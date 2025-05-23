@@ -1,0 +1,25 @@
+spring:
+  data:
+    mongodb:
+      uri: mongodb://localhost:27017/cleanic
+  jackson:
+    date-format: dd/MM/yyyy
+    time-zone: Europe/Paris
+
+
+logging:
+  level:
+    org:
+      springframework:
+        data:
+          mongodb:
+            core:
+              MongoTemplate: DEBUG
+
+
+
+
+
+
+
+
