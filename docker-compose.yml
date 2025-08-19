@@ -18,6 +18,9 @@ services:
       - mongo 
     environment:
       - SPRING_DATA_MONGODB_URI=mongodb://mongo:27017/cleanic
+      - JWT_SECRET=G5pRQXJg7GwOULOE2VODLI9q3baigC4UcW3DYKGX//g=
+
+
 
 volumes:
   mongo_data:

@@ -15,7 +15,7 @@ import java.util.List;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/site")
+@RequestMapping("/api/site")
 @RequiredArgsConstructor
 public class SitesController {
 

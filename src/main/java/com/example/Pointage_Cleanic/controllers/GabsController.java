@@ -15,7 +15,7 @@ import java.util.List;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/gab")
+@RequestMapping("/api/gab")
 @RequiredArgsConstructor
 public class GabsController {
 

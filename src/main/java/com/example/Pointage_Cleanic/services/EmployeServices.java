@@ -25,11 +25,16 @@ public class EmployeServices {
         return mongoTemplate.findAll(Employe.class);
     }
 
-    public Employe getBycodeSecret(Integer codeSecret) {
+    public Employe getBycodeSecret(String codeSecret) {
         Query query = new Query();
         query.addCriteria(Criteria.where("codeSecret").is(codeSecret));
         return mongoTemplate.findOne(query,Employe.class);
     }
 
+    public List<Employe> CheffeEquipe() {
+        Query query = new Query();
+        query.addCriteria(Criteria.where("statut").is("Cheffe d'équipe"));
+        return mongoTemplate.find(query,Employe.class);
+    }
 
 }

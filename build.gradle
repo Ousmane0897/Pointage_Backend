@@ -26,6 +26,17 @@ repositories {
 dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-data-mongodb'
 	implementation 'org.springframework.boot:spring-boot-starter-web'
+
+	// Pour le support de Optional<T>, Stream, etc.
+	implementation 'com.fasterxml.jackson.datatype:jackson-datatype-jdk8'
+	implementation 'jakarta.validation:jakarta.validation-api:3.0.2'
+	implementation 'org.hibernate.validator:hibernate-validator:8.0.1.Final' // moteur de validation
+	implementation 'org.springframework.boot:spring-boot-starter-security'
+	implementation 'io.jsonwebtoken:jjwt-api:0.11.5'
+	runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.11.5'
+	runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.11.5' // ou jjwt-gson si tu préfères
+
+	implementation 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310'
 	compileOnly 'org.projectlombok:lombok'
 	developmentOnly 'org.springframework.boot:spring-boot-devtools'
 	annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
@@ -41,3 +52,16 @@ tasks.named('test') {
 bootJar {
 	archiveFileName = 'app.jar'  // optional: name it consistently
 }
+
+bootRun {
+	jvmArgs += [
+			'--add-opens=java.base/java.time=ALL-UNNAMED'
+	]
+}
+
+test {
+	jvmArgs += [
+			'--add-opens=java.base/java.time=ALL-UNNAMED'
+	]
+}
+

@@ -4,7 +4,15 @@ spring:
       uri: mongodb://localhost:27017/cleanic
   jackson:
     date-format: dd/MM/yyyy
-    time-zone: Europe/Paris
+    time-zone: Africa/Dakar
+  datasource:
+    time-zone: Africa/Dakar
+  profiles:
+    actives: dev
+
+# Dropbox Access Token
+  dropbox:
+    access-token: XXX_YOUR_DROPBOX_TOKEN
 
 
 logging:
@@ -15,6 +23,14 @@ logging:
           mongodb:
             core:
               MongoTemplate: DEBUG
+        security: DEBUG
+
+jwt:
+  secret: w9awKW+/x+VOzOyvg5DY3D7qWVZhipaV6VH8h9c4JS8=
+
+
+
+
 
 
 

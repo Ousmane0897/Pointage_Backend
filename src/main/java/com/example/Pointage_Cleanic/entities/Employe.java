@@ -5,9 +5,6 @@ import lombok.*;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 
-import java.time.LocalDate;
-import java.util.Date;
-
 
 @Getter
 @Setter
@@ -18,11 +15,23 @@ import java.util.Date;
 public class Employe {
 
     @Id
-    private Integer codeSecret;
-    private String nom;
+    private String id;
+    private String codeSecret;
     private String prenom;
+    private String nom;
     private String numero;
     private String intervention; //agent bureau, vitre ou désinfectation
-    private String site;
+    private String statut; // employé simple ou chef d'équipe
+    private String employeCreePar;
+    private String[] site;
+    private String joursDeTravail;
+    private String joursDeTravail2;
+    private boolean deplacement; // Si un agent à été déplacé d'une agence à une autre
+    private String heureDebut;
+    private String heureFin;
+    private String heureDebut2;
+    private String heureFin2;
+    private String dateEtHeureCreation;
+
 
 }
