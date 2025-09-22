@@ -1,7 +1,97 @@
 package com.example.Pointage_Cleanic.controllers;
 
 
+import com.example.Pointage_Cleanic.Dto.CancelRequestDto;
+import com.example.Pointage_Cleanic.Dto.PlanificationDto;
+import com.example.Pointage_Cleanic.Dto.ValidationRequestDto;
+import com.example.Pointage_Cleanic.Mapper.PlanificationMapper;
+import com.example.Pointage_Cleanic.entities.Planification;
+import com.example.Pointage_Cleanic.repositories.PlanificationRepository;
+import com.example.Pointage_Cleanic.services.PlanificationService;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
 
+import java.security.Principal;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+
+@RestController
+@RequestMapping("/api/planification")
+@RequiredArgsConstructor
+public class PlanificationController {
+
+    private final PlanificationService service;
+    private final PlanificationRepository repository;
+
+    @PostMapping
+    public ResponseEntity<PlanificationDto> create(@RequestBody Planification plan) {
+        return ResponseEntity.ok(service.createPlanification(plan));
+    }
+
+    @GetMapping
+    public List<PlanificationDto> getAll() {
+        return service.getAll();
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<PlanificationDto> getById(@PathVariable String id) {
+        return ResponseEntity.ok(service.getById(id));
+    }
+
+
+    /**
+     * Annule une planification en fonction de son ID.
+     * id L'identifiant de la planification à annuler
+     */
+    @PostMapping("/cancel")
+    public ResponseEntity<PlanificationDto> cancelPlanification(@RequestBody CancelRequestDto requestDto) {
+        boolean cancelled = service.cancelPlanification(requestDto.getId(), requestDto.getMotif());
+
+        if (!cancelled) {
+            return ResponseEntity.notFound().build();
+        }
+
+        Planification updated = repository.findById(requestDto.getId()).get();
+        PlanificationDto dto = PlanificationDto.fromEntity(updated);
+        return ResponseEntity.ok(dto);
+    }
+
+
+
+    @PutMapping("/{id}")
+    public ResponseEntity<Optional<PlanificationDto>> update(@PathVariable String id, @RequestBody Planification plan) {
+        return ResponseEntity.ok(service.updatePlanification(id,plan));
+    }
+
+    @DeleteMapping("/{id}")
+    public void delete(@PathVariable String id) {
+        service.delete(id);
+    }
+
+    /**
+     * Ici Principal fait référence à l’interface Java java.security.Principal.
+     * C’est ce que Spring Security met à disposition dans tes controllers REST pour savoir qui est l’utilisateur connecté.
+     */
+    @PostMapping("/demander")
+    public ResponseEntity<PlanificationDto> demanderAnnulation(@RequestBody CancelRequestDto dto, Principal principal) {
+        // récupère le username depuis le token JWT si principal.getName() n'est pas null.
+        String requestedBy = principal != null ? principal.getName() : dto.getRequestedBy();
+        PlanificationDto updated = service.demanderAnnulation(dto.getId(), dto.getMotif(), requestedBy);
+        return ResponseEntity.ok(updated);
+    }
+
+    @PostMapping("/valider")
+    public ResponseEntity<PlanificationDto> validerAnnulation(@RequestBody ValidationRequestDto dto, Principal principal) {
+        String validatedBy = principal != null ? principal.getName() : dto.getValidatedBy();
+        PlanificationDto updated = service.validerAnnulation(dto.getId(), dto.isAccepted(), validatedBy);
+        return ResponseEntity.ok(updated);
+    }
+}
+
+/*
 import com.example.Pointage_Cleanic.entities.Planification;
 import com.example.Pointage_Cleanic.repositories.PlanificationRepository;
 import com.example.Pointage_Cleanic.services.PlanificationService;
@@ -107,3 +197,4 @@ public class PlanificationController {
         return ResponseEntity.ok(planifications);
     }
 }
+**/

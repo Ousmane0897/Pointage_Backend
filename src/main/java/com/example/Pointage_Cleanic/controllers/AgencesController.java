@@ -38,10 +38,10 @@ public class AgencesController {
     }
 
 
-    @GetMapping("/nom/{nom}")
-    public ResponseEntity<Agence> GetByNom(@PathVariable String nom) {
+    @GetMapping("/nom")
+    public ResponseEntity<Agence> GetByNom(@RequestParam String nomAgence) {
 
-        Agence agence = agencesServices.getByNom(nom);
+        Agence agence = agencesServices.getByNom(nomAgence);
 
         if (agence == null) {
             return ResponseEntity.notFound().build(); // 404
@@ -65,10 +65,10 @@ public class AgencesController {
 
 
 
-    @GetMapping("/site/{site}")
-    public ResponseEntity<List<Employe>> GetEmployeesBySite(@PathVariable String site) {
+    @GetMapping("/site")
+    public ResponseEntity<List<Employe>> GetEmployeesBySite(@RequestParam String nomAgence) {
 
-        List<Employe> employees = agencesServices.EmployeeParAgence(site);
+        List<Employe> employees = agencesServices.EmployeeParAgence(nomAgence);
 
         return ResponseEntity.ok(employees);
     }
@@ -81,16 +81,38 @@ public class AgencesController {
         return ResponseEntity.ok(sites);
     }
 
-    @GetMapping("/getNumberofEmployeesInOneAgence/{nomAgence}")
-    public ResponseEntity<Integer> getNumberofEmployeesInOneAgence(@PathVariable String nomAgence) {
+    //En Spring Boot, @RequestParam sert à récupérer une valeur passée dans l’URL sous forme de paramètre de requête (après le ?).
+    //C’est très pratique pour des recherches ou filtres, surtout quand la valeur peut contenir espaces, accents, caractères spéciaux.
 
-        return ResponseEntity.ok(agencesServices.getNumberofEmployeesInOneAgence(nomAgence));
+    //Quand utiliser quoi ?
+    //
+    //@PathVariable 👉 pour un identifiant unique (/employees/123).
+    //
+    //@RequestParam 👉 pour un paramètre de recherche / filtre (/employeesDansUnSite?site=SGS point e).
+
+    @GetMapping("/getNumberofEmployeesInOneAgence")
+    public ResponseEntity<Integer> getNumberofEmployeesInOneAgence(@RequestParam String nomAgence) {
+
+        int max = agencesServices.getNumberofEmployeesInOneAgence(nomAgence.trim());
+        return ResponseEntity.ok(max);
     }
 
-    @GetMapping("/MaxNumberOfEmployeesInOneAgence/{nomAgence}")
-    public ResponseEntity<Integer> getMaxNumberOfEmployeesInOneAgence(@PathVariable String nomAgence) {
 
-        return ResponseEntity.ok(agencesServices.getMaxNumberOfEmployeesInOneAgence(nomAgence));
+    @GetMapping("/getEmployeeDeplacee")
+    public ResponseEntity<Employe> getEmployeeDeplacee(@RequestParam String nomAgence) {
+        return ResponseEntity.ok(agencesServices.EmployeeDeplacee(nomAgence));
+    }
+
+    @GetMapping("/getEmployeeRemplacee")
+    public ResponseEntity<Employe> getEmployeeRemplacee(@RequestParam String nomAgence) {
+        return ResponseEntity.ok(agencesServices.EmployeeRemplacee(nomAgence));
+    }
+
+    @GetMapping("/MaxNumberOfEmployeesInOneAgence")
+    public ResponseEntity<Integer> getMaxNumberOfEmployeesInOneAgence(@RequestParam String nomAgence) {
+
+        int max = agencesServices.getMaxNumberOfEmployeesInOneAgence(nomAgence.trim());
+        return ResponseEntity.ok(max);
     }
 
     @GetMapping(value = "/{nomAgence}", produces = "text/plain")

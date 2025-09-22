@@ -59,6 +59,23 @@ public class AgencesServices {
         return mongoTemplate.find(query,Employe.class);
     }
 
+
+    //Trouver l'agent qui a été déplacée
+    public Employe EmployeeDeplacee(String site) {
+        Query query = new Query();
+        query.addCriteria(Criteria.where("site").is(site).and("deplacement").is(true));
+        return mongoTemplate.findOne(query,Employe.class);
+    }
+
+    //Trouver l'agent qui a été remplacée
+    public Employe EmployeeRemplacee(String site) {
+        Query query = new Query();
+        query.addCriteria(Criteria.where("site").is(site).and("remplacement").is(true));
+        return mongoTemplate.findOne(query,Employe.class);
+    }
+
+
+
     public String getJoursOuvertureByNom(String nomAgence) {
         return agencesRepository.findJoursOuvertureByNom(nomAgence)
                 .orElse(null); // ou throw exception custom si tu préfères

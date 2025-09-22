@@ -20,5 +20,8 @@ public class Agence {
     private String joursOuverture;
     private String heuresTravail;
     private Integer nombreAgentsMaximum;
+    private boolean receptionEmploye;
+    private boolean deplacementEmploye;
+    private boolean deplacementInterne;
 
 }
