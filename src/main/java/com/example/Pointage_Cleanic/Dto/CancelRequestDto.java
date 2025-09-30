@@ -8,7 +8,8 @@ import lombok.Setter;
 @Setter
 public class CancelRequestDto {
 
-    private String id;
+    private String planificationId;
     private String motif;
     private String requestedBy; // Si l'utilisateur connecté, son username est envoyé depuis angular
+
 }

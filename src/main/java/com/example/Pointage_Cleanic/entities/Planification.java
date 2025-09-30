@@ -48,7 +48,7 @@ public class Planification {
     private String heureDebut;       // Heure de début de chaque journée
     private String heureFin;         // Heure de fin prévue
 
-
+    private String dateDemandeAnnulation;
     private String commentaires;         // Commentaires du superviseur ou de l’agent
 
     private String motifAnnulation;
@@ -59,7 +59,7 @@ public class Planification {
     //private String creePar;             // Nom ou ID du planificateur
     private String dateCreation;
 
-    private AnnulationStatus annulationStatus = AnnulationStatus.NON_DEMANDEE;
+
     private String requestedBy; // L'admin qui envoie la demande d'annulation
     private String validatedBy; // Le super admin
 
@@ -68,12 +68,10 @@ public class Planification {
         EN_ATTENTE,
         EN_COURS,
         EXECUTEE,
-        ANNULEE
-    }
-
-
-    public enum AnnulationStatus {
-        NON_DEMANDEE, EN_ATTENTE_VALIDATION, VALIDEE, REFUSEE
+        ANNULEE,
+        EN_ATTENTE_VALIDATION, // Pour dire d'attendre que l'admin valide ou invalide l'annulation
+        ANNULATION_ACCEPTEE,
+        ANNULATION_REFUSEE
     }
 
 

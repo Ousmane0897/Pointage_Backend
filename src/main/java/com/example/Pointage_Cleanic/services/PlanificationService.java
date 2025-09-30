@@ -2,6 +2,7 @@ package com.example.Pointage_Cleanic.services;
 
 import com.example.Pointage_Cleanic.Dto.AnnulationDecisionMessage;
 import com.example.Pointage_Cleanic.Dto.AnnulationRequestMessage;
+import com.example.Pointage_Cleanic.Dto.CancelRequestDto;
 import com.example.Pointage_Cleanic.Dto.PlanificationDto;
 import com.example.Pointage_Cleanic.Mapper.PlanificationMapper;
 import com.example.Pointage_Cleanic.entities.Agence;
@@ -24,6 +25,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledFuture;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -508,26 +510,53 @@ public class PlanificationService {
         repository.deleteById(id);
     }
 
+    public List<AnnulationRequestMessage> getPendingAnnulations() {
+        List<Planification> pendingPlans = repository.findByStatut(Planification.Statut.EN_ATTENTE_VALIDATION);
+
+
+        return pendingPlans.stream().map(p -> {
+            AnnulationRequestMessage dto = new AnnulationRequestMessage();
+            dto.setPlanificationId(p.getId());
+            dto.setMotif(p.getMotifAnnulation());
+            dto.setRequestedBy(p.getRequestedBy());
+            dto.setDateRequest(p.getDateDemandeAnnulation());
+            return dto;
+        }).collect(Collectors.toList());
+    }
+
     // Admin envoie une demande d'annulation (EN_ATTENTE_VALIDATION) au super admin.
-    public PlanificationDto demanderAnnulation(String id, String motif, String requestedBy) {
+    public CancelRequestDto demanderAnnulation(String id, String motif, String requestedBy) {
+
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd/MM/yyyy")
+                .withZone(ZoneId.systemDefault());
+
         Planification plan = repository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Planification non trouvée"));
         plan.setMotifAnnulation(motif);
-        plan.setAnnulationStatus(Planification.AnnulationStatus.EN_ATTENTE_VALIDATION);
+        plan.setStatut(Planification.Statut.EN_ATTENTE_VALIDATION);
         plan.setRequestedBy(requestedBy);
+        plan.setDateDemandeAnnulation(formatter.format(Instant.now()));
         repository.save(plan);
 
-        AnnulationRequestMessage msg = new AnnulationRequestMessage();
+        CancelRequestDto msg = new CancelRequestDto(); // Cet objet représente la requête d’annulation que tu veux envoyer aux super-admins.
         msg.setPlanificationId(plan.getId());
-        msg.setPrenomNom(plan.getPrenomNom());
         msg.setMotif(motif);
         msg.setRequestedBy(requestedBy);
-        msg.setDateRequest(Instant.now().toString());
+
 
         // broadcast aux super-admins
+        /**
+         * convertAndSend(destination, payload) →
+         * destination = le “canal” ou “topic” où tu publies le message (/topic/annulationRequests).
+         * payload = l’objet à envoyer (msg), qui sera converti en JSON automatiquement.
+         * Ce que ça veut dire en pratique:
+         * Dès qu’un utilisateur envoie une demande d’annulation, tu construis ce message.
+         * Tu le diffuses sur la chaîne WebSocket /topic/annulationRequests.
+         * Tous les super-admins connectés et abonnés à ce topic recevront le JSON, en temps réel.
+         */
         messagingTemplate.convertAndSend("/topic/annulationRequests", msg);
 
-        return PlanificationMapper.toDto(plan);
+        return msg;
     }
 
     // Super admin valide/refuse
@@ -537,30 +566,86 @@ public class PlanificationService {
 
         if (accepte) {
             plan.setStatut(Planification.Statut.ANNULEE);
-            plan.setAnnulationStatus(Planification.AnnulationStatus.VALIDEE);
+            plan.setStatut(Planification.Statut.ANNULATION_ACCEPTEE);
         } else {
-            plan.setAnnulationStatus(Planification.AnnulationStatus.REFUSEE);
+            plan.setStatut(Planification.Statut.ANNULATION_REFUSEE);
             // optionnel : plan.setMotifAnnulation(null);
         }
         plan.setValidatedBy(validatedBy);
         repository.save(plan);
+
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd/MM/yyyy")
+                .withZone(ZoneId.systemDefault());
 
         AnnulationDecisionMessage decision = new AnnulationDecisionMessage();
         decision.setPlanificationId(plan.getId());
         decision.setAccepted(accepte);
         decision.setValidatedBy(validatedBy);
         decision.setMotif(plan.getMotifAnnulation());
-        decision.setDateDecision(Instant.now().toString());
+        decision.setDateDecision(formatter.format(Instant.now()));
 
         // notifier l'admin demandeur en user queue
         if (plan.getRequestedBy() != null) {
+            /**
+             * 2️⃣ convertAndSendToUser(user, destination, payload)
+             * Contrairement à convertAndSend (qui envoie à tout un topic),
+             * 👉 ici tu envoies le message à un seul utilisateur en particulier.
+             * user → c’est l’identifiant de l’utilisateur (souvent son username ou son id de session).
+             * destination → le chemin où l’utilisateur doit écouter (souvent sous /user/queue/...).
+             * payload → le contenu du message (ici decision, ça peut être "acceptée" ou "refusée" par exemple).
+             * 3️⃣ plan.getRequestedBy()
+             * ➡️ Ici tu récupères l’utilisateur qui a demandé l’annulation (celui qui a fait la requête).
+             * C’est lui qui doit recevoir la réponse.
+             * 4️⃣ "/queue/annulationResponses"
+             * ➡️ C’est la file privée de messages où l’utilisateur concerné est abonné.
+             * Dans STOMP, chaque utilisateur a son propre espace /user/{username}/queue/....
+             * Donc si requestedBy = "employe1",
+             * Spring enverra réellement sur :
+             * /user/employe1/queue/annulationResponses
+             * 5️⃣ decision
+             * ➡️ C’est la réponse du super-admin : par exemple "ACCEPTEE" ou "REFUSEE".
+             * 🔄 Exemple complet du cycle
+             * Employé → envoie une demande d’annulation.
+             * Super-admins → reçoivent la notification en temps réel via /topic/annulationRequests.
+             * L’un d’eux prend une décision (acceptée ou refusée).
+             * Le backend envoie la réponse directement à l’utilisateur qui a demandé, via :
+             * convertAndSendToUser("employe1", "/queue/annulationResponses", "ACCEPTEE");
+             * Employé employe1 → reçoit en direct la réponse sur sa WebSocket.
+             * 👉 Donc :
+             * convertAndSend() = broadcast (à tous ceux qui écoutent un topic).
+             * convertAndSendToUser() = message privé (un seul utilisateur abonné).
+             */
             messagingTemplate.convertAndSendToUser(plan.getRequestedBy(), "/queue/annulationResponses", decision);
         }
 
-        // broadcast pour synchro UI super-admins
+        // broadcast pour synchro UI super-admins. Ça veut dire : on envoie le message à tous les super-admins connectés pour qu’ils synchronisent leur interface utilisateur (UI).
+        //Par exemple, si un admin accepte une demande, tous les autres voient le changement instantanément.
+        /**
+         * messagingTemplate.convertAndSend(...)
+         * messagingTemplate → l’outil Spring qui publie des messages WebSocket/STOMP.
+         * convertAndSend(destination, payload) → envoie un message à tous les abonnés d’un canal (topic).
+         * "/topic/annulationDecisions"
+         * C’est le canal partagé où les super-admins sont abonnés.
+         * Tous ceux qui écoutent /topic/annulationDecisions recevront les décisions en temps réel.
+         * decision: le contenu envoyé (payload).
+         */
         messagingTemplate.convertAndSend("/topic/annulationDecisions", decision);
 
         return PlanificationMapper.toDto(plan);
+
+
+        /**
+         * 🌀 Exemple de flux complet
+         * Employé fait une demande d’annulation.
+         * Tous les super-admins reçoivent la demande en temps réel via /topic/annulationRequests.
+         * L’un d’eux prend une décision.
+         * Le backend envoie :
+         * convertAndSendToUser(..., "/queue/annulationResponses", decision) → uniquement à l’employé concerné.
+         * convertAndSend("/topic/annulationDecisions", decision) → à tous les super-admins, pour que leur tableau de bord se mette à jour (broadcast).
+         * 👉 En résumé :
+         * convertAndSendToUser = réponse privée (employé).
+         * convertAndSend = broadcast (tous les super-admins).
+         */
     }
 }
 

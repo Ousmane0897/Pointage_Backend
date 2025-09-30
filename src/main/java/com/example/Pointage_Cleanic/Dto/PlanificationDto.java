@@ -27,14 +27,16 @@ public class PlanificationDto {
     private String statut;
     private String dateCreation;
     private String motifAnnulation;
+    
     private long joursRestants;  // ✅ Calculé dynamiquement
 
 
     // Convertir une entité en DTO
-    public static PlanificationDto fromEntity(Planification plan) {
+   public static PlanificationDto fromEntity(Planification plan) {
         PlanificationDto dto = new PlanificationDto();
         dto.setId(plan.getId());
         dto.setPrenomNom(plan.getPrenomNom());
+        dto.setCodeSecret(plan.getCodeSecret());
         dto.setNomSite(plan.getNomSite());
         dto.setSiteDestination(plan.getSiteDestination());
         dto.setPersonneRemplacee(plan.getPersonneRemplacee());

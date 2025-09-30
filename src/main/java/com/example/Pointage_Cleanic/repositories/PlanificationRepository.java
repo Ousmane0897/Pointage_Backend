@@ -12,4 +12,6 @@ import java.util.List;
 public interface PlanificationRepository extends MongoRepository<Planification, String> {
 
     List<Planification> findByStatutIn(List<String> statuts);
+    // Trouver toutes les planifications dont le statut est EN_ATTENTE_VALIDATION
+    List<Planification> findByStatut(Planification.Statut statut);
 }

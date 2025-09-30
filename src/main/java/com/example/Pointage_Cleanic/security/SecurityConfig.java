@@ -38,6 +38,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.DELETE, "/api/ferie/**").authenticated()
                         .requestMatchers("/api/pointages/**").permitAll()
                         .requestMatchers("/error", "/error/**").permitAll()
+                        .requestMatchers("/ws/**").permitAll()
                         .requestMatchers("/api/dashboard_par_agence").authenticated()
                         .requestMatchers("/api/planification/**").hasAnyRole("Admin", "SUPERADMIN")
                         .anyRequest().authenticated()

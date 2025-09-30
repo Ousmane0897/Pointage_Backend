@@ -7,7 +7,6 @@ import lombok.Setter;
 @Setter
 public class AnnulationRequestMessage {
     private String planificationId;
-    private String prenomNom;
     private String motif;
     private String requestedBy;
     private String dateRequest;

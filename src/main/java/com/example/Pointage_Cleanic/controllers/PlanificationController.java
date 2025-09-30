@@ -1,6 +1,7 @@
 package com.example.Pointage_Cleanic.controllers;
 
 
+import com.example.Pointage_Cleanic.Dto.AnnulationRequestMessage;
 import com.example.Pointage_Cleanic.Dto.CancelRequestDto;
 import com.example.Pointage_Cleanic.Dto.PlanificationDto;
 import com.example.Pointage_Cleanic.Dto.ValidationRequestDto;
@@ -48,13 +49,13 @@ public class PlanificationController {
      */
     @PostMapping("/cancel")
     public ResponseEntity<PlanificationDto> cancelPlanification(@RequestBody CancelRequestDto requestDto) {
-        boolean cancelled = service.cancelPlanification(requestDto.getId(), requestDto.getMotif());
+        boolean cancelled = service.cancelPlanification(requestDto.getPlanificationId(), requestDto.getMotif());
 
         if (!cancelled) {
             return ResponseEntity.notFound().build();
         }
 
-        Planification updated = repository.findById(requestDto.getId()).get();
+        Planification updated = repository.findById(requestDto.getPlanificationId()).get();
         PlanificationDto dto = PlanificationDto.fromEntity(updated);
         return ResponseEntity.ok(dto);
     }
@@ -76,19 +77,27 @@ public class PlanificationController {
      * C’est ce que Spring Security met à disposition dans tes controllers REST pour savoir qui est l’utilisateur connecté.
      */
     @PostMapping("/demander")
-    public ResponseEntity<PlanificationDto> demanderAnnulation(@RequestBody CancelRequestDto dto, Principal principal) {
+    public ResponseEntity<CancelRequestDto> demanderAnnulation(@RequestBody CancelRequestDto dto) {
         // récupère le username depuis le token JWT si principal.getName() n'est pas null.
-        String requestedBy = principal != null ? principal.getName() : dto.getRequestedBy();
-        PlanificationDto updated = service.demanderAnnulation(dto.getId(), dto.getMotif(), requestedBy);
+        String requestedBy =  dto.getRequestedBy();
+        CancelRequestDto updated = service.demanderAnnulation(dto.getPlanificationId(), dto.getMotif(), requestedBy);
         return ResponseEntity.ok(updated);
     }
 
     @PostMapping("/valider")
-    public ResponseEntity<PlanificationDto> validerAnnulation(@RequestBody ValidationRequestDto dto, Principal principal) {
-        String validatedBy = principal != null ? principal.getName() : dto.getValidatedBy();
+    public ResponseEntity<PlanificationDto> validerAnnulation(@RequestBody ValidationRequestDto dto) {
+        String validatedBy = dto.getValidatedBy();
         PlanificationDto updated = service.validerAnnulation(dto.getId(), dto.isAccepted(), validatedBy);
         return ResponseEntity.ok(updated);
     }
+
+    //Récupérer les demandes d'annulation en attente
+    @GetMapping("/pending")
+    public ResponseEntity<List<AnnulationRequestMessage>> getPendingRequests() {
+        List<AnnulationRequestMessage> pending = service.getPendingAnnulations();
+        return ResponseEntity.ok(pending);
+    }
+
 }
 
 /*
