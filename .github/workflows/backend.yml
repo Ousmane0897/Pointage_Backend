@@ -1,6 +1,6 @@
 name: CI/CD Backend - Spring Boot (Gradle)
 
-on:
+on:  # on permet de définir l'évènement qui va déclencher l'exéction du workflow, dans notre cas c'est à chaque push du code dans le dépot. On peut filtrer par branche : branches: [ "main" ]
   push:
     branches: [ "main" ]
 
@@ -9,47 +9,51 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1️⃣ Checkout code
-      - uses: actions/checkout@v3
+      # 1️⃣ Checkout code      # Récupérer le code source
+      - name: Checkout repository
+      - uses: actions/checkout@v4   # permet à GitHub Actions de cloner ton dépôt dans la machine virtuelle du workflow. Le v4 signifie simplement la quatrième version majeure actuelle de cette action pour cloner ton dépôt Git dans le runner GitHub Actions
 
-      # 2️⃣ Set up JDK 17
-      - name: Set up JDK 23
-        uses: actions/setup-java@v3
+      # 2️⃣ Set up JDK 21
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
         with:
-          java-version: '23'
+          java-version: '21' # Ici on compile notre projet avec java 21
           distribution: 'temurin'
       # le JAR est construit (build) sans tests avec '-x test' ( plus rapide) dans 3️⃣  et les tests sont exécutés juste après pour valider ton code dans 4️⃣. Donc le JAR est construit sans tests (rapide) et les tests sont exécutés juste après pour valider ton code.
       # 3️⃣ Build with Gradle
       - name: Build backend
-        run: ./gradlew clean build -x test
+        run: ./gradlew clean build -x test   # On build sans tester. Donc si le build échoue → problème de compilation ou dépendances
 
-      # 4️⃣ Run tests
+      # 4️⃣ Run tests # Lancer les tests unitaires
       - name: Run tests
-        run: ./gradlew test
+        run: ./gradlew test                  # On lance ensuite les tests seuls. Donc si les tests échouent → problème de logique métier
 
-      # 5️⃣ Docker login
-      - name: Log in to DockerHub
-        uses: docker/login-action@v2
-        with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
+     # 5️⃣ Docker login
+# - name: Log in to DockerHub
+#   uses: docker/login-action@v2
+#   with:
+#     username: ${{ secrets.DOCKER_USERNAME }}
+#     password: ${{ secrets.DOCKER_PASSWORD }}
 
-      # 6️⃣ Build & push Docker image
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          push: true
-          tags: myorg/myapp-backend:latest
 
-      # 7️⃣ Deploy on VPS
-      - name: Deploy to VPS
-        uses: appleboy/ssh-action@v1.0.0
-        with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SERVER_SSH_KEY }}
-          script: |
-            cd /home/${{ secrets.SERVER_USER }}/myapp
-            docker-compose pull backend
-            docker-compose up -d backend
+     # 6️⃣ Build & push Docker image
+# - name: Build and push Docker image
+#   uses: docker/build-push-action@v5
+#   with:
+#     context: .
+#     push: true
+#     tags: myorg/myapp-backend:latest
+
+
+          # 7️⃣ Deploy to VPS
+      # - name: Deploy to VPS
+      #   uses: appleboy/ssh-action@v1.0.0
+      #   with:
+      #     host: ${{ secrets.SERVER_HOST }}
+      #     username: ${{ secrets.SERVER_USER }}
+      #     key: ${{ secrets.SERVER_SSH_KEY }}
+      #     script: |
+      #       cd /home/${{ secrets.SERVER_USER }}/myapp
+      #       docker-compose pull backend
+      #       docker-compose up -d backend
+
