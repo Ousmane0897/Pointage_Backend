@@ -7,11 +7,27 @@ plugins {
 group = 'com.example'
 version = '0.0.1-SNAPSHOT'
 
-java {
+/*java {
 	toolchain {
-		languageVersion = JavaLanguageVersion.of(23)
+		languageVersion = JavaLanguageVersion.of(21)
 	}
+	// Dans dockefile Gradle toolchains ne compile pas forcément avec le JDK installé sur ta machine locale (JDK 23).
+	//Il utilise le JDK disponible dans l’environnement d’exécution Gradle,dans le contener, ou télécharge celui spécifié dans la toolchain.
+	//Dans ton Dockerfile, le builder a gradle:8.10.2-jdk21 → Java 21 est installé dans le conteneur.
+	//Gradle va utiliser le JDK 21 du conteneur Docker, pas celui de ta machine locale.
+	//Ton JDK 23 local n’interfère pas, car Docker isole l’environnement.
+	//Docker build se passe entièrement dans le conteneur → ta version locale de Java n’a aucune importance.
+	//Forcer languageVersion = 21 résout le problème de "Cannot find a Java installation matching 23" dans Docker.
+}*/
+
+java {
+	sourceCompatibility = JavaVersion.VERSION_21 // 21 correspond au JDK présent dans dockerfile et non celui présent en local qui JDK 21
+	targetCompatibility = JavaVersion.VERSION_21
+
+	//Dire à Gradle de ne pas utiliser de Toolchain et de se servir du JDK existant
+	//Avec ça, Gradle compile avec le JDK présent dans l’image Docker (gradle:8.10.2-jdk21)
 }
+
 
 configurations {
 	compileOnly {
