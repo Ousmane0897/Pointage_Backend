@@ -29,6 +29,7 @@ public class MouvementSortieStock {
     private MotifMouvementSortieStock motifSortieStock; // VENTE,DESTINATION_AGENCE,DON etc...
     private String responsable;
     private String mois;
-    //@JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss.SSSX", timezone = "UTC")
-    //private Instant dateDeSortie;
+
+    @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss.SSSX", timezone = "UTC")
+    private Instant dateMouvement;
 }

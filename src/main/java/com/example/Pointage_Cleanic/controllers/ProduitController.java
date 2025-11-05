@@ -147,6 +147,15 @@ public class ProduitController {
                 .orElse(ResponseEntity.notFound().build());
     }
 
+    @GetMapping("/nom")
+    public ResponseEntity<Produit> getProductByNomProduit(@RequestParam String nomProduit) {
+        return produitService.findByNomProduit(nomProduit)
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
+    }
+
+
+
 
 
 

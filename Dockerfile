@@ -18,7 +18,7 @@ COPY . .
 RUN ./gradlew clean build -x test #
 
 # ====== 2️⃣ Runtime stage ======
-FROM openjdk:21-jdk-slim
+FROM eclipse-temurin:21-jdk-jammy
 
 WORKDIR /app
 

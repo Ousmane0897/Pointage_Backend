@@ -47,6 +47,12 @@ public class StockController {
         return ResponseEntity.ok(Entrees);
     }
 
+    @GetMapping("/sorties")
+    public ResponseEntity<List<MouvementSortieStock>> getAllSorties() {
+        List<MouvementSortieStock> Sorties = stockService.getAllSorties();
+        return ResponseEntity.ok(Sorties);
+    }
+
 
     // ✅ Sortie simple
     @PostMapping("/sortie/simple")
@@ -66,6 +72,54 @@ public class StockController {
                 request.getMotifSortieStock()
         );
         return ResponseEntity.ok(mouvements);
+    }
+
+    // 🔵 Suivi global du stock
+    @GetMapping("/suivi")
+    public List<Map<String, Object>> getSuiviStock() {
+        return stockService.getSuiviGlobal();
+    }
+
+    @GetMapping("/rapports/evolution/{codeProduit}")
+    public Map<String, Object> getStockEvolution(@PathVariable String codeProduit) {
+        return stockService.getStockEvolutionReport(codeProduit);
+    }
+
+    @GetMapping("/rapports/top-produits-sortis")
+    public Map<String, Object> getTopProduitsSortis(
+            @RequestParam int mois,
+            @RequestParam int annee
+    ) {
+        return stockService.getTopProduitsSortisParPeriode(mois, annee);
+    }
+
+    @GetMapping("rapports/snapshot")
+    public Map<String, Object> getSnapshotByMonth(
+            @RequestParam int mois,
+            @RequestParam int annee) {
+
+        return stockService.getSnapshotByMonth(mois,annee);
+    }
+
+    @GetMapping("rapports/evolution-par-produits")
+    public ResponseEntity<Map<String, Object>> evolutionParProduits() {
+        return ResponseEntity.ok(stockService.getEvolutionParProduits());
+    }
+
+    @GetMapping("rapports/rapport-mensuel")
+    public Map<String, Object> getRapportMensuel(
+            @RequestParam int mois,
+            @RequestParam int annee
+    ) {
+        return stockService.getRapportMensuel(mois, annee);
+    }
+
+
+    @GetMapping("rapports/sorties-par-destination")
+    public ResponseEntity<Map<String, Object>> sortiesParDestination(
+            @RequestParam Integer mois,
+            @RequestParam Integer annee) {
+        return ResponseEntity.ok(stockService.getSortiesParDestination(mois, annee));
     }
 
 }
