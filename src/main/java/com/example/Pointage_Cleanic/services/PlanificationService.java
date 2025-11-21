@@ -72,6 +72,12 @@ public class PlanificationService {
     //  - planifie l’exécution à dateDebut/heureDebut et dateFin/heureFin
     public PlanificationDto createPlanification(Planification plan) {
         plan.setDateCreation(LocalDateTime.now().toString());
+        Employe employe = employeServices.getBycodeSecret(plan.getCodeSecret());
+        // employe.deplacement = true au moment de la création de la planification, AVANT le début réel du déplacement.
+        employe.setDeplacement(true);
+
+        employeServices.save(employe);
+
         plan.setStatut(Planification.Statut.EN_ATTENTE);
         Planification saved = repository.save(plan);
         scheduleStartAndEnd(saved);
@@ -311,14 +317,14 @@ public class PlanificationService {
 
                         employe.setSiteAvantDeplacement(planification.getNomSite()); // Site dans lequel était l'employé
                         employe.setSite(planification.getSiteDestination()); // Le nouveau site de l'employé après déplacement (pas de changement sachant que c'est un shift interne)
-                        employe.setDeplacement(true);
+                        //employe.setDeplacement(true);
                         employe.setHorairesDeRemplacement(planification.getHeureDebut() +'-'+ planification.getHeureFin());
                         employe.setPersonneRemplacee(prenom +' '+ nom);
                     } else {
 
                         employe.setSiteAvantDeplacement(planification.getNomSite());
                         employe.setSite(planification.getSiteDestination());
-                        employe.setDeplacement(true);
+                        //employe.setDeplacement(true);
                         employe.setHorairesDeRemplacement(planification.getHeureDebut() +'-'+ planification.getHeureFin());
                         employe.setPersonneRemplacee(prenom +' '+ nom);
                     }

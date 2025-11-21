@@ -80,39 +80,30 @@ public class StockController {
         return stockService.getSuiviGlobal();
     }
 
-    @GetMapping("/rapports/evolution/{codeProduit}")
+    /*@GetMapping("/rapports/evolution/{codeProduit}")
     public Map<String, Object> getStockEvolution(@PathVariable String codeProduit) {
         return stockService.getStockEvolutionReport(codeProduit);
+    }*/
+
+
+
+    @GetMapping("/stats/produit-destination-mois/{nomProduit}/{destination}/{annee}")
+    public Map<String, Object> quantiteProduitDestinationMensuel(
+            @PathVariable String nomProduit,
+            @PathVariable String destination,
+            @PathVariable int annee
+            ) {
+        return stockService.getQuantiteProduitParDestinationParMois(nomProduit, destination, annee);
     }
 
-    @GetMapping("/rapports/top-produits-sortis")
-    public Map<String, Object> getTopProduitsSortis(
-            @RequestParam int mois,
-            @RequestParam int annee
-    ) {
-        return stockService.getTopProduitsSortisParPeriode(mois, annee);
+    @GetMapping("/stats/consommation-destination-mois/{destination}/{annee}")
+    public Map<String, Object> getConsommationParDestinationParMois(
+            @PathVariable String destination,
+            @PathVariable int annee) {
+
+        return stockService.getConsommationParDestinationParMois(destination, annee);
     }
 
-    @GetMapping("rapports/snapshot")
-    public Map<String, Object> getSnapshotByMonth(
-            @RequestParam int mois,
-            @RequestParam int annee) {
-
-        return stockService.getSnapshotByMonth(mois,annee);
-    }
-
-    @GetMapping("rapports/evolution-par-produits")
-    public ResponseEntity<Map<String, Object>> evolutionParProduits() {
-        return ResponseEntity.ok(stockService.getEvolutionParProduits());
-    }
-
-    @GetMapping("rapports/rapport-mensuel")
-    public Map<String, Object> getRapportMensuel(
-            @RequestParam int mois,
-            @RequestParam int annee
-    ) {
-        return stockService.getRapportMensuel(mois, annee);
-    }
 
 
     @GetMapping("rapports/sorties-par-destination")
@@ -121,5 +112,36 @@ public class StockController {
             @RequestParam Integer annee) {
         return ResponseEntity.ok(stockService.getSortiesParDestination(mois, annee));
     }
+
+    @GetMapping("rapports/sorties-bar-par-destination")
+    public ResponseEntity<Map<String, Object>> SortiesParDestination(
+            @RequestParam Integer mois,
+            @RequestParam Integer annee) {
+        Map<String, Object> result = stockService.getSortiesParDestinationBar(mois, annee);
+        return ResponseEntity.ok(result);
+    }
+
+    @GetMapping("rapports/classement-destinations-produit")
+    public ResponseEntity<Map<String, Object>> classementDestinationsProduit(
+            @RequestParam String produit,
+            @RequestParam Integer mois,
+            @RequestParam Integer annee) {
+
+        Map<String, Object> result = stockService.getClassementDestinationsParProduitEtMois(produit, mois, annee);
+        return ResponseEntity.ok(result);
+    }
+
+    @GetMapping("rapports/consommation-produit-periode")
+    public ResponseEntity<Map<String, Object>> consommationProduitParPeriode(
+            @RequestParam String produit,
+            @RequestParam Integer moisDebut,
+            @RequestParam Integer moisFin,
+            @RequestParam Integer annee) {
+
+        Map<String, Object> result = stockService.getConsommationProduitParPeriode(produit, moisDebut, moisFin, annee);
+        return ResponseEntity.ok(result);
+    }
+
+
 
 }

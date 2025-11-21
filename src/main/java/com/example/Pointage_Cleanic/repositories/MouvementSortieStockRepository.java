@@ -17,6 +17,8 @@ public interface MouvementSortieStockRepository extends MongoRepository<Mouvemen
 
     List<MouvementSortieStock> findByCodeProduit(String codeProduit);
 
+
+    List<MouvementSortieStock> findByNomProduit(String nomProduit);
     @Query("{ 'typeMouvement': ?0, 'dateMouvement': { $gte: ?1, $lte: ?2 } }")
     List<MouvementSortieStock> findByTypeMouvementAndDateMouvementBetween(TypeMouvement type, Instant start, Instant end);
 }

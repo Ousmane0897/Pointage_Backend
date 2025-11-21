@@ -40,6 +40,7 @@ public class SecurityConfig {
                         .requestMatchers("/error", "/error/**").permitAll()
                         .requestMatchers("/ws/**").permitAll()
                         .requestMatchers("/api/produits/image/**").permitAll()
+                        .requestMatchers("/api/employe-complet/image/**").permitAll()
                         //.requestMatchers("api/stock/produit/quantite/**").permitAll()
                         .requestMatchers("/api/dashboard_par_agence").authenticated()
                         .requestMatchers("/api/planification/**").authenticated()

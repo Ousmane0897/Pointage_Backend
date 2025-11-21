@@ -7,6 +7,7 @@ import org.springframework.stereotype.Repository;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 
@@ -22,6 +23,9 @@ public interface EmployeRepository extends MongoRepository<Employe,String> {
                 .distinct()
                 .collect(Collectors.toList());
     }
+
+
+    Optional<Employe> findByCodeSecret(String s);
 
     @Query(value = "{ 'site': ?0 }", fields = "{ '_id' : 1 }")
     List<String> findEmployeIdsBySite(String site);

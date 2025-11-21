@@ -161,45 +161,6 @@ public class StockService {
     }*/
 
     // ==========================================================
-    // 📈 1️⃣ Évolution du stock (par produit)
-    // ==========================================================
-    public Map<String, Object> getStockEvolutionReport(String codeProduit) {
-        List<MouvementEntreeStock> entrees = mouvementEntreeStockRepository.findByCodeProduit(codeProduit);
-        List<MouvementSortieStock> sorties = mouvementSortieStockRepository.findByCodeProduit(codeProduit);
-
-        // Utiliser TreeMap pour garder l'ordre chronologique
-        Map<String, Integer> evolution = new TreeMap<>((a, b) -> {
-            try {
-                // Comparaison basée sur l'ordre réel des mois (format "MMMM yyyy")
-                DateTimeFormatter formatter = DateTimeFormatter.ofPattern("MMMM yyyy", Locale.FRENCH);
-                YearMonth ym1 = YearMonth.parse(a, formatter);
-                YearMonth ym2 = YearMonth.parse(b, formatter);
-                return ym1.compareTo(ym2);
-            } catch (Exception e) {
-                return a.compareTo(b);
-            }
-        });
-
-        // Ajouter les entrées (positives)
-        entrees.forEach(e -> {
-            String mois = getMoisAnneeFrancais(e.getDateMouvement());
-            evolution.put(mois, evolution.getOrDefault(mois, 0) + e.getQuantite());
-        });
-
-        // Ajouter les sorties (négatives)
-        sorties.forEach(s -> {
-            String mois = getMoisAnneeFrancais(s.getDateMouvement());
-            evolution.put(mois, evolution.getOrDefault(mois, 0) - s.getQuantite());
-        });
-
-        return Map.of(
-                "codeProduit", codeProduit,
-                "labels", evolution.keySet(),
-                "data", evolution.values()
-        );
-    }
-
-    // ==========================================================
 // 🧩 Méthode utilitaire pour formater les dates en FRANÇAIS
 // ==========================================================
     private String getMoisAnneeFrancais(Instant instant) {
@@ -215,7 +176,77 @@ public class StockService {
 
 
     /**
-     * 🏢 Répartition des sorties par destination (agence, chantier…)
+     * 1️⃣ Quantité d’un produit donné par mois pour chaque destination (année complète)
+     */
+    public Map<String, Object> getQuantiteProduitParDestinationParMois(String nomProduit, String destination , int annee) {
+
+        List<MouvementSortieStock> sorties = mouvementSortieStockRepository.findByNomProduit(nomProduit)
+                .stream()
+                .filter(s -> {
+                    LocalDate d = s.getDateMouvement().atZone(ZoneId.systemDefault()).toLocalDate();
+                    return d.getYear() == annee &&
+                            Objects.equals(
+                                    Optional.ofNullable(s.getDestination()).orElse("Inconnue"),
+                                    destination
+                            );
+                })
+                .toList();
+
+        // Mois → Quantité (on initialise avec 0 pour tous les mois)
+        Map<String, Integer> parMois = new LinkedHashMap<>();
+        for (int m = 1; m <= 12; m++) {
+            parMois.put(getMoisNom(m), 0);
+        }
+
+        // Ajout des quantités
+        for (MouvementSortieStock s : sorties) {
+            LocalDate date = s.getDateMouvement().atZone(ZoneId.systemDefault()).toLocalDate();
+            String mois = getMoisNom(date.getMonthValue());
+            parMois.put(mois, parMois.get(mois) + s.getQuantite());
+        }
+
+        return Map.of(
+                "labels", parMois.keySet(),    // ex: Janvier, Février, ...
+                "data", parMois.values()      // ex: 12, 0, 5, ...
+        );
+    }
+
+
+    /**
+     * 2️⃣ Consommation totale d’une destination pour tous les produits par mois (année)
+     */
+    public Map<String, Object> getConsommationParDestinationParMois(String destination, int annee) {
+
+        // Liste fixe des mois
+        List<String> moisLabels = Arrays.asList(
+                "Janvier", "Février", "Mars", "Avril", "Mai", "Juin",
+                "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"
+        );
+
+        // Initialiser les quantités à 0
+        Map<String, Integer> totalParMois = new LinkedHashMap<>();
+        moisLabels.forEach(m -> totalParMois.put(m, 0));
+
+        List<MouvementSortieStock> sorties = mouvementSortieStockRepository.findAll();
+
+        for (MouvementSortieStock s : sorties) {
+            LocalDate d = s.getDateMouvement().atZone(ZoneId.systemDefault()).toLocalDate();
+            if (d.getYear() != annee) continue;
+            if (!Objects.equals(s.getDestination(), destination)) continue;
+
+            String mois = getMoisNom(d.getMonthValue());
+            totalParMois.put(mois, totalParMois.get(mois) + s.getQuantite());
+        }
+
+        return Map.of(
+                "labels", moisLabels,
+                "data", new ArrayList<>(totalParMois.values())
+        );
+    }
+
+
+    /**
+     * 🏢 Répartition des sorties par destination en pie (agence, chantier…)
      */
     public Map<String, Object> getSortiesParDestination(Integer mois, Integer annee) {
         List<MouvementSortieStock> sorties = mouvementSortieStockRepository.findAll().stream()
@@ -239,75 +270,146 @@ public class StockService {
 
 
 
-    // ==========================================================
-    // 🏆 3️⃣ Top 5 produits les plus sortis sur une période donnée
-    // ==========================================================
-    public Map<String, Object> getTopProduitsSortisParPeriode(int mois, int annee) {
-        LocalDate debut = LocalDate.of(annee, mois, 1);
-        LocalDate fin = debut.withDayOfMonth(debut.lengthOfMonth());
-
-        Instant start = debut.atStartOfDay(ZoneId.systemDefault()).toInstant();
-        Instant end = fin.atTime(23, 59).atZone(ZoneId.systemDefault()).toInstant();
-
-        List<MouvementSortieStock> sorties = mouvementSortieStockRepository.findByTypeMouvementAndDateMouvementBetween(
-                TypeMouvement.SORTIE,
-                start,
-                end
-        );
-
-        if (sorties.isEmpty()) {
-            return Map.of("labels", List.of(), "data", List.of());
-        }
-
-        Map<String, Integer> totalSorties = sorties.stream()
-                .collect(Collectors.groupingBy(
-                        MouvementSortieStock::getNomProduit,
-                        Collectors.summingInt(MouvementSortieStock::getQuantite)
-                ));
-
-        List<Map.Entry<String, Integer>> top5 = totalSorties.entrySet().stream()
-                .sorted(Map.Entry.<String, Integer>comparingByValue().reversed())
-                .limit(5)
-                .toList();
-
-        List<String> labels = top5.stream().map(Map.Entry::getKey).toList();
-        List<Integer> data = top5.stream().map(Map.Entry::getValue).toList();
-
-        return Map.of("labels", labels, "data", data);
-    }
-
-    /**
-     * Option A – Vue instantanée (snapshot) : quantité par produit pour un mois donné → 📊 Bar chart (labels = produits)
-     */
-    public Map<String, Object> getSnapshotByMonth( int mois, int annee) {
-        List<MouvementEntreeStock> entrees = mouvementEntreeStockRepository.findAll();
-        List<MouvementSortieStock> sorties = mouvementSortieStockRepository.findAll();
-
-        Map<String, Integer> bilan = new HashMap<>();
-
-        // 🔹 Ajouter les entrées
-        entrees.stream()
-                .filter(e -> isSameMonth(e.getDateMouvement(), mois, annee))
-                .forEach(e -> bilan.put(e.getNomProduit(),
-                        bilan.getOrDefault(e.getNomProduit(), 0) + e.getQuantite()));
-
-        // 🔸 Ajouter les sorties
-        sorties.stream()
-                .filter(s -> isSameMonth(s.getDateMouvement(), mois, annee))
-                .forEach(s -> bilan.put(s.getNomProduit(),
-                        bilan.getOrDefault(s.getNomProduit(), 0) - s.getQuantite()));
-
-        return Map.of(
-                "periode", getMoisAnneeFrancais(LocalDate.of(annee, mois, 1).atStartOfDay(ZoneId.systemDefault()).toInstant()),
-                "labels", bilan.keySet(),
-                "data", bilan.values()
-        );
-    }
-
     private boolean isSameMonth(Instant date, int mois, int annee) {
         LocalDate d = date.atZone(ZoneId.systemDefault()).toLocalDate();
         return d.getMonthValue() == mois && d.getYear() == annee;
     }
+
+
+    /**
+     * 🏢 Répartition des sorties par destination en Bar (agence, chantier…)
+     */
+    public Map<String, Object> getSortiesParDestinationBar(Integer mois, Integer annee) {
+        List<MouvementSortieStock> sorties = mouvementSortieStockRepository.findAll().stream()
+                .filter(s -> {
+                    LocalDateTime date = LocalDateTime.ofInstant(s.getDateMouvement(), ZoneId.systemDefault());
+                    return date.getMonthValue() == mois && date.getYear() == annee;
+                })
+                .toList();
+
+        if (sorties.isEmpty()) {
+            return Map.of("labels", List.of(), "datasets", List.of());
+        }
+
+        Map<String, Integer> repartition = sorties.stream()
+                .collect(Collectors.groupingBy(
+                        s -> Optional.ofNullable(s.getDestination()).orElse("Inconnue"),
+                        Collectors.summingInt(MouvementSortieStock::getQuantite)
+                ));
+
+        List<Map.Entry<String, Integer>> sorted = repartition.entrySet().stream()
+                .sorted(Map.Entry.<String, Integer>comparingByValue().reversed())
+                .toList();
+
+        List<String> labels = sorted.stream().map(Map.Entry::getKey).toList();
+        List<Integer> data = sorted.stream().map(Map.Entry::getValue).toList();
+
+        Map<String, Object> dataset = Map.of(
+                "label", "Quantité totale sortie",
+                "data", data
+        );
+
+        return Map.of(
+                "labels", labels,
+                "datasets", List.of(dataset)
+        );
+    }
+
+
+    /**
+     * 🧱 Classement des quantités par destinations pour un produit donné et un mois spécifique.
+     * Bar chart : X = Destinations, Y = Quantité sortie.
+     */
+    public Map<String, Object> getClassementDestinationsParProduitEtMois(String nomProduit, Integer mois, Integer annee) {
+
+        List<MouvementSortieStock> sorties = mouvementSortieStockRepository.findAll().stream()
+                .filter(s -> {
+                    LocalDateTime date = LocalDateTime.ofInstant(s.getDateMouvement(), ZoneId.systemDefault());
+                    return date.getMonthValue() == mois
+                            && date.getYear() == annee
+                            && s.getNomProduit().equalsIgnoreCase(nomProduit);
+                })
+                .toList();
+
+        if (sorties.isEmpty()) {
+            return Map.of("labels", List.of(), "datasets", List.of());
+        }
+
+        // Regrouper par destination
+        Map<String, Integer> totalParDestination = sorties.stream()
+                .collect(Collectors.groupingBy(
+                        s -> Optional.ofNullable(s.getDestination()).orElse("Inconnue"),
+                        Collectors.summingInt(MouvementSortieStock::getQuantite)
+                ));
+
+        // Trier par quantité décroissante
+        List<Map.Entry<String, Integer>> sorted = totalParDestination.entrySet().stream()
+                .sorted(Map.Entry.<String, Integer>comparingByValue().reversed())
+                .toList();
+
+        List<String> labels = sorted.stream().map(Map.Entry::getKey).toList();
+        List<Integer> data = sorted.stream().map(Map.Entry::getValue).toList();
+
+        Map<String, Object> dataset = Map.of(
+                "label", "Quantité sortie de " + nomProduit,
+                "data", data
+        );
+
+        return Map.of(
+                "labels", labels,
+                "datasets", List.of(dataset)
+        );
+    }
+
+
+    /**
+     * 📊 Classement des quantités par destinations pour un produit donné et
+     * une période spécifique (par ex: de janvier à Mai). (bar chart).
+     */
+    public Map<String, Object> getConsommationProduitParPeriode(String nomProduit, int moisDebut, int moisFin, int annee) {
+        List<MouvementSortieStock> sorties = mouvementSortieStockRepository.findAll().stream()
+                .filter(s -> {
+                    LocalDateTime date = LocalDateTime.ofInstant(s.getDateMouvement(), ZoneId.systemDefault());
+                    int mois = date.getMonthValue();
+                    return date.getYear() == annee
+                            && mois >= moisDebut
+                            && mois <= moisFin
+                            && s.getNomProduit().equalsIgnoreCase(nomProduit);
+                })
+                .toList();
+
+        if (sorties.isEmpty()) {
+            return Map.of("labels", List.of(), "datasets", List.of());
+        }
+
+        // Regrouper par destination
+        Map<String, Integer> consommationParDestination = sorties.stream()
+                .collect(Collectors.groupingBy(
+                        s -> Optional.ofNullable(s.getDestination()).orElse("Inconnue"),
+                        Collectors.summingInt(MouvementSortieStock::getQuantite)
+                ));
+
+        // Trier par quantité décroissante
+        List<Map.Entry<String, Integer>> sorted = consommationParDestination.entrySet().stream()
+                .sorted(Map.Entry.<String, Integer>comparingByValue().reversed())
+                .toList();
+
+        List<String> labels = sorted.stream().map(Map.Entry::getKey).toList();
+        List<Integer> data = sorted.stream().map(Map.Entry::getValue).toList();
+
+        Map<String, Object> dataset = Map.of(
+                "label", "Quantité totale de " + nomProduit + " (" + getMoisNom(moisDebut) + " - " + getMoisNom(moisFin) + ")",
+                "data", data
+        );
+
+        return Map.of(
+                "labels", labels,
+                "datasets", List.of(dataset)
+        );
+    }
+
+
+
 
 
     /**
@@ -323,98 +425,6 @@ public class StockService {
         return moisFr[mois - 1];
     }
 
-    /**
-     * Option B – Évolution temporelle : suivi de l’évolution de chaque produit dans le temps → 📈 Line chart multi-produits
-     */
-    public Map<String, Object> getEvolutionParProduits() {
-        List<MouvementEntreeStock> entrees = mouvementEntreeStockRepository.findAll();
-        List<MouvementSortieStock> sorties = mouvementSortieStockRepository.findAll();
-
-        // Ensemble unique des produits
-        Set<String> produits = new HashSet<>();
-        entrees.forEach(e -> produits.add(e.getNomProduit()));
-        sorties.forEach(s -> produits.add(s.getNomProduit()));
-
-        // Calcul du stock global (entrées - sorties)
-        Map<String, Integer> stockParProduit = new HashMap<>();
-
-        for (MouvementEntreeStock entree : entrees) {
-            stockParProduit.merge(entree.getNomProduit(), entree.getQuantite(), Integer::sum);
-        }
-
-        for (MouvementSortieStock sortie : sorties) {
-            stockParProduit.merge(sortie.getNomProduit(), -sortie.getQuantite(), Integer::sum);
-        }
-
-        // Trier par quantité CROISSANTE
-        List<Map.Entry<String, Integer>> sortedList = stockParProduit.entrySet()
-                .stream()
-                .sorted(Map.Entry.comparingByValue()) // pas de .reversed()
-                .toList();
-
-        // Extraire les produits (labels) et quantités (data)
-        List<String> labels = sortedList.stream()
-                .map(Map.Entry::getKey)
-                .toList();
-
-        List<Integer> data = sortedList.stream()
-                .map(Map.Entry::getValue)
-                .toList();
-
-        // Créer le dataset
-        Map<String, Object> dataset = new LinkedHashMap<>();
-        dataset.put("label", "Stock global");
-        dataset.put("data", data);
-
-        // Retour final compatible avec Chart.js
-        return Map.of(
-                "labels", labels,
-                "datasets", List.of(dataset)
-        );
-    }
-
-
-    /**
-     * Rapport mensuel
-     */
-    public Map<String, Object> getRapportMensuel(int mois, int annee) {
-        List<MouvementEntreeStock> entrees = mouvementEntreeStockRepository.findAll();
-        List<MouvementSortieStock> sorties = mouvementSortieStockRepository.findAll();
-
-        int totalEntrees = entrees.stream()
-                .filter(e -> isSameMonth(e.getDateMouvement(), mois, annee))
-                .mapToInt(MouvementEntreeStock::getQuantite)
-                .sum();
-
-        int totalSorties = sorties.stream()
-                .filter(s -> isSameMonth(s.getDateMouvement(), mois, annee))
-                .mapToInt(MouvementSortieStock::getQuantite)
-                .sum();
-
-        int solde = totalEntrees - totalSorties;
-
-        // 🔹 Top 5 produits sortis du mois
-        Map<String, Integer> topProduits = sorties.stream()
-                .filter(s -> isSameMonth(s.getDateMouvement(), mois, annee))
-                .collect(Collectors.groupingBy(
-                        MouvementSortieStock::getNomProduit,
-                        Collectors.summingInt(MouvementSortieStock::getQuantite)
-                ));
-
-        List<Map.Entry<String, Integer>> top5 = topProduits.entrySet().stream()
-                .sorted(Map.Entry.<String, Integer>comparingByValue().reversed())
-                .limit(5)
-                .toList();
-
-        return Map.of(
-                "mois", mois,
-                "annee", annee,
-                "totalEntrees", totalEntrees,
-                "totalSorties", totalSorties,
-                "solde", solde,
-                "topProduits", top5
-        );
-    }
 
    /* private boolean isSameMonth(Instant date, int mois, int annee) {
         LocalDate d = date.atZone(ZoneId.systemDefault()).toLocalDate();
