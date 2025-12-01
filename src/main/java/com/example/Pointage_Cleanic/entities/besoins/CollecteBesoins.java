@@ -29,7 +29,12 @@ public class CollecteBesoins {
 
     private StatutCommande statut;
 
+    @Builder.Default
+    private int nombreModifications = 0;
+    private String dateLivraison;
+    private String heureLivraison;
     private List<BesoinProduit> produitsDemandes; // Liste des produits et quantités demandées
+    private List<BesoinProduit> anciensProduitsDemandes; // Stocke les produits et quatités d'origine pour que le superadmin sache les données collectées par le superviseur.
 
     private List<String> historiqueModifications;
 

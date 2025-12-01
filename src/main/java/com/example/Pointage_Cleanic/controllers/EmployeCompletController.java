@@ -163,12 +163,6 @@ public class EmployeCompletController {
                 .orElse(ResponseEntity.notFound().build());
     }
 
-    @PutMapping("/{agentId}")
-    public ResponseEntity<EmployeComplet> update(@PathVariable String agentId, EmployeComplet employeComplet) {
-
-        return ResponseEntity.ok(employeCompletService.update(agentId, employeComplet));
-    }
-
     @GetMapping("/prenomNom")
     public ResponseEntity<EmployeComplet> searchEmploye(
             @RequestParam String prenom,
@@ -186,4 +180,16 @@ public class EmployeCompletController {
 
         employeCompletService.delete(agentId);
     }
+
+    @PutMapping(value = "/complet/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<EmployeComplet> update(
+            @PathVariable String id,
+            @RequestPart("employe") EmployeComplet employeComplet,
+            @RequestPart(value = "photo", required = false) MultipartFile photo
+    ) throws IOException {
+
+        EmployeComplet updated = employeCompletService.update(id, employeComplet, photo);
+        return ResponseEntity.ok(updated);
+    }
+
 }

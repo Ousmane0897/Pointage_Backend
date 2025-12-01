@@ -1,19 +1,21 @@
 package com.example.Pointage_Cleanic.services;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 
 import com.example.Pointage_Cleanic.Enum.StatutCommande;
+import com.example.Pointage_Cleanic.entities.besoins.BesoinProduit;
 import com.example.Pointage_Cleanic.entities.besoins.CollecteBesoins;
 import com.example.Pointage_Cleanic.repositories.CollecteBesoinRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
-import java.time.Instant;
-import java.time.LocalDate;
-import java.time.Month;
+import java.time.*;
 import java.time.format.DateTimeFormatter;
 import java.time.format.TextStyle;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -34,6 +36,15 @@ public class CollecteBesoinService {
         demande.setStatut(StatutCommande.EN_ATTENTE);
         demande.setDateDemande(dateFormatee);
 
+        // Cloner la liste d'origine pour éviter les modifications ultérieures
+        List<BesoinProduit> copie = demande.getProduitsDemandes()
+                .stream()
+                .map(p -> new BesoinProduit(p.getCodeProduit(), p.getNomProduit(), p.getQuantite()))
+                .collect(Collectors.toList());
+
+        demande.setAnciensProduitsDemandes(copie);
+
+
         if (demande.getHistoriqueModifications() == null) {
             demande.setHistoriqueModifications(new ArrayList<>());
         }
@@ -43,6 +54,7 @@ public class CollecteBesoinService {
                 dateFormatee,
                 createdby == null ? "AGENT" : createdby
         );
+
 
         demande.getHistoriqueModifications().add(log);
         return repository.save(demande);
@@ -72,10 +84,14 @@ public class CollecteBesoinService {
 
     // Modifier par supérieur (autorisé si pas LIVREE)
     public CollecteBesoins modifierDemande(String id, CollecteBesoins nouvelleVersion, String modifiedBy) {
-        CollecteBesoins ancienne = repository.findById(id).orElseThrow(() -> new RuntimeException("Demande introuvable"));
+
+        CollecteBesoins ancienne = repository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Demande introuvable"));
+
         if (ancienne.getStatut() == StatutCommande.LIVREE) {
             throw new RuntimeException("Impossible de modifier une demande déjà livrée.");
         }
+
         ancienne.setDestination(nouvelleVersion.getDestination());
         ancienne.setResponsable(nouvelleVersion.getResponsable());
         ancienne.setProduitsDemandes(nouvelleVersion.getProduitsDemandes());
@@ -83,24 +99,51 @@ public class CollecteBesoinService {
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd/MM/yyyy");
         String dateFormatee = LocalDate.now().format(formatter);
 
-        String log = String.format("%s - Modifiée par %s", dateFormatee, modifiedBy == null ? "SUPERVISEUR" : modifiedBy);
+        String decodedModifiedBy = modifiedBy == null
+                ? "SUPERVISEUR"
+                : URLDecoder.decode(modifiedBy, StandardCharsets.UTF_8);
+
+        String log = String.format("%s - vérifiée et validée par %s", dateFormatee, decodedModifiedBy);
+
+
         ancienne.getHistoriqueModifications().add(log);
+
+        //  Incrémenter le compteur stocké en base
+        ancienne.setNombreModifications(ancienne.getNombreModifications() + 1);
+
+        //  Mettre à jour le statut après 3 modifications
+        if (ancienne.getNombreModifications() == 3) {
+            ancienne.setStatut(StatutCommande.EN_COURS);
+        }
+
         return repository.save(ancienne);
     }
 
-    // Changer statut simple (EN_COURS, EN_ATTENTE)
+
+    // Changer statut simple (EN_ATTENTE,EN_COURS,LIVREE)
     public CollecteBesoins updateStatut(String id, StatutCommande statut, String by) {
-        CollecteBesoins d = repository.findById(id).orElseThrow(() -> new RuntimeException("Demande introuvable"));
+        CollecteBesoins d = repository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Demande introuvable"));
+
+        String dateFormatee = LocalDate.now().format(DateTimeFormatter.ofPattern("dd/MM/yyyy"));
+        String heure = ZonedDateTime.now(ZoneId.of("Africa/Dakar"))
+                .format(DateTimeFormatter.ofPattern("HH:mm"));
+
+        // Bloquer si déjà livrée
         if (d.getStatut() == StatutCommande.LIVREE) {
             throw new RuntimeException("Impossible de changer le statut d'une demande livrée.");
         }
 
-
-        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd/MM/yyyy");
-        String dateFormatee = LocalDate.now().format(formatter);
+        // Enregistrer date/heure seulement si nouveau statut = LIVREE
+        if (statut == StatutCommande.LIVREE) {
+            d.setDateLivraison(dateFormatee);
+            d.setHeureLivraison(heure);
+        }
 
         d.setStatut(statut);
-        d.getHistoriqueModifications().add(String.format("%s - Statut->%s par %s", dateFormatee, statut, by));
+        d.getHistoriqueModifications()
+                .add(String.format("%s %s - Statut → %s par %s", dateFormatee, heure, statut, by));
+
         return repository.save(d);
     }
 
@@ -112,6 +155,10 @@ public class CollecteBesoinService {
 
         return d.getHistoriqueModifications();
 
+    }
+
+    public List<CollecteBesoins> getHistoriques() {
+        return repository.findByStatut(StatutCommande.LIVREE);
     }
 
 

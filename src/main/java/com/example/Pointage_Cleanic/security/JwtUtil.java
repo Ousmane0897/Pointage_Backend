@@ -1,5 +1,7 @@
 package com.example.Pointage_Cleanic.security;
 
+import com.example.Pointage_Cleanic.Enum.RoleAdmin;
+import com.example.Pointage_Cleanic.Enum.RoleSuperviseur;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
@@ -12,6 +14,8 @@ import org.springframework.stereotype.Component;
 //import javax.annotation.PostConstruct;
 import javax.crypto.SecretKey;
 import java.util.Date;
+import java.util.List;
+import java.util.Map;
 
 @Component
 public class JwtUtil {
@@ -31,7 +35,21 @@ public class JwtUtil {
         this.secretKey = Keys.hmacShaKeyFor(secret.getBytes());
     }
 
-    public String generateToken(UserDetails userDetails, String prenom, String nom, String role, String poste) {
+    public String generateToken(UserDetails userDetails, String prenom, String nom, RoleAdmin role, String poste, Map<String, Boolean> modules) {
+        return Jwts.builder()
+                .setSubject(userDetails.getUsername())
+                .claim("prenom",prenom)
+                .claim("nom", nom)
+                .claim("role",role)
+                .claim("poste",poste)
+                .claim("modules", modules)
+                .setIssuedAt(new Date())
+                .setExpiration(new Date(System.currentTimeMillis() + EXPIRATION_TIME))
+                .signWith(secretKey, SignatureAlgorithm.HS256)
+                .compact();
+    }
+
+    public String generateToken3(UserDetails userDetails, String prenom, String nom, RoleSuperviseur role, String poste) {
         return Jwts.builder()
                 .setSubject(userDetails.getUsername())
                 .claim("prenom",prenom)
@@ -43,6 +61,8 @@ public class JwtUtil {
                 .signWith(secretKey, SignatureAlgorithm.HS256)
                 .compact();
     }
+
+
 
     public String generateToken2(UserDetails userDetails, String role) {
         return Jwts.builder()

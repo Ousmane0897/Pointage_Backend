@@ -2,10 +2,12 @@ package com.example.Pointage_Cleanic.controllers;
 
 import com.example.Pointage_Cleanic.Dto.AuthRequest;
 import com.example.Pointage_Cleanic.Dto.AuthResponse;
-import com.example.Pointage_Cleanic.entities.Admins;
+import com.example.Pointage_Cleanic.entities.Utilisateur;
+import com.example.Pointage_Cleanic.entities.Superviseur;
 import com.example.Pointage_Cleanic.entities.User;
 import com.example.Pointage_Cleanic.repositories.LoginRepository;
 import com.example.Pointage_Cleanic.repositories.SuperAdminRepository;
+import com.example.Pointage_Cleanic.repositories.SuperviseursRepository;
 import com.example.Pointage_Cleanic.security.JwtUtil;
 import com.example.Pointage_Cleanic.services.LoginService;
 import com.example.Pointage_Cleanic.services.MyUserDetailsService;
@@ -34,6 +36,7 @@ public class LoginController {
     private final LoginService loginService;
     private final LoginRepository loginRepository;
     private final SuperAdminRepository superAdminRepository;
+    private final SuperviseursRepository superviseursRepository;
 
 
     @PostMapping
@@ -49,12 +52,22 @@ public class LoginController {
 
         UserDetails userDetails = userDetailsService.loadUserByUsername(authRequest.getEmail());
 
-        // First try to find in Admins
-        Optional<Admins> adminOpt = superAdminRepository.findByEmail(authRequest.getEmail());
+        // Pour trouver le superviseur qui se connecte (Collecteur, magasinier)
+        Optional<Superviseur> SuperviseurOpt = superviseursRepository.findByEmail(authRequest.getEmail());
 
-        if (adminOpt.isPresent()) {
-            Admins admin = adminOpt.get();
-            String jwt = jwtUtil.generateToken(userDetails,admin.getPrenom(), admin.getNom(), admin.getRole(), admin.getPoste() );
+        if (SuperviseurOpt.isPresent()) {
+            Superviseur superviseur  = SuperviseurOpt.get();
+            String jwt = jwtUtil.generateToken3(userDetails,superviseur.getPrenom(), superviseur.getNom(), superviseur.getRole(), superviseur.getPoste() );
+            return ResponseEntity.ok(new AuthResponse(jwt));
+        }
+
+        // First try to find in Utilisateurs
+        Optional<Utilisateur> utilisateur = superAdminRepository.findByEmail(authRequest.getEmail());
+
+        if (utilisateur.isPresent()) {
+            Utilisateur utilisateur1 = utilisateur.get();
+            String jwt = jwtUtil.generateToken(userDetails,utilisateur1.getPrenom(), utilisateur1.getNom(), utilisateur1.getRole(), utilisateur1.getPoste(), utilisateur1.getModulesAutorises() );
+            System.out.println("MODULES BACKEND = " + utilisateur1.getModulesAutorises());
             return ResponseEntity.ok(new AuthResponse(jwt));
         }
 

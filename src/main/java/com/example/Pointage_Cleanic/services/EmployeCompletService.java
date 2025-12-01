@@ -6,7 +6,9 @@ import com.example.Pointage_Cleanic.repositories.EmployeCompletRepository;
 import jdk.jfr.Registered;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
 import java.util.List;
 import java.util.Optional;
 
@@ -49,59 +51,63 @@ public class EmployeCompletService {
         }
     }
 
-    public EmployeComplet update(String agentId, EmployeComplet employeComplet) {
+    public EmployeComplet update(String id, EmployeComplet newData, MultipartFile photo) throws IOException {
 
-        EmployeComplet employeComplet1 = employeCompletRepository.findByAgentId(agentId).orElseThrow(() -> new RuntimeException("Agent non trouvé"));
+        // 🔍 1. Vérification de l'existence de l'employé
+        EmployeComplet existing = employeCompletRepository.findByAgentId(id)
+                .orElseThrow(() -> new RuntimeException("Employé introuvable"));
 
-        if (employeComplet1 != null) {
+        // 🟦 2. Copie des champs simples (merge manuel)
+        existing.setAgentId(newData.getAgentId());
+        existing.setMatricule(newData.getMatricule());
+        existing.setPrenom(newData.getPrenom());
+        existing.setNom(newData.getNom());
+        existing.setSexe(newData.getSexe());
+        existing.setDateNaissance(newData.getDateNaissance());
+        existing.setLieuNaissance(newData.getLieuNaissance());
+        existing.setNationalite(newData.getNationalite());
+        existing.setEtatCivil(newData.getEtatCivil());
+        existing.setAdresse(newData.getAdresse());
+        existing.setVille(newData.getVille());
+        existing.setTelephone1(newData.getTelephone1());
+        existing.setTelephone2(newData.getTelephone2());
+        existing.setEmail(newData.getEmail());
+        existing.setContactUrgence(newData.getContactUrgence());
+        existing.setLienDeParenteAvecContactUrgence(newData.getLienDeParenteAvecContactUrgence());
+        existing.setTelephoneUrgent(newData.getTelephoneUrgent());
+        existing.setAgence(newData.getAgence());
+        existing.setCodeSite(newData.getCodeSite());
+        existing.setVilleSite(newData.getVilleSite());
+        existing.setChefEquipe(newData.getChefEquipe());
+        existing.setManagerOps(newData.getManagerOps());
+        existing.setPoste(newData.getPoste());
+        existing.setTypeContrat(newData.getTypeContrat());
+        existing.setDateEmbauche(newData.getDateEmbauche());
+        existing.setDateFinContrat(newData.getDateFinContrat());
+        existing.setTempsDeTravail(newData.getTempsDeTravail());
+        existing.setHoraire(newData.getHoraire());
+        existing.setSalaireDeBase(newData.getSalaireDeBase());
+        existing.setPrimeTransport(newData.getPrimeTransport());
+        existing.setPrimeAssiduite(newData.getPrimeAssiduite());
+        existing.setPrimeRisque(newData.getPrimeRisque());
+        existing.setRibCompteBancaire(newData.getRibCompteBancaire());
+        existing.setBanque(newData.getBanque());
+        existing.setCnssOuIpres(newData.getCnssOuIpres());
+        existing.setIpmNumero(newData.getIpmNumero());
+        existing.setPermisConduire(newData.getPermisConduire());
+        existing.setCategoriePermis(newData.getCategoriePermis());
+        existing.setStatut(newData.getStatut());
+        existing.setMotifSortie(newData.getMotifSortie());
+        existing.setDateSortie(newData.getDateSortie());
+        existing.setObservations(newData.getObservations());
 
-            employeComplet1.setPrenom(employeComplet.getPrenom());
-            employeComplet1.setNom(employeComplet.getNom());
-            employeComplet1.setSexe(employeComplet.getSexe());
-            employeComplet1.setDateNaissance(employeComplet.getDateNaissance());
-            employeComplet1.setLieuNaissance(employeComplet.getLieuNaissance());
-            employeComplet1.setNationalite(employeComplet.getNationalite());
-            employeComplet1.setEtatCivil(employeComplet.getEtatCivil());
-            employeComplet1.setAdresse(employeComplet.getAdresse());
-            employeComplet1.setVille(employeComplet.getVille());
-            employeComplet1.setTelephone1(employeComplet.getTelephone1());
-            employeComplet1.setTelephone2(employeComplet.getTelephone2());
-            employeComplet1.setEmail(employeComplet.getEmail());
-            employeComplet1.setContactUrgence(employeComplet.getContactUrgence());
-            employeComplet1.setLienDeParenteAvecContactUrgence(employeComplet.getLienDeParenteAvecContactUrgence());
-            employeComplet1.setTelephoneUrgent(employeComplet.getTelephoneUrgent());
-            employeComplet1.setAgence(employeComplet.getAgence());
-            employeComplet1.setCodeSite(employeComplet.getCodeSite());
-            employeComplet1.setVilleSite(employeComplet.getVilleSite());
-            employeComplet1.setChefEquipe(employeComplet.getChefEquipe());
-            employeComplet1.setManagerOps(employeComplet.getManagerOps());
-            employeComplet1.setPoste(employeComplet.getPoste());
-            employeComplet1.setTypeContrat(employeComplet.getTypeContrat());
-            employeComplet1.setDateEmbauche(employeComplet.getDateEmbauche());
-            employeComplet1.setDateFinContrat(employeComplet.getDateFinContrat());
-            employeComplet1.setTempsDeTravail(employeComplet.getTempsDeTravail());
-            employeComplet1.setHoraire(employeComplet.getHoraire());
-            employeComplet1.setSalaireDeBase(employeComplet.getSalaireDeBase());
-            employeComplet1.setPrimeTransport(employeComplet.getPrimeTransport());
-            employeComplet1.setPrimeAssiduite(employeComplet.getPrimeAssiduite());
-            employeComplet1.setPrimeRisque(employeComplet.getPrimeRisque());
-            employeComplet1.setRibCompteBancaire(employeComplet.getRibCompteBancaire());
-            employeComplet1.setBanque(employeComplet.getBanque());
-            employeComplet1.setCnssOuIpres(employeComplet.getCnssOuIpres());
-            employeComplet1.setIpmNumero(employeComplet.getIpmNumero());
-            employeComplet1.setPermisConduire(employeComplet.getPermisConduire());
-            employeComplet1.setCategoriePermis(employeComplet.getCategoriePermis());
-            employeComplet1.setStatut(employeComplet.getStatut());
-            employeComplet1.setMotifSortie(employeComplet.getMotifSortie());
-            employeComplet1.setDateSortie(employeComplet.getDateSortie());
-            employeComplet1.setObservations(employeComplet.getObservations());
-
-
-
+        // 🟩 3. Gestion de la photo (si envoyée)
+        if (photo != null && !photo.isEmpty()) {
+            existing.setPhoto(photo.getBytes());
         }
 
-        return employeComplet1;
-
+        // 🟧 4. Sauvegarde en base
+        return employeCompletRepository.save(existing);
     }
 
 

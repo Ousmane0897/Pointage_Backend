@@ -1,6 +1,6 @@
 package com.example.Pointage_Cleanic.services;
 
-import com.example.Pointage_Cleanic.entities.Admins;
+import com.example.Pointage_Cleanic.entities.Utilisateur;
 import com.example.Pointage_Cleanic.entities.User;
 import com.example.Pointage_Cleanic.repositories.LoginRepository;
 import com.example.Pointage_Cleanic.repositories.SuperAdminRepository;
@@ -24,7 +24,7 @@ public class MyUserDetailsService implements UserDetailsService {
     @Override
     public UserDetails loadUserByUsername(String email) throws UsernameNotFoundException {
         // Vérifier d'abord s'il s'agit d'un Admin
-        Admins admin = superAdminRepository.findByEmail(email).orElse(null);
+        Utilisateur admin = superAdminRepository.findByEmail(email).orElse(null);
 
         if (admin != null) {
             if (!admin.isActive()) {

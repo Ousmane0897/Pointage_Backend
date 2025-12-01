@@ -1,6 +1,6 @@
 package com.example.Pointage_Cleanic.services;
 
-import com.example.Pointage_Cleanic.entities.Admins;
+import com.example.Pointage_Cleanic.entities.Utilisateur;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
@@ -11,23 +11,23 @@ import java.util.List;
 
 @Service
 @RequiredArgsConstructor
-public class AdminsService {
+public class UtilisateursService {
 
     private final MongoTemplate mongoTemplate;
 
-    public Admins save(Admins admins) {
-        return mongoTemplate.save(admins);
+    public Utilisateur save(Utilisateur utilisateur) {
+        return mongoTemplate.save(utilisateur);
     }
 
-    public List<Admins> getAll() {
-        return mongoTemplate.findAll(Admins.class);
+    public List<Utilisateur> getAll() {
+        return mongoTemplate.findAll(Utilisateur.class);
     }
 
 
-    public Admins getByid(String identifiant) {
+    public Utilisateur getByid(String id) {
         Query query = new Query();
-        query.addCriteria(Criteria.where("identifiant").is(identifiant));
-        return mongoTemplate.findOne(query, Admins.class);
+        query.addCriteria(Criteria.where("_id").is(id));
+        return mongoTemplate.findOne(query, Utilisateur.class);
     }
 }
 

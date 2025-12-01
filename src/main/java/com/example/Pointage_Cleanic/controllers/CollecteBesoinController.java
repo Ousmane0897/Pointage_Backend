@@ -34,7 +34,7 @@ public class CollecteBesoinController {
     @GetMapping("/{id}")
     public CollecteBesoins get(@PathVariable String id) { return service.getById(id); }
 
-    @GetMapping("/historique-modification/{id}")
+    @GetMapping("/historique-modifications/{id}")
     public List<String> getHistorique(@PathVariable String id) { return service.getHistorique(id); }
 
     @GetMapping("/destination/{nom}")
@@ -53,6 +53,11 @@ public class CollecteBesoinController {
         return service.updateStatut(id, statut, modifiedBy);
     }
 
+    @GetMapping("/historique-livraisons")
+    public List<CollecteBesoins> getHistoriques() {
+
+        return service.getHistoriques();
+    }
 
     @PutMapping("/{id}")
     public CollecteBesoins modifier(@PathVariable String id, @RequestBody CollecteBesoins demande, @RequestParam String modifiedBy) {
