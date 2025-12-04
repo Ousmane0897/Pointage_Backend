@@ -1,8 +1,13 @@
 package com.example.Pointage_Cleanic.services;
 
 
+import com.example.Pointage_Cleanic.Dto.EmployeCompletDto;
+import com.example.Pointage_Cleanic.Mapper.EmployeCompletMapper;
+import com.example.Pointage_Cleanic.Mapper.EmployeMapper;
+import com.example.Pointage_Cleanic.entities.Employe;
 import com.example.Pointage_Cleanic.entities.EmployeComplet;
 import com.example.Pointage_Cleanic.repositories.EmployeCompletRepository;
+import com.example.Pointage_Cleanic.repositories.EmployeRepository;
 import jdk.jfr.Registered;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -17,10 +22,45 @@ import java.util.Optional;
 public class EmployeCompletService {
 
     private final EmployeCompletRepository employeCompletRepository;
+    private final EmployeCompletMapper employeCompletMapper;
+    private final EmployeMapper employeMapper;
+    private final EmployeRepository employeRepository;
 
     public EmployeComplet save(EmployeComplet employeComplet) {
 
         return employeCompletRepository.save(employeComplet);
+    }
+
+    // On utilise MapStruct pour créer l'entité. Puis on ajoute la photo si fournie. Enfin on sauvegarde.
+    public EmployeComplet create(EmployeCompletDto dto, MultipartFile photo) throws IOException {
+
+        // 1️⃣ Création de l'employé complet
+        EmployeComplet employeComplet = employeCompletMapper.toEntity(dto);
+
+        if (photo != null && !photo.isEmpty()) {
+            employeComplet.setPhoto(photo.getBytes());
+        }
+
+        EmployeComplet savedComplet = employeCompletRepository.save(employeComplet);
+
+        // 2️⃣ Création Employe (simple)
+        Employe employe = employeMapper.toEmploye(dto);
+
+        // Champs laissés volontairement à initialiser manuellement
+        employe.setEmployeCreePar("SYSTEM");
+        employe.setSiteAvantDeplacement(dto.getAgence() != null && dto.getAgence().length > 0 ? dto.getAgence()[0] : null);
+        employe.setMatin(false);
+        employe.setApresMidi(false);
+        employe.setDeplacement(false);
+        employe.setRemplacement(false);
+        employe.setHorairesDeRemplacement(null);
+        employe.setPersonneRemplacee(null);
+        employe.setDateEtHeureCreation(java.time.Instant.now().toString());
+        employe.setHeuresSupplementaires(null);
+
+        employeRepository.save(employe);
+
+        return savedComplet;
     }
 
     public List<EmployeComplet> getAll() {
@@ -42,73 +82,62 @@ public class EmployeCompletService {
 
     }
 
-    public void delete(String matricule) {
+    public void delete(String agentId) {
 
-        EmployeComplet employeComplet1 = employeCompletRepository.findByMatricule(matricule).orElseThrow(() -> new RuntimeException("Agent non trouvé"));
+        // 🔍 Vérifier si l'employé complet existe
+        EmployeComplet employeComplet = employeCompletRepository.findByAgentId(agentId)
+                .orElseThrow(() -> new RuntimeException("Employé complet introuvable : " + agentId));
 
-        if (employeComplet1 != null) {
-            employeCompletRepository.delete(employeComplet1);
-        }
+        // 🗑 Supprimer EmployeComplet
+        employeCompletRepository.delete(employeComplet);
+
+        // 🔍 Vérifier s'il existe aussi dans la collection employes
+        Optional<Employe> employe = employeRepository.findByCodeSecret(agentId); // agentId dans EmployeComplet représente le code secret dand Employe
+
+        employe.ifPresent(e -> {
+            employeRepository.delete(e);
+            System.out.println("Employe supprimé : " + agentId);
+        });
+
+        System.out.println("EmployeComplet supprimé : " + agentId);
     }
 
-    public EmployeComplet update(String id, EmployeComplet newData, MultipartFile photo) throws IOException {
 
-        // 🔍 1. Vérification de l'existence de l'employé
-        EmployeComplet existing = employeCompletRepository.findByAgentId(id)
-                .orElseThrow(() -> new RuntimeException("Employé introuvable"));
+    public EmployeComplet update(String agentId, EmployeCompletDto dto, MultipartFile photo) throws IOException {
 
-        // 🟦 2. Copie des champs simples (merge manuel)
-        existing.setAgentId(newData.getAgentId());
-        existing.setMatricule(newData.getMatricule());
-        existing.setPrenom(newData.getPrenom());
-        existing.setNom(newData.getNom());
-        existing.setSexe(newData.getSexe());
-        existing.setDateNaissance(newData.getDateNaissance());
-        existing.setLieuNaissance(newData.getLieuNaissance());
-        existing.setNationalite(newData.getNationalite());
-        existing.setEtatCivil(newData.getEtatCivil());
-        existing.setAdresse(newData.getAdresse());
-        existing.setVille(newData.getVille());
-        existing.setTelephone1(newData.getTelephone1());
-        existing.setTelephone2(newData.getTelephone2());
-        existing.setEmail(newData.getEmail());
-        existing.setContactUrgence(newData.getContactUrgence());
-        existing.setLienDeParenteAvecContactUrgence(newData.getLienDeParenteAvecContactUrgence());
-        existing.setTelephoneUrgent(newData.getTelephoneUrgent());
-        existing.setAgence(newData.getAgence());
-        existing.setCodeSite(newData.getCodeSite());
-        existing.setVilleSite(newData.getVilleSite());
-        existing.setChefEquipe(newData.getChefEquipe());
-        existing.setManagerOps(newData.getManagerOps());
-        existing.setPoste(newData.getPoste());
-        existing.setTypeContrat(newData.getTypeContrat());
-        existing.setDateEmbauche(newData.getDateEmbauche());
-        existing.setDateFinContrat(newData.getDateFinContrat());
-        existing.setTempsDeTravail(newData.getTempsDeTravail());
-        existing.setHoraire(newData.getHoraire());
-        existing.setSalaireDeBase(newData.getSalaireDeBase());
-        existing.setPrimeTransport(newData.getPrimeTransport());
-        existing.setPrimeAssiduite(newData.getPrimeAssiduite());
-        existing.setPrimeRisque(newData.getPrimeRisque());
-        existing.setRibCompteBancaire(newData.getRibCompteBancaire());
-        existing.setBanque(newData.getBanque());
-        existing.setCnssOuIpres(newData.getCnssOuIpres());
-        existing.setIpmNumero(newData.getIpmNumero());
-        existing.setPermisConduire(newData.getPermisConduire());
-        existing.setCategoriePermis(newData.getCategoriePermis());
-        existing.setStatut(newData.getStatut());
-        existing.setMotifSortie(newData.getMotifSortie());
-        existing.setDateSortie(newData.getDateSortie());
-        existing.setObservations(newData.getObservations());
+        // 1️⃣ Récupération EmployeComplet
+        EmployeComplet existing = employeCompletRepository.findByAgentId(agentId)
+                .orElseThrow(() -> new RuntimeException("Employé complet introuvable"));
 
-        // 🟩 3. Gestion de la photo (si envoyée)
+        // 2️⃣ Mise à jour EmployeComplet (tous champs sauf photo gérés à part)
+        employeCompletMapper.updateEntityFromDto(dto, existing);
+
         if (photo != null && !photo.isEmpty()) {
             existing.setPhoto(photo.getBytes());
         }
 
-        // 🟧 4. Sauvegarde en base
-        return employeCompletRepository.save(existing);
+        EmployeComplet updated = employeCompletRepository.save(existing);
+
+
+        // ===============================
+        //  SYNCHRONISATION AVEC Employe
+        // ===============================
+
+        Employe employe = employeRepository.findByCodeSecret(agentId) // le code secret de l'employe qui lui permet de se pointer est son agentId
+                .orElseThrow(() -> new RuntimeException("Employé simple introuvable"));
+
+        // 3️⃣ Mise à jour SÉCURISÉE (champs obligatoires seulement)
+        employeMapper.updateEmployeFromDto(dto, employe);
+
+        // Aucun champ optionnel n'est modifié ici.
+        // Toutes les propriétés opérationnelles sont conservées.
+
+        employeRepository.save(employe);
+
+        return updated;
     }
+
+
 
 
 }

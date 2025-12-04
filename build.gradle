@@ -7,27 +7,10 @@ plugins {
 group = 'com.example'
 version = '0.0.1-SNAPSHOT'
 
-/*java {
-	toolchain {
-		languageVersion = JavaLanguageVersion.of(21)
-	}
-	// Dans dockefile Gradle toolchains ne compile pas forcément avec le JDK installé sur ta machine locale (JDK 23).
-	//Il utilise le JDK disponible dans l’environnement d’exécution Gradle,dans le contener, ou télécharge celui spécifié dans la toolchain.
-	//Dans ton Dockerfile, le builder a gradle:8.10.2-jdk21 → Java 21 est installé dans le conteneur.
-	//Gradle va utiliser le JDK 21 du conteneur Docker, pas celui de ta machine locale.
-	//Ton JDK 23 local n’interfère pas, car Docker isole l’environnement.
-	//Docker build se passe entièrement dans le conteneur → ta version locale de Java n’a aucune importance.
-	//Forcer languageVersion = 21 résout le problème de "Cannot find a Java installation matching 23" dans Docker.
-}*/
-
 java {
-	sourceCompatibility = JavaVersion.VERSION_21 // 21 correspond au JDK présent dans dockerfile et non celui présent en local qui JDK 21
+	sourceCompatibility = JavaVersion.VERSION_21
 	targetCompatibility = JavaVersion.VERSION_21
-
-	//Dire à Gradle de ne pas utiliser de Toolchain et de se servir du JDK existant
-	//Avec ça, Gradle compile avec le JDK présent dans l’image Docker (gradle:8.10.2-jdk21)
 }
-
 
 configurations {
 	compileOnly {
@@ -40,45 +23,51 @@ repositories {
 }
 
 dependencies {
+
 	implementation 'org.springframework.boot:spring-boot-starter-data-mongodb'
 	implementation 'org.springframework.boot:spring-boot-starter-web'
 
-	// Pour le support de Optional<T>, Stream, etc.
+	// ➤ LOMBOK DOIT VENIR AVANT MAPSTRUCT
+	compileOnly 'org.projectlombok:lombok'
+	annotationProcessor 'org.projectlombok:lombok'
+
+	// ➤ MAPSTRUCT
+	implementation 'org.mapstruct:mapstruct:1.5.5.Final'
+	annotationProcessor 'org.mapstruct:mapstruct-processor:1.5.5.Final'
+
+	// OPTIONAL BUT RECOMMENDED
+	annotationProcessor "org.springframework.boot:spring-boot-configuration-processor"
+
+	// OTHER DEPENDENCIES
 	implementation 'com.fasterxml.jackson.datatype:jackson-datatype-jdk8'
 	implementation 'jakarta.validation:jakarta.validation-api:3.0.2'
-	implementation 'org.hibernate.validator:hibernate-validator:8.0.1.Final' // moteur de validation
+	implementation 'org.hibernate.validator:hibernate-validator:8.0.1.Final'
 	implementation 'org.springframework.boot:spring-boot-starter-security'
 	implementation 'org.springframework.boot:spring-boot-starter-websocket'
+
 	implementation 'io.jsonwebtoken:jjwt-api:0.11.5'
 	runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.11.5'
-	runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.11.5' // ou jjwt-gson si tu préfères
+	runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.11.5'
 
 	implementation 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310'
-	compileOnly 'org.projectlombok:lombok'
+
 	developmentOnly 'org.springframework.boot:spring-boot-devtools'
-	annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
-	annotationProcessor 'org.projectlombok:lombok'
+
 	testImplementation 'org.springframework.boot:spring-boot-starter-test'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+// ❗ SUPPRIMER CETTE LIGNE QUI BRISAIT LES ANNOTATION PROCESSORS
+// tasks.withType(JavaCompile) {
+//     options.annotationProcessorPath = configurations.annotationProcessor
+// }
+
+compileJava {
+	options.compilerArgs += [
+			"-Amapstruct.defaultComponentModel=spring"
+	]
 }
 
 tasks.named('test') {
 	useJUnitPlatform()
 }
-
-bootJar {
-	archiveFileName = 'app.jar'  // optional: name it consistently
-}
-
-bootRun {
-	jvmArgs += [
-			'--add-opens=java.base/java.time=ALL-UNNAMED'
-	]
-}
-
-test {
-	jvmArgs += [
-			'--add-opens=java.base/java.time=ALL-UNNAMED'
-	]
-}
-

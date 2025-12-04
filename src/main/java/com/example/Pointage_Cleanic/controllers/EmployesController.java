@@ -47,7 +47,6 @@ public class EmployesController {
 
         employe.setDateEtHeureCreation(formatte);
 
-
         Employe createdEmploye = employeServices.save(employe);
         return ResponseEntity.status(HttpStatus.CREATED).body(createdEmploye);
     }

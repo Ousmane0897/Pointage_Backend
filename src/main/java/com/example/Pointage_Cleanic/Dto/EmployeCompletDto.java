@@ -20,6 +20,12 @@ public class EmployeCompletDto {
     private String prenom;
     private String nom;
     private String sexe;
+    private String heureDebut;
+    private String heureFin;
+    private String heureDebut2;
+    private String heureFin2;
+    private String joursDeTravail;
+    private String joursDeTravail2;
 
     @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss.SSSX", timezone = "UTC")
     private Instant dateNaissance;
@@ -35,11 +41,15 @@ public class EmployeCompletDto {
     private String contactUrgence;
     private String lienDeParenteAvecContactUrgence;
     private String telephoneUrgent;
-    private String agence;
+    private String[] agence;
     private String codeSite;
     private String villeSite;
     private String chefEquipe;
     private String managerOps;
+    private String codeSite2;
+    private String villeSite2;
+    private String chefEquipe2;
+    private String managerOps2;
     private String poste;
     private String typeContrat;
 

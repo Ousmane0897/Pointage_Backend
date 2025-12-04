@@ -31,66 +31,22 @@ public class EmployeCompletController {
     private final EmployeCompletRepository employeCompletRepository;
 
 
-    @PostMapping(value = "/employe", consumes = MediaType.MULTIPART_FORM_DATA_VALUE) // Donc il faut dire à Spring Boot que la requête est multipart/form-data.Sinon le JSON ne sera pas désérialisé correctement.
-    public ResponseEntity<EmployeComplet> createEmployeComplet(
-            @RequestPart("employe") EmployeCompletDto employeDto,
-            @RequestParam(value = "photo", required = false) MultipartFile photo
+    // ==================================
+    //            CREATE
+    // ==================================
+    @PostMapping(value = "/employe", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<EmployeComplet> createEmploye(
+            @RequestPart("employe") EmployeCompletDto dto,
+            @RequestPart(value = "photo", required = false) MultipartFile photo
     ) {
         try {
-            byte[] photoData = photo != null ? photo.getBytes() : null;
-
-            EmployeComplet employe = EmployeComplet.builder()
-                    .agentId(employeDto.getAgentId())
-                    .matricule(employeDto.getMatricule())
-                    .prenom(employeDto.getPrenom())
-                    .nom(employeDto.getNom())
-                    .sexe(employeDto.getSexe())
-                    .dateNaissance(employeDto.getDateNaissance())
-                    .lieuNaissance(employeDto.getLieuNaissance())
-                    .nationalite(employeDto.getNationalite())
-                    .etatCivil(employeDto.getEtatCivil())
-                    .adresse(employeDto.getAdresse())
-                    .ville(employeDto.getVille())
-                    .telephone1(employeDto.getTelephone1())
-                    .telephone2(employeDto.getTelephone2())
-                    .email(employeDto.getEmail())
-                    .contactUrgence(employeDto.getContactUrgence())
-                    .lienDeParenteAvecContactUrgence(employeDto.getLienDeParenteAvecContactUrgence())
-                    .telephoneUrgent(employeDto.getTelephoneUrgent())
-                    .agence(employeDto.getAgence())
-                    .codeSite(employeDto.getCodeSite())
-                    .villeSite(employeDto.getVilleSite())
-                    .chefEquipe(employeDto.getChefEquipe())
-                    .managerOps(employeDto.getManagerOps())
-                    .poste(employeDto.getPoste())
-                    .typeContrat(employeDto.getTypeContrat())
-                    .dateEmbauche(employeDto.getDateEmbauche())
-                    .dateFinContrat(employeDto.getDateFinContrat())
-                    .tempsDeTravail(employeDto.getTempsDeTravail())
-                    .horaire(employeDto.getHoraire())
-                    .salaireDeBase(employeDto.getSalaireDeBase())
-                    .primeTransport(employeDto.getPrimeTransport())
-                    .primeAssiduite(employeDto.getPrimeAssiduite())
-                    .primeRisque(employeDto.getPrimeRisque())
-                    .ribCompteBancaire(employeDto.getRibCompteBancaire())
-                    .banque(employeDto.getBanque())
-                    .cnssOuIpres(employeDto.getCnssOuIpres())
-                    .ipmNumero(employeDto.getIpmNumero())
-                    .permisConduire(employeDto.getPermisConduire())
-                    .categoriePermis(employeDto.getCategoriePermis())
-                    .statut(employeDto.getStatut())
-                    .motifSortie(employeDto.getMotifSortie())
-                    .dateSortie(employeDto.getDateSortie())
-                    .photo(photoData)
-                    .observations(employeDto.getObservations())
-                    .build();
-
-            return ResponseEntity.ok(employeCompletService.save(employe));
-
-        } catch (IOException e) {
+            EmployeComplet saved = employeCompletService.create(dto, photo);
+            return ResponseEntity.ok(saved);
+        } catch (Exception e) {
             return ResponseEntity.internalServerError().build();
         }
     }
+
 
 
     // Retourne une page de produit contenant 20 produits
@@ -184,11 +140,11 @@ public class EmployeCompletController {
     @PutMapping(value = "/complet/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<EmployeComplet> update(
             @PathVariable String id,
-            @RequestPart("employe") EmployeComplet employeComplet,
+            @RequestPart("employe") EmployeCompletDto employeCompletDto,
             @RequestPart(value = "photo", required = false) MultipartFile photo
     ) throws IOException {
 
-        EmployeComplet updated = employeCompletService.update(id, employeComplet, photo);
+        EmployeComplet updated = employeCompletService.update(id, employeCompletDto, photo);
         return ResponseEntity.ok(updated);
     }
 
