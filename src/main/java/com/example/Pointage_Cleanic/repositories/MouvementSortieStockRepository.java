@@ -1,7 +1,6 @@
 package com.example.Pointage_Cleanic.repositories;
 
 import com.example.Pointage_Cleanic.Enum.TypeMouvement;
-import com.example.Pointage_Cleanic.entities.stock.MouvementEntreeStock;
 import com.example.Pointage_Cleanic.entities.stock.MouvementSortieStock;
 import org.springframework.data.mongodb.repository.MongoRepository;
 import org.springframework.data.mongodb.repository.Query;

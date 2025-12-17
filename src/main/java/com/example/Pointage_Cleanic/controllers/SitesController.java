@@ -1,6 +1,5 @@
 package com.example.Pointage_Cleanic.controllers;
 
-import com.example.Pointage_Cleanic.entities.Gab;
 import com.example.Pointage_Cleanic.entities.Site;
 import com.example.Pointage_Cleanic.exception.ResourceNotFoundException;
 import com.example.Pointage_Cleanic.repositories.SiteRepository;

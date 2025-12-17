@@ -4,6 +4,7 @@ package com.example.Pointage_Cleanic.services;
 import com.example.Pointage_Cleanic.entities.Agence;
 import com.example.Pointage_Cleanic.entities.Employe;
 import com.example.Pointage_Cleanic.repositories.AgencesRepository;
+import com.example.Pointage_Cleanic.repositories.projections.AgenceJoursOuvertureProjection;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
@@ -11,6 +12,7 @@ import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -76,9 +78,10 @@ public class AgencesServices {
 
 
 
-    public String getJoursOuvertureByNom(String nomAgence) {
-        return agencesRepository.findJoursOuvertureByNom(nomAgence)
-                .orElse(null); // ou throw exception custom si tu préfères
+    public Optional<String> getJoursOuvertureByNom(String nomAgence) {
+        return agencesRepository
+                .findJoursOuvertureByNom(nomAgence)
+                .map(AgenceJoursOuvertureProjection::getJoursOuverture);
     }
 
 }

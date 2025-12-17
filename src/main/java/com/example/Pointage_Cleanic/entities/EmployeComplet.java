@@ -4,6 +4,7 @@ package com.example.Pointage_Cleanic.entities;
 import com.fasterxml.jackson.annotation.JsonFormat;
 import lombok.*;
 import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.time.Instant;
@@ -13,20 +14,23 @@ import java.time.Instant;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-@Document(collection = "employes-complet")
+@Document(collection = "employes_complet")
 public class EmployeComplet {
 
     @Id
     private String id;
 
+    @Indexed(unique = true)
     private String agentId;
+
+    @Indexed(unique = true)
     private String matricule;
     private String prenom;
     private String nom;
     private String sexe;
     private String heureDebut;
     private String heureFin;
-    private String heureDebut1;
+    private String heureDebut2;
     private String heureFin2;
     private String joursDeTravail;
     private String joursDeTravail2;
@@ -83,6 +87,10 @@ public class EmployeComplet {
 
     private byte[] photo;
     private String observations;
+
+
+    @Indexed(unique = true)
+    private String nomComplet; // nom + prenom
 
     public enum PermisConduire {
         OUI, NON

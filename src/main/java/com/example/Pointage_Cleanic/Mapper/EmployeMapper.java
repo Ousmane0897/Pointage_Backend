@@ -88,7 +88,8 @@ public interface EmployeMapper {
             // Champs backend
             @Mapping(target = "id", ignore = true),
             @Mapping(target = "codeSecret", ignore = true),
-            @Mapping(target = "employeCreePar", ignore = true)
+            @Mapping(target = "employeCreePar", ignore = true),
+
     })
     void updateEmployeFromDto(EmployeCompletDto dto, @MappingTarget Employe employe);
 }

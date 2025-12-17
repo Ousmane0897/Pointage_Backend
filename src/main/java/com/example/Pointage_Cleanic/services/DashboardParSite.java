@@ -3,6 +3,7 @@ package com.example.Pointage_Cleanic.services;
 
 import com.example.Pointage_Cleanic.repositories.EmployeRepository;
 import com.example.Pointage_Cleanic.repositories.PointageRepository;
+import com.example.Pointage_Cleanic.repositories.projections.EmployeIdProjection;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import java.time.LocalDate;
@@ -30,7 +31,7 @@ public class DashboardParSite {
 
         for (String site : allSites) {
             // Récupère tous les employés assignés à ce site
-            List<String> employeIds = employeRepository.findEmployeIdsBySite(site);
+            List<EmployeIdProjection> employeIds = employeRepository.findEmployeIdsBySite(site);
 
             long total = employeIds.size();
             long present = pointageRepository.countByDateAndIdIn(todayStr, employeIds);

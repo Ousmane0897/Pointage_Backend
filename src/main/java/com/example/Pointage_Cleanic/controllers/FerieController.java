@@ -1,7 +1,6 @@
 package com.example.Pointage_Cleanic.controllers;
 
 
-import com.example.Pointage_Cleanic.entities.Employe;
 import com.example.Pointage_Cleanic.entities.Ferie;
 import com.example.Pointage_Cleanic.repositories.FerieRepository;
 import com.example.Pointage_Cleanic.services.FerieService;

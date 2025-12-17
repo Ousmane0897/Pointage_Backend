@@ -7,13 +7,6 @@ spring:
     time-zone: Africa/Dakar
   datasource:
     time-zone: Africa/Dakar
-  profiles:
-    actives: dev
-
-# Dropbox Access Token
-  dropbox:
-    access-token: XXX_YOUR_DROPBOX_TOKEN
-
 
 logging:
   level:
@@ -27,15 +20,3 @@ logging:
 
 jwt:
   secret: w9awKW+/x+VOzOyvg5DY3D7qWVZhipaV6VH8h9c4JS8=
-
-
-
-
-
-
-
-
-
-
-
-

@@ -117,12 +117,12 @@ public class AgencesController {
 
     @GetMapping(value = "/{nomAgence}", produces = "text/plain")
     public ResponseEntity<String> getJoursOuvertureByNom(@PathVariable String nomAgence) {
-        String joursOuverture = agencesServices.getJoursOuvertureByNom(nomAgence);
-        if (joursOuverture == null) {
-            return ResponseEntity.notFound().build();
-        }
-        return ResponseEntity.ok(joursOuverture);
-    } // Avec produces = "text/plain" au lieu d'envoyer un objet '{ "joursOuverture": "Lundi-Vendredi" }, spring envoi seulement 'Lundi-Vendredi'
+
+        return agencesServices.getJoursOuvertureByNom(nomAgence)
+                .map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+    // Avec produces = "text/plain" au lieu d'envoyer un objet '{ "joursOuverture": "Lundi-Vendredi" }, spring envoi seulement 'Lundi-Vendredi'
 
 
     @PutMapping("/{nom}")

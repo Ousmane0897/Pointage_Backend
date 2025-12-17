@@ -1,2 +1,7 @@
 jwt:
   secret: TestSecretKeyForJwtTestSecretKeyForJwt
+
+# désactiver la configuration mail en test pour éviter les erreurs.
+spring:
+  mail:
+    host: disabled

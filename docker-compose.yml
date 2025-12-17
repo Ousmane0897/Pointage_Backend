@@ -1,26 +1,25 @@
-
-
 services:
   mongo:
     image: mongo:6
     container_name: mongo
     ports:
-      - "27017:27017"
+      - "27018:27017"
     volumes:
       - mongo_data:/data/db
 
   springboot:
     build: .
-    container_name: springboot_app
+    container_name: springboot-backend
     ports:
       - "8080:8080"
     depends_on:
-      - mongo 
+      - mongo
     environment:
-      - SPRING_DATA_MONGODB_URI=mongodb://mongo:27017/cleanic
-      - JWT_SECRET=G5pRQXJg7GwOULOE2VODLI9q3baigC4UcW3DYKGX//g=
-
-
+      SPRING_PROFILES_ACTIVE: "prod"
+      MAIL_USERNAME: "cleanicsarl24@gmail.com"
+      MAIL_PASSWORD: "wsuj dawn qmdd qyfq"
+      JWT_SECRET: "G5pRQXJg7GwOULOE2VODLI9q3baigC4UcW3DYKGX//g="
+    restart: always
 
 volumes:
   mongo_data:

@@ -14,6 +14,13 @@ public interface EmployeCompletRepository extends MongoRepository<EmployeComplet
 
     Optional<EmployeComplet> findByAgentId(String agentId);
 
+    boolean existsByAgentId(String agentId);
+
+    boolean existsByMatricule(String matricule);
+
+    boolean existsByNomComplet(String nomComplet);
+
+
     Optional<EmployeComplet> findByPrenom(String prenom);
 
     Optional<EmployeComplet> findByPrenomAndNom(String prenom, String nom);

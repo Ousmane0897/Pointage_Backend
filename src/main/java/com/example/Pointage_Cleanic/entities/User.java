@@ -16,5 +16,6 @@ public class User {
     private String id;
     private String email;
     private String password;
+    private boolean mustChangePassword = true;
     private String role;
 }

@@ -32,10 +32,15 @@ public class JwtRequestFilter extends OncePerRequestFilter {
 
         // 🔐 Ignorer les routes publiques (login, register, etc.)
         String path = request.getRequestURI();
-        if (path.contains("/api/login") || path.contains("/api/pointages")) {
+        if (path.startsWith("/api/login")
+                || path.startsWith("/api/pointages")
+                || path.startsWith("/auth/forgot-password")
+                || path.startsWith("/auth/reset-password")) {
+
             chain.doFilter(request, response);
             return;
         }
+
 
         final String authHeader = request.getHeader("Authorization");
 

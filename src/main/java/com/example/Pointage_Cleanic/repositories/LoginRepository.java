@@ -11,4 +11,7 @@ import java.util.Optional;
 public interface LoginRepository extends MongoRepository<User, Integer> {
 
     Optional<User> findByEmail(String email);
+
+    void deleteByEmail(String email);
+
 }

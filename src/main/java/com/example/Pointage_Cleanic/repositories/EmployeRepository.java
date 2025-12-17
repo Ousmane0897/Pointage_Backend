@@ -1,6 +1,7 @@
 package com.example.Pointage_Cleanic.repositories;
 
 import com.example.Pointage_Cleanic.entities.Employe;
+import com.example.Pointage_Cleanic.repositories.projections.EmployeIdProjection;
 import org.springframework.data.mongodb.repository.MongoRepository;
 import org.springframework.data.mongodb.repository.Query;
 import org.springframework.stereotype.Repository;
@@ -27,8 +28,10 @@ public interface EmployeRepository extends MongoRepository<Employe,String> {
 
     Optional<Employe> findByCodeSecret(String s);
 
+
     @Query(value = "{ 'site': ?0 }", fields = "{ '_id' : 1 }")
-    List<String> findEmployeIdsBySite(String site);
+    List<EmployeIdProjection> findEmployeIdsBySite(String site);
+
 
 
 }

@@ -175,9 +175,19 @@ public class ProduitController {
     }
 
 
-    @PutMapping(value = "/{CodeProduit}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public Produit update(@PathVariable String CodeProduit, @RequestBody Produit payload) {
-        Produit existing = produitRepository.findByCodeProduit(CodeProduit).orElseThrow(() -> new IllegalArgumentException("Produit non trouvé"));
+    @PutMapping(
+            value = "/{codeProduit}",
+            consumes = MediaType.MULTIPART_FORM_DATA_VALUE
+    )
+    public Produit update(
+            @PathVariable String codeProduit,
+
+            @RequestPart("produit") Produit payload,
+            @RequestPart(value = "image", required = false) MultipartFile image
+    ) {
+        Produit existing = produitRepository.findByCodeProduit(codeProduit)
+                .orElseThrow(() -> new IllegalArgumentException("Produit non trouvé"));
+
         existing.setNomProduit(payload.getNomProduit());
         existing.setDescription(payload.getDescription());
         existing.setCategorie(payload.getCategorie());
@@ -187,8 +197,18 @@ public class ProduitController {
         existing.setEmplacement(payload.getEmplacement());
         existing.setSeuilMinimum(payload.getSeuilMinimum());
         existing.setStatut(payload.getStatut());
+
+        if (image != null && !image.isEmpty()) {
+            try {
+                existing.setImage(image.getBytes());
+            } catch (IOException e) {
+                throw new RuntimeException("Erreur lecture image", e);
+            }
+        }
+
         return produitRepository.save(existing);
     }
+
 
 
     @DeleteMapping("/{id}")

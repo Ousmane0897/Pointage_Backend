@@ -35,13 +35,15 @@ public class JwtUtil {
         this.secretKey = Keys.hmacShaKeyFor(secret.getBytes());
     }
 
-    public String generateToken(UserDetails userDetails, String prenom, String nom, RoleAdmin role, String poste, Map<String, Boolean> modules) {
+    public String generateToken(UserDetails userDetails, String prenom, String nom, RoleAdmin role, String email, String poste, boolean mustChangePassword, Map<String, Boolean> modules) {
         return Jwts.builder()
                 .setSubject(userDetails.getUsername())
                 .claim("prenom",prenom)
                 .claim("nom", nom)
                 .claim("role",role)
+                .claim("email", email)
                 .claim("poste",poste)
+                .claim("mustChangePassword", mustChangePassword)
                 .claim("modules", modules)
                 .setIssuedAt(new Date())
                 .setExpiration(new Date(System.currentTimeMillis() + EXPIRATION_TIME))
@@ -49,25 +51,14 @@ public class JwtUtil {
                 .compact();
     }
 
-    public String generateToken3(UserDetails userDetails, String prenom, String nom, RoleSuperviseur role, String poste) {
-        return Jwts.builder()
-                .setSubject(userDetails.getUsername())
-                .claim("prenom",prenom)
-                .claim("nom", nom)
-                .claim("role",role)
-                .claim("poste",poste)
-                .setIssuedAt(new Date())
-                .setExpiration(new Date(System.currentTimeMillis() + EXPIRATION_TIME))
-                .signWith(secretKey, SignatureAlgorithm.HS256)
-                .compact();
-    }
 
 
-
-    public String generateToken2(UserDetails userDetails, String role) {
+    public String generateToken2(UserDetails userDetails, String role, String email, boolean mustChangePassword) {
         return Jwts.builder()
                 .setSubject(userDetails.getUsername())
                 .claim("role",role)
+                .claim("email",email )
+                .claim("mustChangePassword", mustChangePassword)
                 .setIssuedAt(new Date())
                 .setExpiration(new Date(System.currentTimeMillis() + EXPIRATION_TIME))
                 .signWith(secretKey, SignatureAlgorithm.HS256)

@@ -131,10 +131,10 @@ public class EmployeCompletController {
     }
 
 
-    @DeleteMapping("/{agentId}")
-    public void deleteEmployee(@PathVariable String agentId) {
+    @DeleteMapping("/{matricule}")
+    public void deleteEmployee(@PathVariable String matricule) {
 
-        employeCompletService.delete(agentId);
+        employeCompletService.delete(matricule);
     }
 
     @PutMapping(value = "/complet/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)

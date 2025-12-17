@@ -18,6 +18,7 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.web.cors.CorsConfiguration;
 
 @Configuration
 @EnableWebSecurity
@@ -29,19 +30,36 @@ public class SecurityConfig {
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+
         http
-                .cors(cors -> {}) // ✅ active CORS proprement
+                .cors(cors -> cors.configurationSource(request -> {
+                    CorsConfiguration config = new CorsConfiguration();
+                    config.addAllowedOriginPattern("*"); // tu peux mettre http://localhost:4200
+                    config.addAllowedMethod("*");
+                    config.addAllowedHeader("*");
+                    config.setAllowCredentials(true);
+                    return config;
+                }))
                 .csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/login").permitAll()
+
+                        // 🔥 Très important : autoriser OPTIONS
+                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+
+                        // 🔥 Routes publiques
+                        .requestMatchers(
+                                "/api/login/**",
+                                "/auth/forgot-password",
+                                "/auth/reset-password/**",
+                                "/error",
+                                "/error/**"
+                        ).permitAll()
 
                         .requestMatchers(HttpMethod.DELETE, "/api/ferie/**").authenticated()
                         .requestMatchers("/api/pointages/**").permitAll()
-                        .requestMatchers("/error", "/error/**").permitAll()
                         .requestMatchers("/ws/**").permitAll()
                         .requestMatchers("/api/produits/image/**").permitAll()
                         .requestMatchers("/api/employe-complet/image/**").permitAll()
-                        //.requestMatchers("api/stock/produit/quantite/**").permitAll()
                         .requestMatchers("/api/dashboard_par_agence").authenticated()
                         .requestMatchers("/api/planification/**").authenticated()
                         .anyRequest().authenticated()
@@ -52,6 +70,7 @@ public class SecurityConfig {
 
         return http.build();
     }
+
 
 
     @Bean

@@ -81,4 +81,5 @@ public class EmployeCompletDto {
 
     private byte[] photo;
     private String observations;
+
 }

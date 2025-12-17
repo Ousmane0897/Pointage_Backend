@@ -8,13 +8,12 @@ import lombok.NoArgsConstructor;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 
-import java.util.List;
 import java.util.Map;
 
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-@Document(collection = "superadmin")
+@Document(collection = "utilisateur")
 public class Utilisateur {
 
     @Id
@@ -26,6 +25,7 @@ public class Utilisateur {
     private String password;
     private String poste;
     private RoleAdmin role;
+    private boolean mustChangePassword = true;
     private Map<String, Boolean> modulesAutorises;
     private String motifDesactivation;
     private boolean active;

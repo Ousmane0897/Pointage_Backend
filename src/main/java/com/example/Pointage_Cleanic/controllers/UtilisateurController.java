@@ -4,7 +4,7 @@ import com.example.Pointage_Cleanic.entities.Utilisateur;
 import com.example.Pointage_Cleanic.entities.User;
 import com.example.Pointage_Cleanic.exception.EmailAlreadyExistsException;
 import com.example.Pointage_Cleanic.repositories.LoginRepository;
-import com.example.Pointage_Cleanic.repositories.SuperAdminRepository;
+import com.example.Pointage_Cleanic.repositories.UtilisateurRepository;
 import com.example.Pointage_Cleanic.services.UtilisateursService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -21,42 +21,49 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class UtilisateurController {
 
-    private final SuperAdminRepository superAdminRepository;
+    private final UtilisateurRepository utilisateurRepository;
     private final UtilisateursService utilisateursService;
     private final PasswordEncoder passwordEncoder;
     private final LoginRepository loginRepository;
 
     @PostMapping
-    public ResponseEntity<?> save( @RequestBody Utilisateur utilisateur) {
+    public ResponseEntity<?> save(@RequestBody Utilisateur utilisateur) {
 
-        
-        Utilisateur utilisateur1 = new Utilisateur();
-        User user = new User();
+        // 🛑 Vérifier dans les deux collections
+        if (utilisateurRepository.findByEmail(utilisateur.getEmail()).isPresent()
+                || loginRepository.findByEmail(utilisateur.getEmail()).isPresent()) {
 
-
-        if (superAdminRepository.findByEmail(utilisateur.getEmail()).isEmpty()) {
-
-            utilisateur1.setPrenom(utilisateur.getPrenom());
-            utilisateur1.setNom(utilisateur.getNom());
-            utilisateur1.setEmail(utilisateur.getEmail());
-            utilisateur1.setPassword(passwordEncoder.encode(utilisateur.getPassword()));
-            utilisateur1.setPoste(utilisateur.getPoste());
-            utilisateur1.setRole(utilisateur.getRole());
-            utilisateur1.setModulesAutorises(utilisateur.getModulesAutorises());
-            utilisateur1.setMotifDesactivation(utilisateur.getMotifDesactivation());
-            utilisateur1.setActive(true);
-            user.setEmail(utilisateur.getEmail());
-            user.setPassword(passwordEncoder.encode(utilisateur.getPassword()));
-
-            loginRepository.save(user);
-            superAdminRepository.save(utilisateur1);
-        } else {
-                throw new EmailAlreadyExistsException("cet Email existe déja:" + utilisateur.getEmail());
+            throw new EmailAlreadyExistsException(
+                    "Cet email existe déjà : " + utilisateur.getEmail()
+            );
         }
 
-        return ResponseEntity.ok(utilisateur1);
+        // ✔ Créer un compte utilisateur complet
+        Utilisateur u = new Utilisateur();
+        u.setPrenom(utilisateur.getPrenom());
+        u.setNom(utilisateur.getNom());
+        u.setEmail(utilisateur.getEmail());
+        u.setPassword(passwordEncoder.encode(utilisateur.getPassword()));
+        u.setPoste(utilisateur.getPoste());
+        u.setRole(utilisateur.getRole());
+        u.setModulesAutorises(utilisateur.getModulesAutorises());
+        u.setMotifDesactivation(utilisateur.getMotifDesactivation());
+        u.setActive(true);
 
+        utilisateurRepository.save(u);
+
+        // ✔ Créer un compte login pour l’authentification
+        User login = new User();
+        login.setEmail(utilisateur.getEmail());
+        login.setPassword(passwordEncoder.encode(utilisateur.getPassword()));
+        login.setRole(utilisateur.getRole().toString());
+        login.setMustChangePassword(true);
+
+        loginRepository.save(login);
+
+        return ResponseEntity.ok(u);
     }
+
 
     @GetMapping
     public ResponseEntity<List<Utilisateur>> getAll() {
@@ -75,17 +82,20 @@ public class UtilisateurController {
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<Map<String, Boolean>> deleteAdmin(@PathVariable String id) {
-        Utilisateur utilisateur = utilisateursService.getByid(id);
+    public ResponseEntity<?> deleteUtilisateur(@PathVariable String id) {
 
-        if (utilisateur == null) {
-            return ResponseEntity.notFound().build(); // 404
-        }
-        superAdminRepository.delete(utilisateur);
-        Map<String, Boolean> response = new HashMap<>();
-        response.put("Deleted", Boolean.TRUE);
-        return ResponseEntity.ok(response);
+        Utilisateur u = utilisateurRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Utilisateur introuvable"));
+
+        // 🔥 Supprimer le User associé dans login
+        loginRepository.deleteByEmail(u.getEmail());
+
+        // 🔥 Puis supprimer l’utilisateur
+        utilisateurRepository.delete(u);
+
+        return ResponseEntity.ok(Map.of("deleted", true));
     }
+
 
     @PutMapping("/{id}")
     public ResponseEntity<Utilisateur> updateAdmin(@PathVariable String id, @RequestBody Utilisateur utilisateurDetails) {
