@@ -1,26 +1,34 @@
 package com.example.Pointage_Cleanic.repositories;
 
+
+import com.example.Pointage_Cleanic.config.MongoTestContainer;
 import com.example.Pointage_Cleanic.entities.User;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.data.mongo.DataMongoTest;
+import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.test.context.TestPropertySource;
 
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 @DataMongoTest
-class LoginRepositoryTest {
+class LoginRepositoryTest extends MongoTestContainer {
 
     @Autowired
     private LoginRepository loginRepository;
 
+    @Autowired
+    MongoTemplate mongoTemplate;
+
     @BeforeEach
-    void cleanDatabase() {
-        loginRepository.deleteAll();
+    void resetDatabase() {
+        mongoTemplate.getDb().drop();
     }
+
 
     @Test
     @DisplayName("Doit trouver un user par email")

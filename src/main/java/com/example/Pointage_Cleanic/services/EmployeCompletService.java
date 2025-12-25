@@ -2,6 +2,8 @@ package com.example.Pointage_Cleanic.services;
 
 
 import com.example.Pointage_Cleanic.Dto.EmployeCompletDto;
+import com.example.Pointage_Cleanic.Dto.ImportEmployeResponse;
+import com.example.Pointage_Cleanic.Dto.ImportError;
 import com.example.Pointage_Cleanic.Mapper.EmployeCompletMapper;
 import com.example.Pointage_Cleanic.Mapper.EmployeMapper;
 import com.example.Pointage_Cleanic.entities.Employe;
@@ -11,11 +13,13 @@ import com.example.Pointage_Cleanic.repositories.EmployeCompletRepository;
 import com.example.Pointage_Cleanic.repositories.EmployeRepository;
 import jdk.jfr.Registered;
 import lombok.RequiredArgsConstructor;
+import org.apache.coyote.BadRequestException;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -60,6 +64,9 @@ public class EmployeCompletService {
             throw new EmployeAlreadyExistsException("Un employé avec ce prénom et nom existe déjà.");
         }
 
+        if (dto.getAgentId() == null || dto.getAgentId().length() < 4) {
+            throw new BadRequestException("agentId invalide ou trop court");
+        }
 
 
         // ===========================================================
@@ -111,6 +118,33 @@ public class EmployeCompletService {
     }
 
 
+    public ImportEmployeResponse importMany(List<EmployeCompletDto> dtos) {
+
+        System.out.println("🧩 importMany() - Nb employés: " + dtos.size());
+
+        List<EmployeCompletDto> success = new ArrayList<>();
+        List<ImportError> errors = new ArrayList<>();
+
+        int line = 1;
+        for (EmployeCompletDto dto : dtos) {
+            System.out.println("➡️ Traitement ligne " + line + " | " + dto.getAgentId());
+            try {
+                create(dto, null); // réutilise la méthode existante sans photo
+                success.add(dto);
+            } catch (EmployeAlreadyExistsException e) {
+                errors.add(new ImportError(line, dto.getAgentId(), e.getMessage()));
+            } catch (Exception e) {
+                System.out.println("❌ Erreur ligne " + line + ": " + e.getMessage());
+                errors.add(new ImportError(line, dto.getAgentId(), "Erreur interne : " + e.getMessage()));
+            }
+            line++;
+        }
+
+        return new ImportEmployeResponse(success, errors);
+    }
+
+
+
     public List<EmployeComplet> getAll() {
 
         return employeCompletRepository.findAll();
@@ -130,31 +164,31 @@ public class EmployeCompletService {
 
     }
 
-    public void delete(String matricule) {
+    public void delete(String agentId) {
 
         // 🔍 Vérifier si l'employé complet existe
-        EmployeComplet employeComplet = employeCompletRepository.findByMatricule(matricule)
-                .orElseThrow(() -> new RuntimeException("Employé complet introuvable : " + matricule));
+        EmployeComplet employeComplet = employeCompletRepository.findByAgentId(agentId)
+                .orElseThrow(() -> new RuntimeException("Employé complet introuvable : " + agentId));
 
         // 🗑 Supprimer EmployeComplet
         employeCompletRepository.delete(employeComplet);
 
         // 🔍 Vérifier s'il existe aussi dans la collection employes
-        Optional<Employe> employe = employeRepository.findByCodeSecret(matricule); // agentId dans EmployeComplet représente le code secret dand Employe
+        Optional<Employe> employe = employeRepository.findByAgentId(agentId); // agentId dans EmployeComplet représente le code secret dand Employe
 
         employe.ifPresent(e -> {
             employeRepository.delete(e);
-            System.out.println("Employe supprimé : " + matricule);
+            System.out.println("Employe supprimé : " + agentId);
         });
 
-        System.out.println("EmployeComplet supprimé : " + matricule);
+        System.out.println("EmployeComplet supprimé : " + agentId);
     }
 
 
-    public EmployeComplet update(String matricule, EmployeCompletDto dto, MultipartFile photo) throws IOException {
+    public EmployeComplet update(String agentId, EmployeCompletDto dto, MultipartFile photo) throws IOException {
 
         // 1️⃣ Récupération EmployeComplet
-        EmployeComplet existing = employeCompletRepository.findByMatricule(matricule)
+        EmployeComplet existing = employeCompletRepository.findByAgentId(agentId)
                 .orElseThrow(() -> new RuntimeException("Employé complet introuvable"));
 
         // 2️⃣ Mise à jour EmployeComplet (tous champs sauf photo gérés à part)
@@ -171,7 +205,7 @@ public class EmployeCompletService {
         //  SYNCHRONISATION AVEC Employe
         // ===============================
 
-        Employe employe = employeRepository.findByCodeSecret(matricule) // le code secret de l'employe qui lui permet de se pointer est son agentId
+        Employe employe = employeRepository.findByAgentId(agentId) // le code secret de l'employe qui lui permet de se pointer est son agentId
                 .orElseThrow(() -> new RuntimeException("Employé simple introuvable"));
 
         // 3️⃣ Mise à jour SÉCURISÉE (champs obligatoires seulement)

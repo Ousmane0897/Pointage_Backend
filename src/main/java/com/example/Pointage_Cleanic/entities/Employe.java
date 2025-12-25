@@ -17,6 +17,7 @@ public class Employe {
     @Id
     private String id;
     private String codeSecret;
+    private String agentId;
     private String prenom;
     private String nom;
     private String numero;

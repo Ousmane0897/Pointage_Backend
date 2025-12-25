@@ -1,5 +1,7 @@
 package com.example.Pointage_Cleanic.repositories;
 
+
+import com.example.Pointage_Cleanic.config.MongoTestContainer;
 import com.example.Pointage_Cleanic.entities.Agence;
 import com.example.Pointage_Cleanic.repositories.projections.AgenceJoursOuvertureProjection;
 import org.junit.jupiter.api.BeforeEach;
@@ -7,21 +9,27 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.data.mongo.DataMongoTest;
+import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.test.context.TestPropertySource;
 
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 @DataMongoTest
-class AgencesRepositoryTest {
+class AgencesRepositoryTest extends MongoTestContainer {
 
     @Autowired
     private AgencesRepository agencesRepository;
 
+    @Autowired
+    MongoTemplate mongoTemplate;
+
     @BeforeEach
-    void cleanDatabase() {
-        agencesRepository.deleteAll();
+    void resetDatabase() {
+        mongoTemplate.getDb().drop();
     }
+
 
     private Agence createAgence(String nom, String joursOuverture) {
         return Agence.builder()

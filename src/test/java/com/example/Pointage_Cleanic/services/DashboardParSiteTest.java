@@ -66,28 +66,24 @@ class DashboardParSiteTest {
 
         when(pointageRepository.countByDateAndIdIn(
                 anyString(),
-                ArgumentMatchers.<List<EmployeIdProjection>>argThat(
+                ArgumentMatchers.<List<String>>argThat(
                         ids -> ids != null
                                 && ids.size() == 3
-                                && ids.stream()
-                                .map(EmployeIdProjection::getId)
-                                .toList()
-                                .containsAll(List.of("E1", "E2", "E3"))
+                                && ids.containsAll(List.of("E1", "E2", "E3"))
                 )
         )).thenReturn(2L);
 
 
+
         when(pointageRepository.countByDateAndIdIn(
                 anyString(),
-                ArgumentMatchers.<List<EmployeIdProjection>>argThat(
+                ArgumentMatchers.<List<String>>argThat(
                         ids -> ids != null
                                 && ids.size() == 2
-                                && ids.stream()
-                                .map(EmployeIdProjection::getId)
-                                .toList()
-                                .containsAll(List.of("E4", "E5"))
+                                && ids.containsAll(List.of("E4", "E5"))
                 )
         )).thenReturn(1L);
+
 
 
 

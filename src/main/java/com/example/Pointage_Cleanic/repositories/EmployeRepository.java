@@ -28,6 +28,8 @@ public interface EmployeRepository extends MongoRepository<Employe,String> {
 
     Optional<Employe> findByCodeSecret(String s);
 
+    Optional<Employe> findByAgentId(String agentId);
+
 
     @Query(value = "{ 'site': ?0 }", fields = "{ '_id' : 1 }")
     List<EmployeIdProjection> findEmployeIdsBySite(String site);

@@ -1,7 +1,6 @@
 package com.example.Pointage_Cleanic.repositories;
 
 import com.example.Pointage_Cleanic.entities.EmployeComplet;
-import com.example.Pointage_Cleanic.entities.stock.Produit;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.mongodb.repository.MongoRepository;

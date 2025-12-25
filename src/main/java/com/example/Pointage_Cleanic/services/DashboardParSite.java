@@ -20,21 +20,28 @@ public class DashboardParSite {
     private final PointageRepository pointageRepository;
 
     public Map<String, Map<String, Long>> getDashboardStatsBySite() {
-        LocalDate today = LocalDate.now();
-        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd/MM/yyyy");
-        String todayStr = today.format(formatter);
 
-        // Récupère tous les sites distincts
+        String todayStr = LocalDate.now()
+                .format(DateTimeFormatter.ofPattern("dd/MM/yyyy"));
+
         List<String> allSites = employeRepository.findAllDistinctSites();
-
         Map<String, Map<String, Long>> siteStats = new HashMap<>();
 
         for (String site : allSites) {
-            // Récupère tous les employés assignés à ce site
-            List<EmployeIdProjection> employeIds = employeRepository.findEmployeIdsBySite(site);
+
+            // ✅ Projection conservée
+            List<String> employeIds = employeRepository
+                    .findEmployeIdsBySite(site)
+                    .stream()
+                    .map(EmployeIdProjection::getId)
+                    .toList();
 
             long total = employeIds.size();
-            long present = pointageRepository.countByDateAndIdIn(todayStr, employeIds);
+
+            long present = employeIds.isEmpty()
+                    ? 0
+                    : pointageRepository.countByDateAndIdIn(todayStr, employeIds);
+
             long absent = total - present;
 
             Map<String, Long> stats = new HashMap<>();
@@ -47,6 +54,4 @@ public class DashboardParSite {
 
         return siteStats;
     }
-
-
 }

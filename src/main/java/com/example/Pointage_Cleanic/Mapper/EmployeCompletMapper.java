@@ -4,14 +4,19 @@ import com.example.Pointage_Cleanic.Dto.EmployeCompletDto;
 import com.example.Pointage_Cleanic.entities.EmployeComplet;
 import org.mapstruct.*;
 
-@Mapper(componentModel = "spring")
+
+@Mapper(componentModel = "spring", uses = DateMapper.class)
 public interface EmployeCompletMapper {
 
     // ================================
     //            CREATE
     // ================================
     @Mapping(target = "photo", ignore = true)
-    @Mapping(target = "nomComplet", ignore = true)  // nouveau champ généré dans le service
+    @Mapping(target = "nomComplet", ignore = true)
+    @Mapping(source = "dateNaissance", target = "dateNaissance")
+    @Mapping(source = "dateEmbauche", target = "dateEmbauche")
+    @Mapping(source = "dateFinContrat", target = "dateFinContrat")
+    @Mapping(source = "dateSortie", target = "dateSortie")
     EmployeComplet toEntity(EmployeCompletDto dto);
 
 
@@ -27,6 +32,10 @@ public interface EmployeCompletMapper {
     @BeanMapping(nullValuePropertyMappingStrategy = NullValuePropertyMappingStrategy.IGNORE)
     @Mapping(target = "photo", ignore = true)
     @Mapping(target = "nomComplet", ignore = true)
+    @Mapping(source = "dateNaissance", target = "dateNaissance")
+    @Mapping(source = "dateEmbauche", target = "dateEmbauche")
+    @Mapping(source = "dateFinContrat", target = "dateFinContrat")
+    @Mapping(source = "dateSortie", target = "dateSortie")
     void updateEntityFromDto(EmployeCompletDto dto, @MappingTarget EmployeComplet entity);
 
 }

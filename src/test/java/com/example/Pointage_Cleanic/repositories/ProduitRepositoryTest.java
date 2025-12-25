@@ -1,5 +1,7 @@
 package com.example.Pointage_Cleanic.repositories;
 
+
+import com.example.Pointage_Cleanic.config.MongoTestContainer;
 import com.example.Pointage_Cleanic.entities.stock.Produit;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -7,22 +9,27 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.data.mongo.DataMongoTest;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
+import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.test.context.TestPropertySource;
 
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 @DataMongoTest
-class ProduitRepositoryTest {
+class ProduitRepositoryTest extends MongoTestContainer {
 
     @Autowired
     private ProduitRepository produitRepository;
 
+    @Autowired
+    MongoTemplate mongoTemplate;
+
     @BeforeEach
-    void cleanDatabase() {
-        produitRepository.deleteAll();
+    void resetDatabase() {
+        mongoTemplate.getDb().drop();
     }
+
 
     private Produit createProduit(
             String code,

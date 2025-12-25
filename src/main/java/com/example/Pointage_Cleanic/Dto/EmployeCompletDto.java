@@ -2,15 +2,18 @@ package com.example.Pointage_Cleanic.Dto;
 
 import com.example.Pointage_Cleanic.entities.EmployeComplet;
 import com.fasterxml.jackson.annotation.JsonFormat;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import lombok.*;
 
 import java.time.Instant;
+import java.time.LocalDate;
 
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class EmployeCompletDto {
 
     private String id;
@@ -27,8 +30,9 @@ public class EmployeCompletDto {
     private String joursDeTravail;
     private String joursDeTravail2;
 
-    @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss.SSSX", timezone = "UTC")
-    private Instant dateNaissance;
+
+    @JsonFormat(pattern = "yyyy-MM-dd")
+    private LocalDate dateNaissance;
 
     private String lieuNaissance;
     private String nationalite;
@@ -53,11 +57,12 @@ public class EmployeCompletDto {
     private String poste;
     private String typeContrat;
 
-    @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss.SSSX", timezone = "UTC")
-    private Instant dateEmbauche;
+    @JsonFormat(pattern = "yyyy-MM-dd")
+    private LocalDate dateEmbauche;
 
-    @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss.SSSX", timezone = "UTC")
-    private Instant dateFinContrat;
+
+    @JsonFormat(pattern = "yyyy-MM-dd")
+    private LocalDate dateFinContrat;
 
     private String tempsDeTravail;
     private String horaire;
@@ -76,8 +81,8 @@ public class EmployeCompletDto {
     private EmployeComplet.StatutEmploye statut;
     private String motifSortie;
 
-    @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss.SSSX", timezone = "UTC")
-    private Instant dateSortie;
+    @JsonFormat(pattern = "yyyy-MM-dd")
+    private LocalDate dateSortie;
 
     private byte[] photo;
     private String observations;

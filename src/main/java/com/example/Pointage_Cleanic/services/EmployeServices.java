@@ -31,12 +31,6 @@ public class EmployeServices {
         return mongoTemplate.findOne(query,Employe.class);
     }
 
-    public List<Employe> CheffeEquipe() {
-        Query query = new Query();
-        query.addCriteria(Criteria.where("statut").is("Cheffe d'équipe"));
-        return mongoTemplate.find(query,Employe.class);
-    }
-
     public List<Employe> EmployeDeplaces() {
         Query query = new Query();
         query.addCriteria(Criteria.where("deplacement").is(true));

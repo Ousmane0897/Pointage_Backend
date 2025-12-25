@@ -1,7 +1,6 @@
 package com.example.Pointage_Cleanic.repositories;
 
 import com.example.Pointage_Cleanic.entities.Pointage;
-import com.example.Pointage_Cleanic.repositories.projections.EmployeIdProjection;
 import org.springframework.data.mongodb.repository.MongoRepository;
 import org.springframework.stereotype.Repository;
 
@@ -14,6 +13,7 @@ public interface PointageRepository extends MongoRepository<Pointage,String> {
     boolean existsByDeviceIdAndTimestampAfter(String deviceId, Instant timestamp);
     Long countByDate(String date);
 
-    long countByDateAndIdIn(String date, List<EmployeIdProjection> employeIds);
+    long countByDateAndIdIn(String date, List<String> ids);
+
 
 }

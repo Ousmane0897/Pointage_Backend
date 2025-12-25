@@ -8,6 +8,7 @@ import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.time.Instant;
+import java.time.LocalDate;
 
 @Getter
 @Setter
@@ -35,8 +36,7 @@ public class EmployeComplet {
     private String joursDeTravail;
     private String joursDeTravail2;
 
-    @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss.SSSX", timezone = "UTC")
-    private Instant dateNaissance;
+    private LocalDate dateNaissance;
 
     private String lieuNaissance;
     private String nationalite;
@@ -61,11 +61,9 @@ public class EmployeComplet {
     private String poste;
     private String typeContrat;
 
-    @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss.SSSX", timezone = "UTC")
-    private Instant dateEmbauche;
+    private LocalDate dateEmbauche;
 
-    @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss.SSSX", timezone = "UTC")
-    private Instant dateFinContrat;
+    private LocalDate dateFinContrat;
 
     private String tempsDeTravail;
     private String horaire;
@@ -82,8 +80,8 @@ public class EmployeComplet {
     private StatutEmploye statut;
     private String motifSortie;
 
-    @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss.SSSX", timezone = "UTC")
-    private Instant dateSortie;
+
+    private LocalDate dateSortie;
 
     private byte[] photo;
     private String observations;
@@ -97,6 +95,6 @@ public class EmployeComplet {
     }
 
     public enum StatutEmploye {
-        ACTIF, Pause, Sortie
+        ACTIF, PAUSE, SORTIE
     }
 }

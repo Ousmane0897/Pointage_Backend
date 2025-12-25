@@ -1,5 +1,6 @@
 package com.example.Pointage_Cleanic.repositories;
 
+import com.example.Pointage_Cleanic.config.MongoTestContainer;
 import com.example.Pointage_Cleanic.entities.Utilisateur;
 import com.example.Pointage_Cleanic.Enum.RoleAdmin;
 import org.junit.jupiter.api.BeforeEach;
@@ -7,6 +8,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.data.mongo.DataMongoTest;
+import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.test.context.TestPropertySource;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -14,17 +17,21 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+
 @DataMongoTest
-class UtilisateurRepositoryTest {
+class UtilisateurRepositoryTest extends MongoTestContainer {
 
     @Autowired
     private UtilisateurRepository utilisateurRepository;
 
+    @Autowired
+    MongoTemplate mongoTemplate;
+
     @BeforeEach
-    void cleanDatabase() {
-        // 🔥 Nettoie la collection AVANT chaque test
-        utilisateurRepository.deleteAll();
+    void resetDatabase() {
+        mongoTemplate.getDb().drop();
     }
+
 
     @Test
     @DisplayName("Doit trouver un utilisateur par email")

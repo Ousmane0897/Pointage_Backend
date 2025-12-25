@@ -56,17 +56,6 @@ class EmployeServiceTest {
     }
 
     @Test
-    void testCheffeEquipe() {
-        when(mongoTemplate.find(any(Query.class), eq(Employe.class)))
-                .thenReturn(List.of(new Employe()));
-
-        List<Employe> result = employeServices.CheffeEquipe();
-
-        assertEquals(1, result.size());
-        verify(mongoTemplate).find(any(Query.class), eq(Employe.class));
-    }
-
-    @Test
     void testEmployeDeplaces() {
         when(mongoTemplate.find(any(Query.class), eq(Employe.class)))
                 .thenReturn(List.of(new Employe(), new Employe()));

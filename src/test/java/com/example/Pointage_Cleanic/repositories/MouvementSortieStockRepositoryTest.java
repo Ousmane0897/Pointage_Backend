@@ -2,12 +2,15 @@ package com.example.Pointage_Cleanic.repositories;
 
 import com.example.Pointage_Cleanic.Enum.MotifMouvementSortieStock;
 import com.example.Pointage_Cleanic.Enum.TypeMouvement;
+import com.example.Pointage_Cleanic.config.MongoTestContainer;
 import com.example.Pointage_Cleanic.entities.stock.MouvementSortieStock;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.data.mongo.DataMongoTest;
+import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.test.context.TestPropertySource;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -16,15 +19,19 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @DataMongoTest
-class MouvementSortieStockRepositoryTest {
+class MouvementSortieStockRepositoryTest extends MongoTestContainer {
 
     @Autowired
     private MouvementSortieStockRepository repository;
 
+    @Autowired
+    MongoTemplate mongoTemplate;
+
     @BeforeEach
-    void cleanDatabase() {
-        repository.deleteAll();
+    void resetDatabase() {
+        mongoTemplate.getDb().drop();
     }
+
 
     private MouvementSortieStock createMouvement(
             String codeProduit,

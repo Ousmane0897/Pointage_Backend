@@ -2,6 +2,8 @@ package com.example.Pointage_Cleanic.controllers;
 
 
 import com.example.Pointage_Cleanic.Dto.EmployeCompletDto;
+import com.example.Pointage_Cleanic.Dto.ImportEmployeRequest;
+import com.example.Pointage_Cleanic.Dto.ImportEmployeResponse;
 import com.example.Pointage_Cleanic.Dto.ProduitDto;
 import com.example.Pointage_Cleanic.entities.Employe;
 import com.example.Pointage_Cleanic.entities.EmployeComplet;
@@ -9,6 +11,8 @@ import com.example.Pointage_Cleanic.entities.stock.Produit;
 import com.example.Pointage_Cleanic.repositories.EmployeCompletRepository;
 import com.example.Pointage_Cleanic.services.EmployeCompletService;
 import com.example.Pointage_Cleanic.services.EmployeServices;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.*;
 import org.springframework.http.MediaType;
@@ -29,22 +33,41 @@ public class EmployeCompletController {
 
     private final EmployeCompletService employeCompletService;
     private final EmployeCompletRepository employeCompletRepository;
+    private final ObjectMapper objectMapper; // 🔥 injecté par Spring
 
 
-    // ==================================
-    //            CREATE
-    // ==================================
+    // ============================================
+    //             CREATE ONE EMPLOYEE
+    // ============================================
+
     @PostMapping(value = "/employe", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<EmployeComplet> createEmploye(
-            @RequestPart("employe") EmployeCompletDto dto,
+            @RequestPart("employe") String employeJson,
             @RequestPart(value = "photo", required = false) MultipartFile photo
+    ) throws IOException {
+
+        System.out.println("RAW JSON = " + employeJson); // 🔥 LOG 1
+
+        EmployeCompletDto dto =
+                objectMapper.readValue(employeJson, EmployeCompletDto.class);
+
+        System.out.println("DTO PRENOM = " + dto.getPrenom()); // 🔥 LOG 2
+        System.out.println("DTO TELEPHONE = " + dto.getTelephone1());
+
+        return ResponseEntity.ok(employeCompletService.create(dto, photo));
+    }
+
+
+    // ===========================================================
+    //           CREATE MULTIPLE EMPLOYEE FROM EXCEL FILE
+    // ===========================================================
+
+    @PostMapping("/import-excel")
+    public ResponseEntity<ImportEmployeResponse> importFromExcel(
+            @RequestBody List<EmployeCompletDto> imported
     ) {
-        try {
-            EmployeComplet saved = employeCompletService.create(dto, photo);
-            return ResponseEntity.ok(saved);
-        } catch (Exception e) {
-            return ResponseEntity.internalServerError().build();
-        }
+        System.out.println("🔥 IMPORT EXCEL APPELÉ");
+        return ResponseEntity.ok(employeCompletService.importMany(imported));
     }
 
 
@@ -131,21 +154,30 @@ public class EmployeCompletController {
     }
 
 
-    @DeleteMapping("/{matricule}")
-    public void deleteEmployee(@PathVariable String matricule) {
+    @DeleteMapping("/by-agent/{agentId}")
+    public void deleteEmployee(@PathVariable String agentId) {
 
-        employeCompletService.delete(matricule);
+        employeCompletService.delete(agentId);
     }
 
-    @PutMapping(value = "/complet/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PutMapping(
+            value = "/complet/{agentId}",
+            consumes = MediaType.MULTIPART_FORM_DATA_VALUE
+    )
     public ResponseEntity<EmployeComplet> update(
-            @PathVariable String id,
-            @RequestPart("employe") EmployeCompletDto employeCompletDto,
+            @PathVariable String agentId,
+            @RequestPart("employe") String employeJson,
             @RequestPart(value = "photo", required = false) MultipartFile photo
     ) throws IOException {
 
-        EmployeComplet updated = employeCompletService.update(id, employeCompletDto, photo);
+        EmployeCompletDto employeCompletDto =
+                objectMapper.readValue(employeJson, EmployeCompletDto.class);
+
+        EmployeComplet updated =
+                employeCompletService.update(agentId, employeCompletDto, photo);
+
         return ResponseEntity.ok(updated);
     }
+
 
 }

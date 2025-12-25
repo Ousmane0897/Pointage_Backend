@@ -57,14 +57,6 @@ public class EmployesController {
         return ResponseEntity.ok(All);
     }
 
-    @GetMapping("/Cheffes")
-    public ResponseEntity<List<Employe>> GetCheffesEquipe() {
-
-        List<Employe> cheffes = employeServices.CheffeEquipe();
-
-        return ResponseEntity.ok(cheffes);
-    }
-
     @GetMapping("/{codeSecret}")
     public ResponseEntity<Employe> GetBycodeSecret(@PathVariable String codeSecret) {
 

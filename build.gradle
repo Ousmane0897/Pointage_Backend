@@ -58,6 +58,7 @@ dependencies {
 	// 🔥 LIAISON Lombok <-> MapStruct (SINON ÉCHEC)
 	annotationProcessor 'org.projectlombok:lombok-mapstruct-binding:0.2.0'
 
+
 	// =========================
 	// LOMBOK
 	// =========================
@@ -75,6 +76,12 @@ dependencies {
 	testImplementation 'org.springframework.boot:spring-boot-starter-test' // JUnit 5 + Assert + MockMvc
 	testImplementation 'org.mockito:mockito-junit-jupiter:5.12.0'
 	testImplementation 'org.springframework.security:spring-security-test'
+	testImplementation 'org.testcontainers:junit-jupiter:1.20.2'
+	testImplementation 'org.testcontainers:mongodb:1.19.2'
+
+
+
+
 }
 
 compileJava {
@@ -83,13 +90,15 @@ compileJava {
 	]
 }
 
-tasks.named('test') {
+tasks.withType(Test).configureEach {
 	useJUnitPlatform()
+	maxParallelForks = 1
+	forkEvery = 0
+	systemProperty "junit.jupiter.execution.parallel.enabled", "false"
 }
 
-test {
-	jvmArgs += [
-			"-javaagent:${configurations.testRuntimeClasspath.find { it.name.contains('mockito-core') }}"
-	]
-}
+
+
+
+
 

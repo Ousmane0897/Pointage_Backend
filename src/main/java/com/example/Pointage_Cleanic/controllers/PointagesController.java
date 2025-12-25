@@ -1,7 +1,7 @@
 package com.example.Pointage_Cleanic.controllers;
 
 
-import com.example.Pointage_Cleanic.entities.Employe;
+
 import com.example.Pointage_Cleanic.entities.Pointage;
 import com.example.Pointage_Cleanic.models.PointageRequest;
 import com.example.Pointage_Cleanic.repositories.PointageRepository;
@@ -11,7 +11,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.time.Instant;
+
 import java.util.List;
 
 @RestController

@@ -2,16 +2,23 @@ package com.example.Pointage_Cleanic.Mapper;
 
 import com.example.Pointage_Cleanic.Dto.EmployeCompletDto;
 import com.example.Pointage_Cleanic.entities.Employe;
+import com.example.Pointage_Cleanic.util.CodeSecretUtil;
 import org.mapstruct.*;
 
-@Mapper(componentModel = "spring")
+
+@Mapper(componentModel = "spring", uses = CodeSecretUtil.class)
 public interface EmployeMapper {
 
     // ================================
     //             CREATE
     // ================================
     @Mappings({
-            @Mapping(source = "agentId", target = "codeSecret"),
+            @Mapping(
+                    source = "agentId",
+                    target = "codeSecret",
+                    qualifiedByName = "extractLast4"
+            ),
+            @Mapping(source = "agentId", target = "agentId"),
             @Mapping(source = "prenom", target = "prenom"),
             @Mapping(source = "nom", target = "nom"),
             @Mapping(source = "telephone1", target = "numero"),

@@ -1,11 +1,15 @@
 package com.example.Pointage_Cleanic.repositories;
 
+
+import com.example.Pointage_Cleanic.config.MongoTestContainer;
 import com.example.Pointage_Cleanic.entities.ResetPasswordToken;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.data.mongo.DataMongoTest;
+import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.test.context.TestPropertySource;
 
 import java.time.LocalDateTime;
 import java.util.Optional;
@@ -13,16 +17,19 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @DataMongoTest
-class ResetPasswordTokenRepositoryTest {
+class ResetPasswordTokenRepositoryTest extends MongoTestContainer {
 
     @Autowired
     private ResetPasswordTokenRepository tokenRepository;
 
+    @Autowired
+    MongoTemplate mongoTemplate;
+
     @BeforeEach
-    void cleanDatabase() {
-        // 🔥 Nettoie la collection AVANT chaque test
-        tokenRepository.deleteAll();
+    void resetDatabase() {
+        mongoTemplate.getDb().drop();
     }
+
 
     @Test
     @DisplayName("Doit trouver un token par email")
