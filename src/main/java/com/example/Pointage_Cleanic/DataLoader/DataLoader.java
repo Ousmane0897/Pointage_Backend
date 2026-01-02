@@ -20,9 +20,9 @@ public class DataLoader implements CommandLineRunner {
     @Override
     public void run(String... args) {
         // Vérifie si l'utilisateur existe déjà
-        if (loginRepository.findByEmail("ousmane97@cleanicsenegal.com").isEmpty()) {
+        if (loginRepository.findByEmail("ousmane.diouf@cleanicsenegal.com").isEmpty()) {
             User user = new User();
-            user.setEmail("ousmane97@cleanicsenegal.com");
+            user.setEmail("ousmane.diouf@cleanicsenegal.com");
             user.setPassword(passwordEncoder.encode("admin2025"));
             user.setRole("SUPERADMIN");
             user.setMustChangePassword(true);

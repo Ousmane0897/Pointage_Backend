@@ -421,19 +421,11 @@ public class PlanificationService {
                         Employe employe1 = employeServices.employeeRemplacee(prenom, nom);
                         employe1.setRemplacement(false);
                         employeRepository.save(employe1);
-                        if (planification.isMatin()) {
 
-                            employe.setSite(new String[]{employe.getSiteAvantDeplacement()}); // Retour de l'employé dans son site d'origine (qui ne change pas vu que c'est un shift interne)
-                            employe.setDeplacement(false);
-                            employe.setHorairesDeRemplacement(null);
-                            employe.setPersonneRemplacee(null);
-                        } else {
-
-                            employe.setSite(new String[]{employe.getSiteAvantDeplacement()}); // Retour de l'employé dans son site d'origine (qui ne change pas vu que c'est un shift interne)
-                            employe.setDeplacement(false);
-                            employe.setHorairesDeRemplacement(null);
-                            employe.setPersonneRemplacee(null);
-                        }
+                        employe.setSite(new String[]{employe.getSiteAvantDeplacement()}); // Retour de l'employé dans son site d'origine (qui ne change pas vu que c'est un shift interne)
+                        employe.setDeplacement(false);
+                        employe.setHorairesDeRemplacement(null);
+                        employe.setPersonneRemplacee(null);
 
 
 

@@ -10,6 +10,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
@@ -29,20 +30,20 @@ public class UtilisateurController {
     @PostMapping
     public ResponseEntity<?> save(@RequestBody Utilisateur utilisateur) {
 
-        // 🛑 Vérifier dans les deux collections
-        if (utilisateurRepository.findByEmail(utilisateur.getEmail()).isPresent()
-                || loginRepository.findByEmail(utilisateur.getEmail()).isPresent()) {
+        String email = utilisateur.getEmail().trim().toLowerCase();
+
+        if (!utilisateurRepository.findAllByEmail(email).isEmpty()
+                || !loginRepository.findAllByEmail(email).isEmpty()) {
 
             throw new EmailAlreadyExistsException(
-                    "Cet email existe déjà : " + utilisateur.getEmail()
+                    "Cet email existe déjà : " + email
             );
         }
 
-        // ✔ Créer un compte utilisateur complet
         Utilisateur u = new Utilisateur();
         u.setPrenom(utilisateur.getPrenom());
         u.setNom(utilisateur.getNom());
-        u.setEmail(utilisateur.getEmail());
+        u.setEmail(email);
         u.setPassword(passwordEncoder.encode(utilisateur.getPassword()));
         u.setPoste(utilisateur.getPoste());
         u.setRole(utilisateur.getRole());
@@ -52,9 +53,8 @@ public class UtilisateurController {
 
         utilisateurRepository.save(u);
 
-        // ✔ Créer un compte login pour l’authentification
         User login = new User();
-        login.setEmail(utilisateur.getEmail());
+        login.setEmail(email);
         login.setPassword(passwordEncoder.encode(utilisateur.getPassword()));
         login.setRole(utilisateur.getRole().toString());
         login.setMustChangePassword(true);
@@ -63,6 +63,7 @@ public class UtilisateurController {
 
         return ResponseEntity.ok(u);
     }
+
 
 
     @GetMapping

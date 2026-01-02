@@ -2,10 +2,9 @@ spring:
   data:
     mongodb:
       uri: mongodb://localhost:27017/cleanic
+
   jackson:
     date-format: dd/MM/yyyy
-    time-zone: Africa/Dakar
-  datasource:
     time-zone: Africa/Dakar
 
 logging:

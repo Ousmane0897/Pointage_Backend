@@ -15,5 +15,8 @@ public interface PointageRepository extends MongoRepository<Pointage,String> {
 
     long countByDateAndIdIn(String date, List<String> ids);
 
+    List<Pointage> findAllByDate(String date);
+
+
 
 }

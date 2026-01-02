@@ -33,6 +33,9 @@ dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-mail'
 	implementation 'org.springframework.boot:spring-boot-starter-websocket'
 
+	// Springdoc OpenAPI pour Swagger
+	implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.2.0'
+
 	// =========================
 	// JWT
 	// =========================
@@ -78,6 +81,9 @@ dependencies {
 	testImplementation 'org.springframework.security:spring-security-test'
 	testImplementation 'org.testcontainers:junit-jupiter:1.20.2'
 	testImplementation 'org.testcontainers:mongodb:1.19.2'
+
+	// MongoDB
+	testImplementation 'org.springframework.boot:spring-boot-starter-data-mongodb'
 
 
 

@@ -3,18 +3,22 @@ package com.example.Pointage_Cleanic.services;
 import com.example.Pointage_Cleanic.entities.Absent;
 import com.example.Pointage_Cleanic.entities.Employe;
 import com.example.Pointage_Cleanic.entities.Ferie;
+import com.example.Pointage_Cleanic.entities.Pointage;
+import com.example.Pointage_Cleanic.repositories.EmployeRepository;
+import com.example.Pointage_Cleanic.repositories.PointageRepository;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
-
+import org.mockito.MockitoAnnotations;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.data.mongodb.core.aggregation.AggregationResults;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Query;
 
-import java.util.List;
+import java.time.*;
 import java.util.Collections;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -24,127 +28,113 @@ import static org.mockito.ArgumentMatchers.*;
 class AbsentServiceTest {
 
     @Mock
-    MongoTemplate mongoTemplate;
+    private MongoTemplate mongoTemplate;
+
+    @Mock
+    private EmployeRepository employeRepository;
+
+    @Mock
+    private PointageRepository pointageRepository;
+
+    private Clock fixedClock;
 
     @InjectMocks
-    AbsentService absentService;
+    private AbsentService absentService;
 
-    // ------------------- SIMPLE TESTS -------------------
+    @BeforeEach
+    void setUp() {
+        MockitoAnnotations.openMocks(this);
+        fixedClock = Clock.fixed(LocalDate.of(2025, 12, 26)
+                .atStartOfDay(ZoneId.of("Africa/Dakar")).toInstant(), ZoneId.of("Africa/Dakar"));
+        absentService = new AbsentService(mongoTemplate, employeRepository, pointageRepository, fixedClock);
+    }
 
     @Test
     void testGetAll() {
-        when(mongoTemplate.findAll(Absent.class)).thenReturn(List.of(new Absent(), new Absent()));
+        List<Absent> absents = List.of(new Absent(), new Absent());
+        when(mongoTemplate.findAll(Absent.class)).thenReturn(absents);
 
         List<Absent> result = absentService.getAll();
 
         assertEquals(2, result.size());
-        verify(mongoTemplate).findAll(Absent.class);
+        verify(mongoTemplate, times(1)).findAll(Absent.class);
     }
 
     @Test
-    void testGetByCodeSecret() {
-        Absent absent = new Absent();
-        when(mongoTemplate.findOne(any(Query.class), eq(Absent.class))).thenReturn(absent);
+    void testGetBycodeSecret() {
+        Absent a = new Absent();
+        a.setCodeSecret("123");
+        when(mongoTemplate.findOne(any(Query.class), eq(Absent.class))).thenReturn(a);
 
-        Absent result = absentService.getBycodeSecret("XYZ123");
+        Absent result = absentService.getBycodeSecret("123");
 
         assertNotNull(result);
-        verify(mongoTemplate).findOne(any(Query.class), eq(Absent.class));
+        assertEquals("123", result.getCodeSecret());
+        verify(mongoTemplate, times(1)).findOne(any(Query.class), eq(Absent.class));
     }
 
+    @Test
+    void testFindAbsencesDynamiques_WeekEnd() {
+        Clock saturdayClock = Clock.fixed(LocalDate.of(2025, 12, 27)
+                .atStartOfDay(ZoneId.of("Africa/Dakar")).toInstant(), ZoneId.of("Africa/Dakar"));
+        absentService = new AbsentService(mongoTemplate, employeRepository, pointageRepository, saturdayClock);
 
-    // ------------------- TEST findAbsencesDynamiques -------------------
+        List<Absent> absents = absentService.findAbsencesDynamiques();
+        assertTrue(absents.isEmpty());
+    }
 
     @Test
-    void testFindAbsencesDynamiques_returnsEmptyList_whenFerie() {
-
+    void testFindAbsencesDynamiques_JourFerie() {
         when(mongoTemplate.exists(any(Query.class), eq(Ferie.class))).thenReturn(true);
 
-        List<Absent> result = absentService.findAbsencesDynamiques();
-
-        assertTrue(result.isEmpty());
-        verify(mongoTemplate).exists(any(Query.class), eq(Ferie.class));
+        List<Absent> absents = absentService.findAbsencesDynamiques();
+        assertTrue(absents.isEmpty());
     }
 
     @Test
-    void testFindAbsencesDynamiques_returnsAbsentList() {
+    void testFindAbsencesDynamiques_JourOuvrable_Complet() {
+        when(mongoTemplate.exists(any(Query.class), eq(Ferie.class))).thenReturn(false);
 
-        // 1️⃣ Not a ferie
-        when(mongoTemplate.exists(any(Query.class), eq(Ferie.class)))
-                .thenReturn(false);
+        Employe e1 = Employe.builder().codeSecret("A").prenom("John").nom("Doe").numero("001")
+                .intervention("Vitre").site(new String[]{"Site1"}).build();
+        Employe e2 = Employe.builder().codeSecret("B").prenom("Jane").nom("Smith").numero("002")
+                .intervention("Bureau").site(new String[]{"Site2"}).build();
 
-        // 2️⃣ Employé absent simulé
-        Employe e = new Employe();
-        e.setCodeSecret("A123");
-        e.setPrenom("Ousmane");
-        e.setNom("Diouf");
+        when(employeRepository.findAll()).thenReturn(List.of(e1, e2));
 
-        AggregationResults<Employe> mockResults = mock(AggregationResults.class);
-        when(mockResults.getMappedResults()).thenReturn(List.of(e));
+        Pointage p = new Pointage();
+        p.setCodeSecret("A");
+        when(pointageRepository.findAllByDate(anyString())).thenReturn(List.of(p));
 
-        when(mongoTemplate.aggregate(
-                any(org.springframework.data.mongodb.core.aggregation.Aggregation.class),
-                eq("employes"),
-                eq(Employe.class)
-        )).thenReturn(mockResults);
+        List<Absent> absents = absentService.findAbsencesDynamiques();
 
-        // 3️⃣ Execution
-        List<Absent> result = absentService.findAbsencesDynamiques();
-
-        // 4️⃣ Assertions
-        assertEquals(1, result.size());
-        assertEquals("A123", result.get(0).getCodeSecret());
-        assertEquals("Pas encore pointé", result.get(0).getMotif());
-
-        verify(mongoTemplate).aggregate(
-                any(org.springframework.data.mongodb.core.aggregation.Aggregation.class),
-                eq("employes"),
-                eq(Employe.class)
-        );
+        assertEquals(1, absents.size());
+        Absent absent = absents.get(0);
+        assertEquals("B", absent.getCodeSecret());
     }
-
-
-
-    // ------------------- TEST Scheduled METHOD -------------------
 
     @Test
     void testFindAndStoreAbsentEmployees_noAction_whenWeekend() {
+        Clock saturdayClock = Clock.fixed(LocalDate.of(2025, 12, 27)
+                .atStartOfDay(ZoneId.of("Africa/Dakar")).toInstant(), ZoneId.of("Africa/Dakar"));
+        absentService = new AbsentService(mongoTemplate, employeRepository, pointageRepository, saturdayClock);
 
-        AbsentService spyService = spy(absentService);
-        doReturn(Collections.emptyList()).when(spyService).findAbsencesDynamiques();
-
-        spyService.findAndStoreAbsentEmployees();
-
+        absentService.findAndStoreAbsentEmployees();
         verify(mongoTemplate, never()).insertAll(any());
     }
 
     @Test
     void testFindAndStoreAbsentEmployees_noAction_whenFerie() {
-
         when(mongoTemplate.exists(any(Query.class), eq(Ferie.class))).thenReturn(true);
 
         absentService.findAndStoreAbsentEmployees();
-
-        verify(mongoTemplate, never()).insertAll(any());
-    }
-
-    @Test
-    void testFindAndStoreAbsentEmployees_noAction_whenNoAbsences() {
-
-        when(mongoTemplate.exists(any(Query.class), eq(Ferie.class))).thenReturn(false);
-
-        AbsentService spyService = spy(absentService);
-        doReturn(Collections.emptyList()).when(spyService).findAbsencesDynamiques();
-
-        spyService.findAndStoreAbsentEmployees();
-
         verify(mongoTemplate, never()).insertAll(any());
     }
 
     @Test
     void testFindAndStoreAbsentEmployees_insertsAbsence_whenValid() {
-
         when(mongoTemplate.exists(any(Query.class), eq(Ferie.class))).thenReturn(false);
+        when(mongoTemplate.exists(any(Query.class), eq(Absent.class))).thenReturn(false);
 
         Absent a = new Absent();
         List<Absent> absents = List.of(a);
@@ -152,11 +142,7 @@ class AbsentServiceTest {
         AbsentService spyService = spy(absentService);
         doReturn(absents).when(spyService).findAbsencesDynamiques();
 
-        when(mongoTemplate.exists(any(Query.class), eq(Absent.class))).thenReturn(false);
-
         spyService.findAndStoreAbsentEmployees();
-
         verify(mongoTemplate).insertAll(absents);
     }
-
 }

@@ -3,9 +3,11 @@ package com.example.Pointage_Cleanic.services;
 import com.example.Pointage_Cleanic.entities.Absent;
 import com.example.Pointage_Cleanic.entities.Employe;
 import com.example.Pointage_Cleanic.entities.Ferie;
+import com.example.Pointage_Cleanic.entities.Pointage;
+import com.example.Pointage_Cleanic.repositories.EmployeRepository;
+import com.example.Pointage_Cleanic.repositories.PointageRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.mongodb.core.MongoTemplate;
-import org.springframework.data.mongodb.core.aggregation.*;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -13,7 +15,8 @@ import org.springframework.stereotype.Service;
 
 import java.time.*;
 import java.time.format.DateTimeFormatter;
-import java.util.*;
+import java.util.Collections;
+import java.util.List;
 import java.util.stream.Collectors;
 
 @Service
@@ -21,6 +24,14 @@ import java.util.stream.Collectors;
 public class AbsentService {
 
     private final MongoTemplate mongoTemplate;
+    private final EmployeRepository employeRepository;
+    private final PointageRepository pointageRepository;
+    private final Clock clock; // Injecté pour tests et production
+
+    // Méthode pour récupérer la date du jour
+    protected LocalDate getTodayDate() {
+        return LocalDate.now(clock);
+    }
 
     public List<Absent> getAll() {
         return mongoTemplate.findAll(Absent.class);
@@ -32,68 +43,41 @@ public class AbsentService {
         return mongoTemplate.findOne(query, Absent.class);
     }
 
-    /**
-     * 🔹 Méthode dynamique :
-     * retourne les absents "du moment" (non pointés aujourd’hui)
-     * sous forme d’objets Absent non persistés.
-     * Lister les absents en temps réel (non pointés aujourd’hui)
-     * ⚙️ Concrètement :
-     * Le service regarde tous les employés.
-     * Il fait une agrégation :
-     * jointure avec la collection pointages (via le codeSecret),
-     * filtre pour ne garder que les pointages du jour courant,
-     * sélectionne ceux qui n’ont aucun pointage aujourd’hui.
-     * Il renvoie ces employés sous forme d’objets Absent temporaires.
-     */
     public List<Absent> findAbsencesDynamiques() {
-        LocalDate today = LocalDate.now();
-        ZoneId zone = ZoneId.of("Africa/Dakar");
+        LocalDate today = getTodayDate();
+        DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern("dd/MM/yyyy");
+        String todayStr = today.format(dateFormatter);
 
-        Instant start = today.atStartOfDay(zone).toInstant();
-        Instant end = today.plusDays(1).atStartOfDay(zone).toInstant();
-
-        // Format pour l'affichage dans dateAbsence
-        DateTimeFormatter frenchDateFormatter = DateTimeFormatter.ofPattern("dd/MM/yyyy");
-        String formattedDate = today.format(frenchDateFormatter);
-
-        // Vérifie jour férié
-        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd.MM.yyyy");
-        String formatDate = today.format(formatter);
-        Query ferieQuery = new Query(Criteria.where("date").is(formatDate));
-        boolean isFerie = mongoTemplate.exists(ferieQuery, Ferie.class);
-        if (isFerie) return Collections.emptyList();
-
-        // Ignore weekEnd
+        // Vérification week-end
         DayOfWeek dayOfWeek = today.getDayOfWeek();
         if (dayOfWeek == DayOfWeek.SATURDAY || dayOfWeek == DayOfWeek.SUNDAY) {
             return Collections.emptyList();
         }
 
-        // Agrégation pour trouver les employés sans pointage aujourd’hui
-        List<AggregationOperation> operations = Arrays.asList(
-                Aggregation.lookup("pointages", "codeSecret", "codeSecret", "pointagesToday"),
-                Aggregation.addFields()
-                        .addFieldWithValue("pointagesToday",
-                                ArrayOperators.Filter.filter("pointagesToday")
-                                        .as("pt")
-                                        .by(
-                                                BooleanOperators.And.and(
-                                                        ComparisonOperators.Gte.valueOf("$$pt.timestamp").greaterThanEqualToValue(start),
-                                                        ComparisonOperators.Lt.valueOf("$$pt.timestamp").lessThanValue(end)
-                                                )
-                                        )
-                        ).build(),
-                Aggregation.match(Criteria.where("pointagesToday").size(0))
-        );
+        // Vérification jour férié
+        Query ferieQuery = new Query(Criteria.where("date").is(todayStr));
+        if (mongoTemplate.exists(ferieQuery, Ferie.class)) {
+            return Collections.emptyList();
+        }
 
-        Aggregation aggregation = Aggregation.newAggregation(operations);
-        AggregationResults<Employe> results = mongoTemplate.aggregate(aggregation, "employes", Employe.class);
-        List<Employe> absentEmployes = results.getMappedResults();
+        // Tous les employés
+        List<Employe> allEmployes = employeRepository.findAll();
 
-        // 🔄 Transformer les employés absents en objets Absent (non stockés)
+        // Tous les pointages du jour
+        List<Pointage> pointagesToday = pointageRepository.findAllByDate(todayStr);
+        List<String> codesPresent = pointagesToday.stream()
+                .map(Pointage::getCodeSecret)
+                .collect(Collectors.toList());
+
+        // Filtrer absents
+        List<Employe> absentEmployes = allEmployes.stream()
+                .filter(e -> !codesPresent.contains(e.getCodeSecret()))
+                .collect(Collectors.toList());
+
+        // Transformer en objets Absent (non persistés)
         return absentEmployes.stream().map(e -> {
             Absent a = new Absent();
-            a.setId(null); // pas encore stocké
+            a.setId(null);
             a.setCodeSecret(e.getCodeSecret());
             a.setPrenom(e.getPrenom());
             a.setNom(e.getNom());
@@ -102,66 +86,34 @@ public class AbsentService {
             a.setJustification("Aucune justification");
             a.setIntervention(e.getIntervention());
             a.setSite(e.getSite());
-            a.setDateAbsence(formattedDate);
+            a.setDateAbsence(todayStr);
             return a;
         }).collect(Collectors.toList());
     }
 
-    /**
-     * 🔹 Méthode planifiée quotidienne (historique des absences)
-     */
     @Scheduled(cron = "0 30 21 * * *", zone = "Africa/Dakar")
     public void findAndStoreAbsentEmployees() {
+        LocalDate today = getTodayDate();
+        DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern("dd/MM/yyyy");
+        String formattedDate = today.format(dateFormatter);
 
-        LocalDate today = LocalDate.now();
-        ZoneId zone = ZoneId.of("Africa/Dakar");
-
-        // Format pour affichage et requêtes
-        DateTimeFormatter frenchDateFormatter = DateTimeFormatter.ofPattern("dd/MM/yyyy");
-        String formattedDate = today.format(frenchDateFormatter);
-
-        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd.MM.yyyy");
-        String formatDate = today.format(formatter);
-
-        System.out.println("🕒 Heure du serveur : " + LocalDateTime.now());
-        System.out.println("📅 Vérification des absences du " + formattedDate);
-
-        // 🔹 1️⃣ Vérification du week-end
+        // Week-end
         DayOfWeek dayOfWeek = today.getDayOfWeek();
-        if (dayOfWeek == DayOfWeek.SATURDAY || dayOfWeek == DayOfWeek.SUNDAY) {
-            System.out.println("⛱️ Week-end détecté (" + dayOfWeek + ") - pas de traitement.");
-            return;
-        }
+        if (dayOfWeek == DayOfWeek.SATURDAY || dayOfWeek == DayOfWeek.SUNDAY) return;
 
-        // 🔹 2️⃣ Vérification jour férié
-        Query ferieQuery = new Query(Criteria.where("date").is(formatDate));
-        boolean isFerie = mongoTemplate.exists(ferieQuery, Ferie.class);
-        if (isFerie) {
-            System.out.println("🎉 Jour férié détecté (" + today + ") - pas de traitement.");
-            return;
-        }
+        // Jour férié
+        Query ferieQuery = new Query(Criteria.where("date").is(formattedDate));
+        if (mongoTemplate.exists(ferieQuery, Ferie.class)) return;
 
-        // 🔹 3️⃣ Récupération des absents dynamiques (employés non pointés aujourd’hui)
+        // Absents dynamiques
         List<Absent> absencesDynamiques = findAbsencesDynamiques();
+        if (absencesDynamiques.isEmpty()) return;
 
-        if (absencesDynamiques.isEmpty()) {
-            System.out.println("✅ Aucune absence détectée aujourd’hui.");
-            return;
-        }
-
-        // 🔹 4️⃣ Vérifie si absences déjà enregistrées pour ce jour
+        // Vérifie si déjà enregistrés
         Query check = new Query(Criteria.where("dateAbsence").is(formattedDate));
-        boolean alreadyExists = mongoTemplate.exists(check, Absent.class);
-        if (alreadyExists) {
-            System.out.println("⚠️ Absences déjà enregistrées pour le " + formattedDate);
-            return;
-        }
+        if (mongoTemplate.exists(check, Absent.class)) return;
 
-        // 🔹 5️⃣ Enregistre les absences en base MongoDB
+        // Enregistre
         mongoTemplate.insertAll(absencesDynamiques);
-
-        System.out.println("💾 Absents enregistrés pour le " + formattedDate + " : "
-                + absencesDynamiques.size() + " employés.");
     }
-
 }

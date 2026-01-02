@@ -1,4 +1,8 @@
 spring:
+  data:
+    mongodb:
+      uri: mongodb://mongo:27017/pointage_cleanic
+
   mail:
     host: smtp.gmail.com
     port: 587
