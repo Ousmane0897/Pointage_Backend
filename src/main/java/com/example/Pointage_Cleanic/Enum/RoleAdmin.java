@@ -5,6 +5,8 @@ public enum RoleAdmin {
         BACKOFFICE,
         SUPERVISEUR,
         MAGASINIER,
-        RESPONSABLE_IT
+        RESPONSABLE_IT,
+        Responsable_QHSE,
+        CONTROLEUR_STOCK
 
 }

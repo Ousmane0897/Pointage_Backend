@@ -71,54 +71,33 @@ public class EmployeCompletController {
     }
 
 
-
-    // Retourne une page de produit contenant 20 produits
-    @GetMapping("/all")
-    public Page<EmployeComplet> list(
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size,
-            @RequestParam(defaultValue = "") String q) {
-
-        // Si aucun mot-clé de recherche : on renvoie la page complète
-        if (q == null || q.isBlank()) {
-            Page<EmployeComplet> all = employeCompletRepository.findAll(PageRequest.of(page, size));
-            return new PageImpl<>(all.getContent(), all.getPageable(), all.getTotalElements());
-        }
-
-        // Sinon on cherche le produit par code
-        return employeCompletRepository.findByPrenom(q)
-                .map(p -> new PageImpl<>(List.of(p), PageRequest.of(page, size), 1))
-                .orElseGet(() -> {
-                    Page<EmployeComplet> all = employeCompletRepository.findAll(PageRequest.of(page, size));
-                    return new PageImpl<>(all.getContent(), all.getPageable(), all.getTotalElements());
-                });
-    }
-
-
     /**
      * 🔍 Recherche d’employés par nom, prénom, matricule, ou email
      */
-    @GetMapping("/search")
-    public SearchResponse searchEmployes(
-            @RequestParam(name = "q", required = false) String query,
+    @GetMapping("/all")
+    public SearchResponse list(
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size) {
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(defaultValue = "") String q) {
 
         Pageable pageable = PageRequest.of(page, size, Sort.by("nom").ascending());
 
-        Page<EmployeComplet> employePage;
+        Page<EmployeComplet> pageResult;
 
-        if (query == null || query.trim().isEmpty()) {
-            employePage = employeCompletRepository.findAll(pageable);
+        if (q == null || q.isBlank()) {
+            pageResult = employeCompletRepository.findAll(pageable);
         } else {
-            // 🔍 recherche insensible à la casse sur plusieurs champs
-            employePage = employeCompletRepository
+            pageResult = employeCompletRepository
                     .findByPrenomContainingIgnoreCaseOrNomContainingIgnoreCaseOrMatriculeContainingIgnoreCaseOrEmailContainingIgnoreCase(
-                            query, query, query, query, pageable);
+                            q, q, q, q, pageable);
         }
 
-        return new SearchResponse(employePage.getContent(), employePage.getTotalElements());
+        return new SearchResponse(
+                pageResult.getContent(),
+                pageResult.getTotalElements()
+        );
     }
+
 
     /**
      * Petite classe DTO de réponse pour Angular
