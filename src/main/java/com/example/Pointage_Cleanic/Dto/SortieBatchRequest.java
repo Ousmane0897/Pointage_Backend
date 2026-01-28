@@ -15,6 +15,7 @@ public class SortieBatchRequest {
     private String destination;
     private MotifMouvementSortieStock motifSortieStock;
     private String responsable;
+    private String beneficaire;
 
     @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss.SSSX", timezone = "UTC")
     private Instant dateMouvement;

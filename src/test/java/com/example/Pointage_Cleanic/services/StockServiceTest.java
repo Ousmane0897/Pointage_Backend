@@ -213,6 +213,7 @@ class StockServiceTest {
                         List.of(dto),
                         "Dakar",
                         "Admin",
+                        "Ousmane",
                         TypeMouvement.SORTIE,
                         MotifMouvementSortieStock.AGENCE
                 );

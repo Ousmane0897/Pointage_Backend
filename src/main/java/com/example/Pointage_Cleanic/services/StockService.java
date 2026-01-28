@@ -510,6 +510,7 @@ public class StockService {
             List<MouvementStock> produits,
             String destination,
             String responsable,
+            String beneficaire,
             //Instant dateDeSortie,
             TypeMouvement typeMouvement,
             MotifMouvementSortieStock motifSortieStock) {
@@ -545,6 +546,7 @@ public class StockService {
                     .motifSortieStock(motifSortieStock)
                     .destination(destination)
                     .responsable(responsable)
+                    .beneficaire(beneficaire)
                     .mois(moisFrancais)
                     .dateMouvement(Instant.now())
                     .build();

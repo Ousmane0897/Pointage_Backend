@@ -67,6 +67,7 @@ public class StockController {
                 request.getMouvements(),
                 request.getDestination(),
                 request.getResponsable(),
+                request.getBeneficaire(),
                 //request.getDateSortie(),
                 request.getTypeMouvement(),
                 request.getMotifSortieStock()

@@ -63,7 +63,7 @@ public class LoginController {
             return ResponseEntity.ok(new AuthResponse(jwt));
         }
 
-//        // Then try to find in SuperAdmin
+//        // Then try to find in SuperAdmin§
           Optional<User> userOpt = loginRepository.findByEmail(authRequest.getEmail());
           if (userOpt.isPresent()) {
               User user = userOpt.get();

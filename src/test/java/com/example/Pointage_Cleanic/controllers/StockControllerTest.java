@@ -144,6 +144,7 @@ class StockControllerTest {
                 any(),
                 any(),
                 any(),
+                any(),
                 any()
         )).thenReturn(List.of(new MouvementSortieStock()));
 
