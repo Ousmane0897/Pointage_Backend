@@ -29,4 +29,5 @@ COPY --from=builder /app/build/libs/*.jar app.jar
 EXPOSE 8080
 
 # Lancer l'application
-ENTRYPOINT ["java", "--add-opens=java.base/java.time=ALL-UNNAMED", "-jar", "app.jar"]
+ENTRYPOINT ["java","--add-opens=java.base/java.time=ALL-UNNAMED","-Dspring.profiles.active=prod","-jar","app.jar"]
+

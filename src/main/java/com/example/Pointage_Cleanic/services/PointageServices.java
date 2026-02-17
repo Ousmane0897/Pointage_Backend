@@ -5,6 +5,7 @@ import com.example.Pointage_Cleanic.entities.Employe;
 import com.example.Pointage_Cleanic.entities.Pointage;
 import com.example.Pointage_Cleanic.repositories.PointageRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
@@ -16,17 +17,18 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
-import java.time.format.DateTimeParseException;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Locale;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class PointageServices {
 
     private final MongoTemplate mongoTemplate;
     private final PointageRepository pointageRepository;
+    private final GeocodingService geocodingService;
 
     Pointage save(Pointage pointage) {
 
@@ -111,69 +113,110 @@ public class PointageServices {
         return !pointageRepository.existsByDeviceIdAndTimestampAfter(deviceId, cutoff);
     }
 
-    public Pointage enregistrerPointage(String codeSecret, String deviceID) {
-        try {
-            Employe employe = getEmployeBycodeSecret(codeSecret);
-            if (employe == null) {
-                throw new IllegalArgumentException("Employé introuvable pour le code: " + codeSecret);
-            }
 
-            LocalDate today = LocalDate.now();
-            DateTimeFormatter frenchDateFormatter = DateTimeFormatter.ofPattern("dd/MM/yyyy");
-            String formattedDate = today.format(frenchDateFormatter);
+    public Pointage enregistrerPointage(
+            String codeSecret,
+            String deviceID,
+            Double latitude,
+            Double longitude
+    ) {
 
-            LocalTime now = LocalTime.now();
-            DateTimeFormatter timeFormatter = DateTimeFormatter.ofPattern("HH:mm", Locale.FRENCH);
-            String currentTime = now.format(timeFormatter);
-
-            Pointage pointageExist = getBycodeSecretAndDate(codeSecret);
-            if (pointageExist == null) {
-                Pointage pointage = new Pointage();
-                pointage.setCodeSecret(employe.getCodeSecret());
-                pointage.setPrenom(employe.getPrenom());
-                pointage.setNom(employe.getNom());
-                pointage.setDate(formattedDate);
-                pointage.setHeureArrive(currentTime);
-                pointage.setStatus("En cours...");
-                pointage.setSite(employe.getSite());
-                pointage.setDeviceId(deviceID);
-                pointage.setTimestamp(Instant.now());
-                pointageRepository.save(pointage);
-                return pointage;
-            } else {
-                String heureEntree = getHeureArriveByCurrentDateAndcodeSecret(codeSecret);
-                if (heureEntree == null) {
-                    throw new IllegalStateException("Heure d'arrivée introuvable pour le code: " + codeSecret);
-                }
-
-                DateTimeFormatter parseFormatter = DateTimeFormatter.ofPattern("HH:mm");
-                LocalTime startTime = LocalTime.parse(heureEntree, parseFormatter);
-                LocalTime endTime = LocalTime.parse(currentTime, parseFormatter);
-
-                Duration duration = Duration.between(startTime, endTime);
-
-                long hours = duration.toHours();
-                long minutes = duration.toMinutes() % 60;
-
-                String formattedDuration;
-                if (hours > 0) {
-                    formattedDuration = hours + "h" + (minutes > 0 ? minutes + "mn" : "");
-                } else {
-                    formattedDuration = minutes + "mn";
-                }
-
-
-
-                String status = "terminé";
-
-                updatePointage(codeSecret, formattedDate, currentTime, formattedDuration, status);
-
-                return getBycodeSecretAndDate(codeSecret); // récupération après update
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-            throw new RuntimeException("Erreur lors de l'enregistrement du pointage: " + e.getMessage(), e);
+        // 1️⃣ Vérification employé
+        Employe employe = getEmployeBycodeSecret(codeSecret);
+        if (employe == null) {
+            throw new IllegalArgumentException(
+                    "Employé introuvable pour le code : " + codeSecret
+            );
         }
+
+        // 2️⃣ Date & heure courantes
+        LocalDate today = LocalDate.now();
+        String formattedDate = today.format(
+                DateTimeFormatter.ofPattern("dd/MM/yyyy")
+        );
+
+        LocalTime now = LocalTime.now();
+        String currentTime = now.format(
+                DateTimeFormatter.ofPattern("HH:mm", Locale.FRENCH)
+        );
+
+        // 3️⃣ Reverse geocoding sécurisé
+        String adresse = "Adresse non disponible";
+        if (latitude != null && longitude != null) {
+            try {
+                // Appel du GeocodingService réactif
+                adresse = geocodingService.getReadableAddress(latitude, longitude)
+                        .block(); // ⚠️ .block() transforme le Mono en String synchrone
+            } catch (Exception e) {
+                // ⚠️ On log seulement, le pointage ne doit jamais échouer
+                log.warn("Reverse geocoding échoué pour {} / {}", latitude, longitude, e);
+            }
+        }
+
+
+        // 4️⃣ Recherche pointage du jour
+        Pointage pointageExist = getBycodeSecretAndDate(codeSecret);
+
+        // =======================
+        // 🟢 CAS ARRIVÉE
+        // =======================
+        if (pointageExist == null) {
+
+            Pointage pointage = Pointage.builder()
+                    .codeSecret(employe.getCodeSecret())
+                    .prenom(employe.getPrenom())
+                    .nom(employe.getNom())
+                    .date(formattedDate)
+                    .heureArrive(currentTime)
+                    .status("En cours...")
+                    .site(employe.getSite())
+                    .deviceId(deviceID)
+                    .timestamp(Instant.now())
+                    .adresse(adresse)
+                    .build();
+
+            return pointageRepository.save(pointage);
+        }
+
+        // =======================
+        // 🔵 CAS DÉPART
+        // =======================
+
+        String heureEntree = pointageExist.getHeureArrive();
+        if (heureEntree == null) {
+            throw new IllegalStateException(
+                    "Heure d'arrivée introuvable pour le code : " + codeSecret
+            );
+        }
+
+        LocalTime startTime = LocalTime.parse(
+                heureEntree,
+                DateTimeFormatter.ofPattern("HH:mm")
+        );
+        LocalTime endTime = LocalTime.parse(
+                currentTime,
+                DateTimeFormatter.ofPattern("HH:mm")
+        );
+
+        Duration duration = Duration.between(startTime, endTime);
+
+        long hours = duration.toHours();
+        long minutes = duration.toMinutes() % 60;
+
+        String formattedDuration =
+                hours > 0
+                        ? hours + "h" + (minutes > 0 ? minutes + "mn" : "")
+                        : minutes + "mn";
+
+        updatePointage(
+                codeSecret,
+                formattedDate,
+                currentTime,
+                formattedDuration,
+                "terminé"
+        );
+
+        return getBycodeSecretAndDate(codeSecret);
     }
 
 

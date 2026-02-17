@@ -19,6 +19,7 @@ services:
       MAIL_USERNAME: "cleanicsarl24@gmail.com"
       MAIL_PASSWORD: "wsuj dawn qmdd qyfq"
       JWT_SECRET: "G5pRQXJg7GwOULOE2VODLI9q3baigC4UcW3DYKGX//g="
+      GOOGLE_MAPS_API_KEY: "AIzaSyAijDeBFgsJUYLqS6Nn3EQfi56cPPMtN_Q"
     restart: always
 
 volumes:

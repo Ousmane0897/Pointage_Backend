@@ -7,16 +7,6 @@ spring:
     date-format: dd/MM/yyyy
     time-zone: Africa/Dakar
 
-logging:
-  level:
-    org:
-      springframework:
-        data:
-          mongodb:
-            core:
-              MongoTemplate: DEBUG
-        security: DEBUG
-
 jwt:
   secret: w9awKW+/x+VOzOyvg5DY3D7qWVZhipaV6VH8h9c4JS8=
 
@@ -27,3 +17,18 @@ springdoc:
     path: /swagger-ui.html
     display-request-duration: true
     operationsSorter: method
+
+
+google:
+  maps:
+    api:
+      key: "AIzaSyAijDeBFgsJUYLqS6Nn3EQfi56cPPMtN_Q"
+
+
+logging:
+  level:
+    root: ERROR
+    org.springframework.web: DEBUG
+    org.springframework.data.mongodb.core.MongoTemplate: DEBUG
+    org.springframework.security: DEBUG
+    com.example: DEBUG

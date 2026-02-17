@@ -30,4 +30,5 @@ public class Pointage {
     private String[] site;
     private String deviceId;
     private Instant timestamp;
+    private String adresse;
 }

@@ -27,7 +27,7 @@ public class Produit {
     private String nomProduit;
     private String description; // détails utiles, composition du produit, etc.
     private String categorie;  // ex : Alimentaire, Informatique, Médicaments
-    private String destination; // usage prévu: vente, agence
+    private String[] destination; // usage prévu: vente ou/et agence
     // L'image sera stockée en base sous forme de bytes
     private byte[] image;
     //private String sousCategorie; // ex : Boissons > Jus, ou Médicament > Antibiotique

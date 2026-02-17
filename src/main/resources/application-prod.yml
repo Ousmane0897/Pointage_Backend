@@ -14,3 +14,9 @@ spring:
 
 jwt:
   secret: ${JWT_SECRET}
+
+
+google:
+  maps:
+    api:
+      key: "AIzaSyAijDeBFgsJUYLqS6Nn3EQfi56cPPMtN_Q"

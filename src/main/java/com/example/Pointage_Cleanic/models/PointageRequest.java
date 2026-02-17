@@ -13,4 +13,6 @@ public class PointageRequest {
 
     private String codeSecret;
     private String deviceId;
+    private Double latitude;
+    private Double longitude;
 }

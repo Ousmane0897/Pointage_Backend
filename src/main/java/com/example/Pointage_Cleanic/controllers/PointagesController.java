@@ -24,14 +24,36 @@ public class PointagesController {
 
     @PostMapping
     public ResponseEntity<?> pointer(@RequestBody PointageRequest request) {
-        if (!pointageServices.canPoint(request.getDeviceId(), 2)) {
+
+        System.out.println("REQUEST = " + request);
+        System.out.println("CODE = " + request.getCodeSecret());
+        System.out.println("LONGUEUR = " + request.getCodeSecret().length());
+        System.out.println("DEVICE = " + request.getDeviceId());
+        System.out.println("LAT = " + request.getLatitude());
+        System.out.println("LNG = " + request.getLongitude());
+
+
+
+
+        if (!pointageServices.canPoint(request.getDeviceId(), 3)) {
             return ResponseEntity
                     .status(HttpStatus.TOO_MANY_REQUESTS)
                     .body("Ce téléphone a déjà été utilisé pour un pointage récemment.");
         }
 
-        Pointage pointage = pointageServices.enregistrerPointage(request.getCodeSecret(), request.getDeviceId());
-        return ResponseEntity.ok(pointage);
+        try {
+            Pointage pointage = pointageServices.enregistrerPointage(
+                    request.getCodeSecret().trim(),
+                    request.getDeviceId(),
+                    request.getLatitude(),
+                    request.getLongitude()
+            );
+            return ResponseEntity.ok(pointage);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity
+                    .status(HttpStatus.NOT_FOUND)
+                    .body(e.getMessage());
+        }
     }
 
     @GetMapping

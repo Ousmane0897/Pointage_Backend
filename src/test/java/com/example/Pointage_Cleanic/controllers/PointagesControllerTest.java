@@ -58,7 +58,7 @@ class PointagesControllerTest {
         Pointage pointage = new Pointage();
 
         Mockito.when(pointageServices.canPoint("DEV-1", 2)).thenReturn(true);
-        Mockito.when(pointageServices.enregistrerPointage("1234", "DEV-1"))
+        Mockito.when(pointageServices.enregistrerPointage("1234", "DEV-1", Mockito.anyDouble(), Mockito.anyDouble()))
                 .thenReturn(pointage);
 
         mockMvc.perform(post("/api/pointages")

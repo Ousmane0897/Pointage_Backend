@@ -41,7 +41,7 @@ public class ProduitController {
     @GetMapping
     public Page<Produit> list(
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(defaultValue = "15") int size,
             @RequestParam(defaultValue = "") String q) {
 
         // Si aucun mot-clé de recherche : on renvoie la page complète
