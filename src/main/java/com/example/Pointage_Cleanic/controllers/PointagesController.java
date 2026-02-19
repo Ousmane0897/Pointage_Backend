@@ -25,6 +25,10 @@ public class PointagesController {
     @PostMapping
     public ResponseEntity<?> pointer(@RequestBody PointageRequest request) {
 
+        String code = request.getCodeSecret()
+                .replaceAll("[^0-9]", "");
+
+
         System.out.println("REQUEST = " + request);
         System.out.println("CODE = " + request.getCodeSecret());
         System.out.println("LONGUEUR = " + request.getCodeSecret().length());
@@ -33,6 +37,11 @@ public class PointagesController {
         System.out.println("LNG = " + request.getLongitude());
 
 
+        if (request.getDeviceId() == null || request.getDeviceId().isBlank()) {
+            return ResponseEntity
+                    .status(HttpStatus.BAD_REQUEST)
+                    .body("Device ID manquant");
+        }
 
 
         if (!pointageServices.canPoint(request.getDeviceId(), 3)) {
@@ -43,7 +52,7 @@ public class PointagesController {
 
         try {
             Pointage pointage = pointageServices.enregistrerPointage(
-                    request.getCodeSecret().trim(),
+                    code,
                     request.getDeviceId(),
                     request.getLatitude(),
                     request.getLongitude()
