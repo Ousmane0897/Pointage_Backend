@@ -44,44 +44,67 @@ public class GeocodingService {
             return "Adresse non disponible";
         }
 
-        String neighborhood = null;
-        String locality = null;
-        String country = null;
+        // 1️⃣ Priorité : formatted_address SANS Plus Code
+        for (Map<String, Object> result : results) {
+            String formatted = (String) result.get("formatted_address");
+            if (formatted != null && !formatted.contains("+")) {
+                return formatted;
+            }
+        }
+
+        // 2️⃣ Fallback intelligent via address_components
+        String quartier = null;
+        String ville = null;
+        String pays = null;
 
         for (Map<String, Object> result : results) {
 
             List<Map<String, Object>> components =
                     (List<Map<String, Object>>) result.get("address_components");
 
+            if (components == null) continue;
+
             for (Map<String, Object> component : components) {
 
                 List<String> types = (List<String>) component.get("types");
                 String longName = (String) component.get("long_name");
 
-                if (types.contains("neighborhood") || types.contains("sublocality")) {
-                    neighborhood = longName;
+                if (types == null || longName == null) continue;
+
+                if (quartier == null &&
+                        (types.contains("neighborhood")
+                                || types.contains("sublocality")
+                                || types.contains("sublocality_level_1"))) {
+                    quartier = longName;
                 }
 
-                if (types.contains("locality")) {
-                    locality = longName;
+                if (ville == null && types.contains("locality")) {
+                    ville = longName;
                 }
 
-                if (types.contains("country")) {
-                    country = longName;
+                if (pays == null && types.contains("country")) {
+                    pays = longName;
                 }
             }
         }
 
-        // Construction propre
-        if (neighborhood != null && locality != null) {
-            return neighborhood + ", " + locality;
+        // 3️⃣ Construction finale (UX métier)
+        if (quartier != null && ville != null) {
+            return quartier + ", " + ville;
         }
 
-        if (locality != null) {
-            return locality;
+        if (ville != null) {
+            return ville;
         }
 
-        return country != null ? country : "Adresse non disponible";
+        if (pays != null) {
+            return pays;
+        }
+
+        // 4️⃣ Ultime fallback
+        return "Localisation approximative";
     }
+
+
 }
 

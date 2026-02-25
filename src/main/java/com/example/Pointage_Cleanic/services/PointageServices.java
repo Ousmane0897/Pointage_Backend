@@ -144,9 +144,12 @@ public class PointageServices {
         String adresse = "Adresse non disponible";
         if (latitude != null && longitude != null) {
             try {
+                log.info("🌍 Reverse geocoding demandé pour lat={}, lng={}", latitude, longitude);
                 // Appel du GeocodingService réactif
                 adresse = geocodingService.getReadableAddress(latitude, longitude)
                         .block(); // ⚠️ .block() transforme le Mono en String synchrone
+                log.info("📍 Adresse retournée = [{}]", adresse);
+
             } catch (Exception e) {
                 // ⚠️ On log seulement, le pointage ne doit jamais échouer
                 log.warn("Reverse geocoding échoué pour {} / {}", latitude, longitude, e);

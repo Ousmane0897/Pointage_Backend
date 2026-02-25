@@ -25,16 +25,14 @@ public class PointagesController {
     @PostMapping
     public ResponseEntity<?> pointer(@RequestBody PointageRequest request) {
 
-        String code = request.getCodeSecret()
-                .replaceAll("[^0-9]", "");
+        String rawCode = request.getCodeSecret();
 
+        String cleanCode = rawCode
+                .replaceAll("[^0-9]", ""); // 🔥 SUPPRIME TOUT SAUF CHIFFRES
 
-        System.out.println("REQUEST = " + request);
-        System.out.println("CODE = " + request.getCodeSecret());
-        System.out.println("LONGUEUR = " + request.getCodeSecret().length());
-        System.out.println("DEVICE = " + request.getDeviceId());
-        System.out.println("LAT = " + request.getLatitude());
-        System.out.println("LNG = " + request.getLongitude());
+        System.out.println("RAW CODE = [" + rawCode + "]");
+        System.out.println("CLEAN CODE = [" + cleanCode + "]");
+        System.out.println("LONGUEUR CLEAN = " + cleanCode.length());
 
 
         if (request.getDeviceId() == null || request.getDeviceId().isBlank()) {
@@ -44,7 +42,7 @@ public class PointagesController {
         }
 
 
-        if (!pointageServices.canPoint(request.getDeviceId(), 3)) {
+        if (!pointageServices.canPoint(request.getDeviceId(), 4)) {
             return ResponseEntity
                     .status(HttpStatus.TOO_MANY_REQUESTS)
                     .body("Ce téléphone a déjà été utilisé pour un pointage récemment.");
@@ -52,7 +50,7 @@ public class PointagesController {
 
         try {
             Pointage pointage = pointageServices.enregistrerPointage(
-                    code,
+                    cleanCode,
                     request.getDeviceId(),
                     request.getLatitude(),
                     request.getLongitude()

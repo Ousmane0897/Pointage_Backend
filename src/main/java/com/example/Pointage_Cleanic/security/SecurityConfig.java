@@ -20,6 +20,8 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.CorsConfiguration;
 
+import java.util.List;
+
 @Configuration
 @EnableWebSecurity
 @RequiredArgsConstructor
@@ -32,14 +34,34 @@ public class SecurityConfig {
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
 
         http
-                .cors(cors -> cors.configurationSource(request -> {
-                    CorsConfiguration config = new CorsConfiguration();
-                    config.addAllowedOriginPattern("*"); // tu peux mettre http://localhost:4200
-                    config.addAllowedMethod("*");
-                    config.addAllowedHeader("*");
-                    config.setAllowCredentials(true);
-                    return config;
-                }))
+        .cors(cors -> cors.configurationSource(request -> {
+            CorsConfiguration config = new CorsConfiguration();
+
+            config.setAllowedOriginPatterns(List.of(
+                    "http://localhost",
+                    "http://localhost:*",
+                    "http://127.0.0.1:*",
+                    "https://*.ngrok-free.dev",
+                    "https://pointic-cleanic.com"
+            ));
+
+            config.setAllowedMethods(List.of(
+                    "GET", "POST", "PUT", "DELETE", "OPTIONS"
+            ));
+
+            config.setAllowedHeaders(List.of(
+                    "Authorization",
+                    "Content-Type"
+            ));
+
+            config.setExposedHeaders(List.of(
+                    "Authorization"
+            ));
+
+            config.setAllowCredentials(false);
+
+            return config;
+        }))
                 .csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(auth -> auth
 
