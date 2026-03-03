@@ -5,11 +5,16 @@ import com.example.Pointage_Cleanic.entities.stock.Produit;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.mongodb.repository.MongoRepository;
+import org.springframework.stereotype.Repository;
 
 import java.util.List;
 import java.util.Optional;
 
-public interface ProduitRepository  extends MongoRepository<Produit,String> {
+@Repository
+public interface ProduitRepository
+        extends MongoRepository<Produit, String>,
+        ProduitRepositoryCustom {
+
 
 
     Optional<Produit> findByCodeProduit(String codeProduit);

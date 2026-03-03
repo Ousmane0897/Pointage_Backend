@@ -23,9 +23,8 @@ public class DashboardService {
         long total = employeRepository.count();
 
         LocalDate today = LocalDate.now();
-        DateTimeFormatter frenchFormatter = DateTimeFormatter.ofPattern("dd/MM/yyyy");
-        String todayStr = today.format(frenchFormatter);
-        long present = pointageRepository.countByDate(todayStr);
+
+        long present = pointageRepository.countByDate(today);
 
         long absent = total - present;
 

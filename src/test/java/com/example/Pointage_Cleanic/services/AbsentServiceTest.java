@@ -9,6 +9,7 @@ import com.example.Pointage_Cleanic.repositories.PointageRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentMatchers;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
@@ -104,7 +105,7 @@ class AbsentServiceTest {
 
         Pointage p = new Pointage();
         p.setCodeSecret("A");
-        when(pointageRepository.findAllByDate(anyString())).thenReturn(List.of(p));
+        when(pointageRepository.findAllByDate(LocalDate.parse(ArgumentMatchers.anyString()))).thenReturn(List.of(p));
 
         List<Absent> absents = absentService.findAbsencesDynamiques();
 

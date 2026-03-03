@@ -10,7 +10,7 @@ import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.mapping.MongoMappingContext;
 
 @Configuration
-@EnableMongoAuditing
+@EnableMongoAuditing // L’audit permet à Spring Data de renseigner automatiquement certains champs sans code métier
 public class MongoConfigurations {
 
     @Bean

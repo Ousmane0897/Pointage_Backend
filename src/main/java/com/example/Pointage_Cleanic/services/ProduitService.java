@@ -5,6 +5,7 @@ import com.example.Pointage_Cleanic.repositories.ProduitRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
 import java.util.HashMap;
@@ -62,9 +63,24 @@ public class ProduitService {
         return produitRepository.findByCodeProduit(codeProduit);
     }
 
+    public Page<Produit> search(
+            String q,
+            String category,
+            String destination,
+            Pageable pageable
+    ) {
+        return produitRepository.search(
+                q,
+                category,
+                destination,
+                pageable
+        );
+    }
+
     public Optional<Produit> findByNomProduit(String nomProduit) {
 
         return produitRepository.findByNomProduit(nomProduit);
     }
+
 
 }

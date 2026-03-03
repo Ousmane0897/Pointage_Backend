@@ -7,6 +7,7 @@ import com.example.Pointage_Cleanic.entities.Pointage;
 import com.example.Pointage_Cleanic.repositories.EmployeRepository;
 import com.example.Pointage_Cleanic.repositories.PointageRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
@@ -17,10 +18,12 @@ import java.time.*;
 import java.time.format.DateTimeFormatter;
 import java.util.Collections;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class AbsentService {
 
     private final MongoTemplate mongoTemplate;
@@ -44,76 +47,71 @@ public class AbsentService {
     }
 
     public List<Absent> findAbsencesDynamiques() {
-        LocalDate today = getTodayDate();
-        DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern("dd/MM/yyyy");
-        String todayStr = today.format(dateFormatter);
 
-        // Vérification week-end
-        DayOfWeek dayOfWeek = today.getDayOfWeek();
-        if (dayOfWeek == DayOfWeek.SATURDAY || dayOfWeek == DayOfWeek.SUNDAY) {
-            return Collections.emptyList();
-        }
-
-        // Vérification jour férié
-        Query ferieQuery = new Query(Criteria.where("date").is(todayStr));
-        if (mongoTemplate.exists(ferieQuery, Ferie.class)) {
-            return Collections.emptyList();
-        }
+        LocalDate today = LocalDate.now(ZoneId.of("Africa/Dakar"));
 
         // Tous les employés
         List<Employe> allEmployes = employeRepository.findAll();
+        if (allEmployes.isEmpty()) return Collections.emptyList();
 
         // Tous les pointages du jour
-        List<Pointage> pointagesToday = pointageRepository.findAllByDate(todayStr);
-        List<String> codesPresent = pointagesToday.stream()
+        List<Pointage> pointagesToday = pointageRepository.findAllByDate(today);
+        Set<String> codesPresent = pointagesToday.stream()
                 .map(Pointage::getCodeSecret)
-                .collect(Collectors.toList());
+                .collect(Collectors.toSet());
 
         // Filtrer absents
-        List<Employe> absentEmployes = allEmployes.stream()
+        return allEmployes.stream()
                 .filter(e -> !codesPresent.contains(e.getCodeSecret()))
-                .collect(Collectors.toList());
-
-        // Transformer en objets Absent (non persistés)
-        return absentEmployes.stream().map(e -> {
-            Absent a = new Absent();
-            a.setId(null);
-            a.setCodeSecret(e.getCodeSecret());
-            a.setPrenom(e.getPrenom());
-            a.setNom(e.getNom());
-            a.setNumero(e.getNumero());
-            a.setMotif("Pas encore pointé");
-            a.setJustification("Aucune justification");
-            a.setIntervention(e.getIntervention());
-            a.setSite(e.getSite());
-            a.setDateAbsence(todayStr);
-            return a;
-        }).collect(Collectors.toList());
+                .map(e -> Absent.builder()
+                        .codeSecret(e.getCodeSecret())
+                        .prenom(e.getPrenom())
+                        .nom(e.getNom())
+                        .numero(e.getNumero())
+                        .dateAbsence(today)
+                        .motif("Pas encore pointé")
+                        .justification("Aucune justification")
+                        .intervention(e.getIntervention())
+                        .site(e.getSite())
+                        .build())
+                .toList();
     }
 
-    @Scheduled(cron = "0 30 21 * * *", zone = "Africa/Dakar")
+    @Scheduled(cron = "0 52 11 * * *", zone = "Africa/Dakar")
     public void findAndStoreAbsentEmployees() {
-        LocalDate today = getTodayDate();
-        DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern("dd/MM/yyyy");
-        String formattedDate = today.format(dateFormatter);
 
-        // Week-end
-        DayOfWeek dayOfWeek = today.getDayOfWeek();
-        if (dayOfWeek == DayOfWeek.SATURDAY || dayOfWeek == DayOfWeek.SUNDAY) return;
+        LocalDate today = LocalDate.now(ZoneId.of("Africa/Dakar"));
 
-        // Jour férié
-        Query ferieQuery = new Query(Criteria.where("date").is(formattedDate));
-        if (mongoTemplate.exists(ferieQuery, Ferie.class)) return;
+        // 1️⃣ Week-end
+        if (today.getDayOfWeek() == DayOfWeek.SATURDAY ||
+                today.getDayOfWeek() == DayOfWeek.SUNDAY) return;
 
-        // Absents dynamiques
-        List<Absent> absencesDynamiques = findAbsencesDynamiques();
-        if (absencesDynamiques.isEmpty()) return;
+        // 2️⃣ Jour férié
+        if (mongoTemplate.exists(
+                new Query(Criteria.where("date").is(today)),
+                Ferie.class)) return;
 
-        // Vérifie si déjà enregistrés
-        Query check = new Query(Criteria.where("dateAbsence").is(formattedDate));
-        if (mongoTemplate.exists(check, Absent.class)) return;
+        // 3️⃣ Absences dynamiques
+        List<Absent> absents = findAbsencesDynamiques();
+        if (absents.isEmpty()) return;
 
-        // Enregistre
-        mongoTemplate.insertAll(absencesDynamiques);
+        // 4️⃣ Absences déjà enregistrées
+        Set<String> codesDejaAbsents = mongoTemplate.find(
+                        new Query(Criteria.where("dateAbsence").is(today)),
+                        Absent.class
+                ).stream()
+                .map(Absent::getCodeSecret)
+                .collect(Collectors.toSet());
+
+        // 5️⃣ Nouveaux absents
+        List<Absent> absentsAInserer = absents.stream()
+                .filter(a -> !codesDejaAbsents.contains(a.getCodeSecret()))
+                .toList();
+
+        // 6️⃣ Insertion finale
+        if (!absentsAInserer.isEmpty()) {
+            mongoTemplate.insertAll(absentsAInserer);
+        }
     }
+
 }

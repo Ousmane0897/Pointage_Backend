@@ -13,6 +13,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.LocalDate;
 import java.util.*;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -65,7 +66,7 @@ class DashboardParSiteTest {
                 .thenReturn(List.of(e4, e5));
 
         when(pointageRepository.countByDateAndIdIn(
-                anyString(),
+                LocalDate.parse(ArgumentMatchers.anyString()),
                 ArgumentMatchers.<List<String>>argThat(
                         ids -> ids != null
                                 && ids.size() == 3
@@ -76,7 +77,7 @@ class DashboardParSiteTest {
 
 
         when(pointageRepository.countByDateAndIdIn(
-                anyString(),
+                LocalDate.parse(ArgumentMatchers.anyString()),
                 ArgumentMatchers.<List<String>>argThat(
                         ids -> ids != null
                                 && ids.size() == 2

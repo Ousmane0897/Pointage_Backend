@@ -7,6 +7,7 @@ import com.example.Pointage_Cleanic.models.PointageRequest;
 import com.example.Pointage_Cleanic.repositories.PointageRepository;
 import com.example.Pointage_Cleanic.services.PointageServices;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -29,10 +30,6 @@ public class PointagesController {
 
         String cleanCode = rawCode
                 .replaceAll("[^0-9]", ""); // 🔥 SUPPRIME TOUT SAUF CHIFFRES
-
-        System.out.println("RAW CODE = [" + rawCode + "]");
-        System.out.println("CLEAN CODE = [" + cleanCode + "]");
-        System.out.println("LONGUEUR CLEAN = " + cleanCode.length());
 
 
         if (request.getDeviceId() == null || request.getDeviceId().isBlank()) {
@@ -67,6 +64,54 @@ public class PointagesController {
     public ResponseEntity<List<Pointage>> getAll() {
         List<Pointage> All= pointageRepository.findAll();
         return ResponseEntity.status(HttpStatus.CREATED).body(All);
+    }
+
+    // Affiche l'historique dans la possibilité de recherche et de filtrage par période dans l'historique des pointages.
+    @GetMapping("/historique/search")
+    public ResponseEntity<Page<Pointage>> searchHistorique(
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String dateDebut,
+            @RequestParam(required = false) String dateFin,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size
+    ) {
+        return ResponseEntity.ok(
+                pointageServices.searchHistorique(
+                        search,
+                        dateDebut,
+                        dateFin,
+                        page,
+                        size
+                )
+        );
+    }
+
+    @GetMapping("/historique/export/excel")
+    public ResponseEntity<byte[]> exportExcel(
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String dateDebut,
+            @RequestParam(required = false) String dateFin
+    ) throws Exception {
+
+        byte[] file = pointageServices.exportExcel(search, dateDebut, dateFin);
+
+        return ResponseEntity.ok()
+                .header("Content-Disposition", "attachment; filename=pointages.xlsx") // indique au navigateur que la réponse contient un fichier à télécharger et lui donne un nom (pointages.xlsx).
+                .body(file);
+    }
+
+    @GetMapping("/historique/export/pdf")
+    public ResponseEntity<byte[]> exportPdf(
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String dateDebut,
+            @RequestParam(required = false) String dateFin
+    ) throws Exception {
+
+        byte[] file = pointageServices.exportPdf(search, dateDebut, dateFin);
+
+        return ResponseEntity.ok()
+                .header("Content-Disposition", "attachment; filename=pointages.pdf") // indique au navigateur que la réponse contient un fichier à télécharger et lui donne un nom (pointages.pdf).
+                .body(file);
     }
 
     @GetMapping("/{codeSecret}")

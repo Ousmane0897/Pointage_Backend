@@ -9,6 +9,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -37,27 +38,24 @@ public class ProduitController {
      * Donc, même un seul produit sera retourné dans un format paginé compatible avec ton frontend Angular
      */
 
-    // Retourne une page de produit contenant 20 produits
     @GetMapping
     public Page<Produit> list(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "15") int size,
-            @RequestParam(defaultValue = "") String q) {
+            @RequestParam(required = false) String q,
+            @RequestParam(required = false) String category,
+            @RequestParam(required = false) String destination
+    ) {
+        Pageable pageable = PageRequest.of(page, size);
 
-        // Si aucun mot-clé de recherche : on renvoie la page complète
-        if (q == null || q.isBlank()) {
-            Page<Produit> all = produitRepository.findAll(PageRequest.of(page, size));
-            return new PageImpl<>(all.getContent(), all.getPageable(), all.getTotalElements());
-        }
-
-        // Sinon on cherche le produit par code
-        return produitRepository.findByCodeProduit(q)
-                .map(p -> new PageImpl<>(List.of(p), PageRequest.of(page, size), 1))
-                .orElseGet(() -> {
-                    Page<Produit> all = produitRepository.findAll(PageRequest.of(page, size));
-                    return new PageImpl<>(all.getContent(), all.getPageable(), all.getTotalElements());
-                });
+        return produitService.search(
+                q,
+                category,
+                destination,
+                pageable
+        );
     }
+
 
     /*
         @RequestParam	Indique à Spring que la donnée vient d’un paramètre de la requête HTTP (par exemple un champ formData envoyé par Angular ou un <input type="file">).

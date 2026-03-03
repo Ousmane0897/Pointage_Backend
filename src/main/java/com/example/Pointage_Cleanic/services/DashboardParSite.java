@@ -21,8 +21,8 @@ public class DashboardParSite {
 
     public Map<String, Map<String, Long>> getDashboardStatsBySite() {
 
-        String todayStr = LocalDate.now()
-                .format(DateTimeFormatter.ofPattern("dd/MM/yyyy"));
+        LocalDate todayStr = LocalDate.now();
+
 
         List<String> allSites = employeRepository.findAllDistinctSites();
         Map<String, Map<String, Long>> siteStats = new HashMap<>();
