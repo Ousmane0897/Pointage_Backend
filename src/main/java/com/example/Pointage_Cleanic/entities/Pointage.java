@@ -21,6 +21,12 @@ import java.time.LocalDate;
         name = "text_search_idx",
         def = "{ 'codeSecret': 'text', 'prenom': 'text', 'nom': 'text', 'site': 'text' }"
 )
+
+@CompoundIndex(
+        name = "unique_pointage_per_day",
+        def = "{'codeSecret': 1, 'date': 1}",
+        unique = true
+)
 public class Pointage {
 
     @Id

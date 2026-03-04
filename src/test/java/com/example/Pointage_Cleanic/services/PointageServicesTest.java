@@ -60,7 +60,7 @@ class PointageServicesTest {
         when(mongoTemplate.findOne(any(), eq(Pointage.class))).thenReturn(null);
         when(pointageRepository.save(any())).thenReturn(savedPointage);
 
-        Pointage result = service.enregistrerPointage("1234", "DEV-1");
+        Pointage result = service.enregistrerPointage("1234", "DEV-1", 14.717, -17.467);
 
         assertNotNull(result);
         verify(pointageRepository).save(any());
@@ -86,12 +86,13 @@ class PointageServicesTest {
 
         doReturn(employe).when(spyService).getEmployeBycodeSecret("1234");
         doReturn(existing).when(spyService).getBycodeSecretAndDate("1234");
-        doReturn("08:00").when(spyService).getHeureArriveByCurrentDateAndcodeSecret("1234");
+
 
         doNothing().when(spyService)
                 .updatePointage(any(), any(), any(), any(), any());
 
-        Pointage result = spyService.enregistrerPointage("1234", "DEV-1");
+        Pointage result = spyService.enregistrerPointage("1234", "DEV-1", 14.717, -17.467);
+
 
         assertNotNull(result);
 
@@ -115,7 +116,7 @@ class PointageServicesTest {
         when(mongoTemplate.findOne(any(), eq(Employe.class))).thenReturn(null);
 
         RuntimeException ex = assertThrows(RuntimeException.class,
-                () -> service.enregistrerPointage("9999", "DEV-1"));
+                () -> service.enregistrerPointage("1234", "DEV-1", 14.717, -17.467));
 
         assertTrue(ex.getMessage().contains("Employé introuvable"));
     }
