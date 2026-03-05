@@ -116,6 +116,12 @@ public class ProduitController {
         return ResponseEntity.ok(produitRepository.findAll());
     }
 
+    @GetMapping("/getAllNomProduits")
+    public ResponseEntity<List<String>> getAllNomProduit() {
+
+        return ResponseEntity.ok(produitService.findAllNomProduit());
+    }
+
     @GetMapping("/getByNomProduit")
     public ResponseEntity<Produit> getByNomProduit(@RequestParam String nomProduit) {
          Produit produit = new Produit();

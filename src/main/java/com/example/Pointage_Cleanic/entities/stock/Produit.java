@@ -3,6 +3,7 @@ package com.example.Pointage_Cleanic.entities.stock;
 import com.fasterxml.jackson.annotation.JsonFormat;
 import lombok.*;
 import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.index.CompoundIndex;
 import org.springframework.data.mongodb.core.mapping.Document;
 import org.springframework.data.mongodb.core.mapping.Field;
 
@@ -15,6 +16,7 @@ import java.util.Date;
 @NoArgsConstructor
 @Builder
 @Document(collection = "produits")
+@CompoundIndex(name = "search_idx", def = "{ 'nomProduit': 'text', 'codeProduit': 'text', 'categorie': 1, 'destination': 1 }")
 public class Produit {
 
 

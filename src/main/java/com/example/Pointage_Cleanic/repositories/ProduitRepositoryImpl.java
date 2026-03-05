@@ -10,6 +10,7 @@ import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.regex.Pattern;
 
 @Repository
 public class ProduitRepositoryImpl
@@ -22,43 +23,39 @@ public class ProduitRepositoryImpl
     }
 
     @Override
-    public Page<Produit> search(
-            String q,
-            String category,
-            String destination,
-            Pageable pageable
-    ) {
+    public Page<Produit> search(String q, String category, String destination, Pageable pageable) {
 
         Query query = new Query();
 
+        // 🔹 Recherche texte
         if (q != null && !q.isBlank()) {
-            query.addCriteria(
-                    new Criteria().orOperator(
-                            Criteria.where("codeProduit").regex(q, "i"),
-                            Criteria.where("nom").regex(q, "i")
-                    )
-            );
+            query.addCriteria(new Criteria().orOperator(
+                    Criteria.where("codeProduit").regex(q, "i"),
+                    Criteria.where("nomProduit").regex(q, "i")
+            ));
         }
 
+        // 🔹 Filtre catégorie
         if (category != null && !category.isBlank()) {
-            query.addCriteria(
-                    Criteria.where("category").is(category)
-            );
+            query.addCriteria(Criteria.where("categorie").is(category));
         }
 
+        // 🔹 Filtre destination
         if (destination != null && !destination.isBlank()) {
-            query.addCriteria(
-                    Criteria.where("destination").is(destination)
-            );
+            query.addCriteria(Criteria.where("destination").is(destination));
         }
 
+        // 🔹 Total avant pagination
         long total = mongoTemplate.count(query, Produit.class);
 
+        // 🔹 Pagination et tri si besoin
         query.with(pageable);
 
-        List<Produit> produits =
-                mongoTemplate.find(query, Produit.class);
+        // 🔹 Récupération des produits avec images
+        List<Produit> produits = mongoTemplate.find(query, Produit.class);
 
         return new PageImpl<>(produits, pageable, total);
     }
+
+
 }

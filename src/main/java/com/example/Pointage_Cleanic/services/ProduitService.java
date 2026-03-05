@@ -6,6 +6,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.stereotype.Service;
 
 import java.util.HashMap;
@@ -18,6 +20,7 @@ import java.util.Optional;
 public class ProduitService {
 
     private final ProduitRepository produitRepository;
+    private final MongoTemplate mongoTemplate;
 
     Produit saveProduit(Produit produit) {
         return produitRepository.save(produit);
@@ -80,6 +83,15 @@ public class ProduitService {
     public Optional<Produit> findByNomProduit(String nomProduit) {
 
         return produitRepository.findByNomProduit(nomProduit);
+    }
+
+    public List<String> findAllNomProduit() {
+
+        return mongoTemplate
+                .query(Produit.class)
+                .distinct("nomProduit")
+                .as(String.class)
+                .all();
     }
 
 
