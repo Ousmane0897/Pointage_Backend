@@ -81,7 +81,7 @@ public class SecurityConfig {
                         ).permitAll()
 
                         .requestMatchers(HttpMethod.DELETE, "/api/ferie/**").authenticated()
-                        .requestMatchers("/api/pointages/**").permitAll()
+                        .requestMatchers("/pointages/**", "/api/pointages/**").permitAll()
                         .requestMatchers("/ws/**").permitAll()
                         .requestMatchers("/api/produits/image/**").permitAll()
                         .requestMatchers("/api/employe-complet/image/**").permitAll()

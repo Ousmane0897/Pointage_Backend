@@ -4,6 +4,7 @@ import lombok.*;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.index.CompoundIndex;
+import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.time.Instant;
@@ -17,16 +18,12 @@ import java.time.LocalDate;
 // Index composé pour filtrer par date et trier par timestamp
 @CompoundIndex(name = "date_timestamp_idx", def = "{'date': 1, 'timestamp': -1}")
 
-@CompoundIndex(
-        name = "text_search_idx",
-        def = "{ 'codeSecret': 'text', 'prenom': 'text', 'nom': 'text', 'site': 'text' }"
-)
 
 @CompoundIndex(
-        name = "unique_pointage_per_day",
-        def = "{'codeSecret': 1, 'date': 1}",
-        unique = true
+        name = "search_idx",
+        def = "{'nom': 1, 'prenom': 1, 'codeSecret': 1}"
 )
+
 public class Pointage {
 
     @Id
@@ -36,6 +33,7 @@ public class Pointage {
     private String codeSecret;
     private String prenom;
     private String nom;
+    @Indexed
     private String[] site;
 
     private LocalDate date;

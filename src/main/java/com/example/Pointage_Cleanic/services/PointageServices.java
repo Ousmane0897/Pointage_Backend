@@ -35,6 +35,11 @@ import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.regex.Pattern;
 
+import org.springframework.data.domain.*;
+import org.springframework.data.mongodb.core.aggregation.*;
+
+
+
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -94,20 +99,16 @@ public class PointageServices {
     ) {
         Query query = new Query();
 
-        // 📅 Date format front-end : dd/MM/yyyy
-        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd/MM/yyyy");
         LocalDate today = LocalDate.now();
+        Criteria criteria = Criteria.where("date").ne(today); // exclure aujourd'hui
 
-        // 1️⃣ Filtre date (exclure aujourd'hui)
-        Criteria dateCriteria = Criteria.where("date").ne(today);
-
-        // 2️⃣ Filtre période si fourni
+        // ✅ Filtre période si fourni
+        DateTimeFormatter formatter = DateTimeFormatter.ISO_LOCAL_DATE;
         if (dateDebut != null && !dateDebut.isBlank() && dateFin != null && !dateFin.isBlank()) {
             try {
                 LocalDate start = LocalDate.parse(dateDebut, formatter);
                 LocalDate end = LocalDate.parse(dateFin, formatter);
-
-                dateCriteria = new Criteria().andOperator(
+                criteria = new Criteria().andOperator(
                         Criteria.where("date").ne(today),
                         Criteria.where("date").gte(start).lte(end)
                 );
@@ -115,21 +116,30 @@ public class PointageServices {
                 System.out.println("Erreur parsing dates : " + e.getMessage());
             }
         }
-        query.addCriteria(dateCriteria);
 
-        // 3️⃣ Recherche texte optimisée (MongoDB utilise l’index textuel)
+        // ✅ Recherche texte partielle sur plusieurs champs (ignore la casse)
         if (search != null && !search.isBlank()) {
-            TextCriteria textCriteria = TextCriteria.forDefaultLanguage().matching(search);
-            query.addCriteria(textCriteria);
+            String regexPattern = ".*" + Pattern.quote(search) + ".*";
+            Criteria searchCriteria = new Criteria().orOperator(
+                    Criteria.where("nom").regex(regexPattern, "i"),
+                    Criteria.where("prenom").regex(regexPattern, "i"),
+                    Criteria.where("codeSecret").regex(regexPattern, "i"),
+                    Criteria.where("site").regex(regexPattern, "i")
+            );
+            criteria = new Criteria().andOperator(criteria, searchCriteria);
         }
 
-        // 4️⃣ Pagination + tri par timestamp (utilise l’index composé)
+        query.addCriteria(criteria);
+
+        // ✅ Pagination + tri par timestamp
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "timestamp"));
         query.with(pageable);
 
-        // 5️⃣ Récupération données + total
-        long total = mongoTemplate.count(query, Pointage.class);
+        // ✅ Récupération des données
         List<Pointage> data = mongoTemplate.find(query, Pointage.class);
+
+        // ✅ Total pour pagination
+        long total = mongoTemplate.count(query, Pointage.class);
 
         return new PageImpl<>(data, pageable, total);
     }
@@ -252,8 +262,8 @@ public class PointageServices {
         mongoTemplate.updateFirst(query, update, Pointage.class);
     }
 
-    public boolean canPoint(String deviceId, int lockDurationInMinutes) {
-        Instant cutoff = Instant.now().minus(lockDurationInMinutes, ChronoUnit.MINUTES);
+    public boolean canPoint(String deviceId, int lockDurationInHours) {
+        Instant cutoff = Instant.now().minus(lockDurationInHours, ChronoUnit.HOURS);
         return !pointageRepository.existsByDeviceIdAndTimestampAfter(deviceId, cutoff);
     }
 
