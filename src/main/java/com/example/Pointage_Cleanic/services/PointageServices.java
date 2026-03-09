@@ -263,7 +263,7 @@ public class PointageServices {
     }
 
     public boolean canPoint(String deviceId, int lockDurationInHours) {
-        Instant cutoff = Instant.now().minus(lockDurationInHours, ChronoUnit.HOURS);
+        Instant cutoff = Instant.now().minus(lockDurationInHours, ChronoUnit.MINUTES);
         return !pointageRepository.existsByDeviceIdAndTimestampAfter(deviceId, cutoff);
     }
 

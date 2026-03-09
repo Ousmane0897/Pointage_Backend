@@ -13,6 +13,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 
+import java.time.LocalDate;
 import java.util.List;
 
 @RestController
@@ -64,6 +65,16 @@ public class PointagesController {
     public ResponseEntity<List<Pointage>> getAll() {
         List<Pointage> All= pointageRepository.findAll();
         return ResponseEntity.status(HttpStatus.CREATED).body(All);
+    }
+
+    @GetMapping("/today")
+    public ResponseEntity<List<Pointage>> getTodayPointages() {
+
+        LocalDate today = LocalDate.now();
+
+        List<Pointage> pointages = pointageRepository.findByDateOrderByTimestampDesc(today);
+
+        return ResponseEntity.ok(pointages);
     }
 
     // Affiche l'historique dans la possibilité de recherche et de filtrage par période dans l'historique des pointages.

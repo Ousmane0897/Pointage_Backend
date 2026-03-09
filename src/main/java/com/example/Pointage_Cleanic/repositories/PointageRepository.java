@@ -21,6 +21,8 @@ public interface PointageRepository extends MongoRepository<Pointage,String> {
 
     List<Pointage> findAllByDate(LocalDate date);
 
+    List<Pointage> findByDateOrderByTimestampDesc(LocalDate date);
+
     Optional<Pointage> findByCodeSecretAndDate(String codeSecret, LocalDate date);
 
 
