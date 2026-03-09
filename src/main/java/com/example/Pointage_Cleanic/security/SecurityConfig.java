@@ -1,6 +1,6 @@
 package com.example.Pointage_Cleanic.security;
 
-
+import com.example.Pointage_Cleanic.security.JwtRequestFilter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -36,7 +36,7 @@ public class SecurityConfig {
                 .cors(cors -> cors.configurationSource(request -> {
                     CorsConfiguration config = new CorsConfiguration();
 
-                    // ✅ Autoriser ton frontend réel
+                    // Autoriser le front Angular
                     config.setAllowedOriginPatterns(List.of(
                             "https://app.pointic-cleanic.com",
                             "https://pointic-cleanic.com",
@@ -45,22 +45,14 @@ public class SecurityConfig {
                             "http://127.0.0.1:*"
                     ));
 
-                    // ✅ Autoriser tous les headers utiles
-                    config.setAllowedHeaders(List.of(
-                            "*"
-                    ));
+                    // Autoriser tous les headers et méthodes
+                    config.setAllowedHeaders(List.of("*"));
+                    config.setAllowedMethods(List.of("*"));
 
-                    // ✅ Autoriser tous les verbes HTTP
-                    config.setAllowedMethods(List.of(
-                            "*"
-                    ));
+                    // Exposer Authorization pour JWT
+                    config.setExposedHeaders(List.of("Authorization"));
 
-                    // ✅ Exposer les headers nécessaires (ex: Authorization)
-                    config.setExposedHeaders(List.of(
-                            "Authorization"
-                    ));
-
-                    // ✅ Indispensable si tu envoies JWT
+                    // ✅ Indispensable pour JWT
                     config.setAllowCredentials(true);
 
                     return config;
@@ -68,10 +60,13 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(auth -> auth
 
-                        // 🔹 OPTIONS préflight autorisé
+                        // OPTIONS préflight autorisé
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 
-                        // 🔹 Routes publiques
+                        // 🔹 Routes publiques (pointage)
+                        .requestMatchers("/pointages/**", "/api/pointages/**").permitAll()
+
+                        // 🔹 Routes publiques docs / login
                         .requestMatchers(
                                 "/api/login/**",
                                 "/auth/forgot-password",
@@ -83,16 +78,18 @@ public class SecurityConfig {
                                 "/error/**"
                         ).permitAll()
 
-                        // 🔹 Routes sécurisées
-                        .requestMatchers(HttpMethod.DELETE, "/api/ferie/**").authenticated()
+                        // 🔹 Routes publiques images
+                        .requestMatchers(
+                                "/api/produits/image/**",
+                                "/api/employe-complet/image/**"
+                        ).permitAll()
+
+                        // 🔹 Routes sécurisées (JWT obligatoire)
                         .requestMatchers("/api/dashboard_par_agence").authenticated()
                         .requestMatchers("/api/planification/**").authenticated()
-
-                        // 🔹 Routes pointage accessibles depuis le front
-                        .requestMatchers("/pointages/**", "/api/pointages/**").permitAll()
-                        .requestMatchers("/ws/**").permitAll()
-                        .requestMatchers("/api/produits/image/**").permitAll()
-                        .requestMatchers("/api/employe-complet/image/**").permitAll()
+                        .requestMatchers(HttpMethod.DELETE, "/api/ferie/**").authenticated()
+                        .requestMatchers("/api/employes/**").authenticated()
+                        .requestMatchers("/api/super-admin/**").authenticated()
 
                         // 🔹 Toutes les autres requêtes nécessitent authentification
                         .anyRequest().authenticated()
