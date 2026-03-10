@@ -11,6 +11,7 @@ import org.springframework.security.authentication.dao.DaoAuthenticationProvider
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -34,30 +35,39 @@ public class SecurityConfig {
 
         http
                 .cors(cors -> cors.configurationSource(request -> {
+
                     CorsConfiguration config = new CorsConfiguration();
 
-                    // Autoriser le front Angular
-                    config.setAllowedOriginPatterns(List.of(
+                    config.setAllowedOrigins(List.of(
                             "https://app.pointic-cleanic.com",
                             "https://pointic-cleanic.com",
-                            "https://*.ngrok-free.dev",
-                            "http://localhost",
-                            "http://127.0.0.1:*"
+                            "http://localhost:4200"
                     ));
 
-                    // Autoriser tous les headers et méthodes
-                    config.setAllowedHeaders(List.of("*"));
-                    config.setAllowedMethods(List.of("*"));
+                    config.setAllowedMethods(List.of(
+                            "GET",
+                            "POST",
+                            "PUT",
+                            "DELETE",
+                            "OPTIONS"
+                    ));
 
-                    // Exposer Authorization pour JWT
+                    config.setAllowedHeaders(List.of(
+                            "Authorization",
+                            "Content-Type",
+                            "Accept",
+                            "Origin"
+                    ));
+
                     config.setExposedHeaders(List.of("Authorization"));
 
-                    // ✅ Indispensable pour JWT
                     config.setAllowCredentials(true);
+
+                    config.setMaxAge(86400L);
 
                     return config;
                 }))
-                .csrf(csrf -> csrf.disable())
+                .csrf(AbstractHttpConfigurer::disable)
                 .authorizeHttpRequests(auth -> auth
 
                         // OPTIONS préflight autorisé
