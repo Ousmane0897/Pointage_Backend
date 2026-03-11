@@ -34,49 +34,45 @@ public class SecurityConfig {
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
 
         http
+                // ✅ CORS configuration
                 .cors(cors -> cors.configurationSource(request -> {
-
                     CorsConfiguration config = new CorsConfiguration();
 
+                    // Mettre explicitement ton front ici
                     config.setAllowedOrigins(List.of(
-                            "https://app.pointic-cleanic.com",
                             "https://pointic-cleanic.com",
-                            "http://localhost:4200"
+                            "https://www.pointic-cleanic.com",
+                            "https://app.pointic-cleanic.com",
+                            "http://localhost",
+                            "http://127.0.0.1:*",
+                            "https://*.ngrok-free.dev"
                     ));
 
+                    // Méthodes autorisées
                     config.setAllowedMethods(List.of(
-                            "GET",
-                            "POST",
-                            "PUT",
-                            "DELETE",
-                            "OPTIONS"
+                            "GET", "POST", "PUT", "DELETE", "OPTIONS"
                     ));
 
-                    config.setAllowedHeaders(List.of(
-                            "Authorization",
-                            "Content-Type",
-                            "Accept",
-                            "Origin"
-                    ));
+                    // Headers autorisés
+                    config.setAllowedHeaders(List.of("*"));
 
+                    // Exposer l'Authorization pour le JWT
                     config.setExposedHeaders(List.of("Authorization"));
 
+                    // Indispensable pour JWT dans header
                     config.setAllowCredentials(true);
 
-                    config.setMaxAge(86400L);
-
+                    config.setMaxAge(3600L); // Cache preflight 1h
                     return config;
                 }))
                 .csrf(AbstractHttpConfigurer::disable)
                 .authorizeHttpRequests(auth -> auth
 
-                        // OPTIONS préflight autorisé
+                        // OPTIONS préflight autorisé pour toutes les routes
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 
-                        // 🔹 Routes publiques (pointage)
+                        // 🔹 Routes publiques
                         .requestMatchers("/pointages/**", "/api/pointages/**").permitAll()
-
-                        // 🔹 Routes publiques docs / login
                         .requestMatchers(
                                 "/api/login/**",
                                 "/auth/forgot-password",
@@ -87,21 +83,21 @@ public class SecurityConfig {
                                 "/error",
                                 "/error/**"
                         ).permitAll()
-
-                        // 🔹 Routes publiques images
                         .requestMatchers(
                                 "/api/produits/image/**",
                                 "/api/employe-complet/image/**"
                         ).permitAll()
+                        .requestMatchers("/ws/**").permitAll()
 
                         // 🔹 Routes sécurisées (JWT obligatoire)
                         .requestMatchers("/api/dashboard_par_agence").authenticated()
                         .requestMatchers("/api/planification/**").authenticated()
                         .requestMatchers(HttpMethod.DELETE, "/api/ferie/**").authenticated()
                         .requestMatchers("/api/employes/**").authenticated()
+                        .requestMatchers("/ws/info").authenticated()
                         .requestMatchers("/api/super-admin/**").authenticated()
 
-                        // 🔹 Toutes les autres requêtes nécessitent authentification
+                        // Toutes les autres requêtes nécessitent authentification
                         .anyRequest().authenticated()
                 )
                 .sessionManagement(sess -> sess.sessionCreationPolicy(SessionCreationPolicy.STATELESS))

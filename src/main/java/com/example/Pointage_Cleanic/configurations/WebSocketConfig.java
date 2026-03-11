@@ -24,7 +24,9 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) { // l’URL /ws est simplement le endpoint WebSocket que tu exposes côté backend pour permettre à Angular (ou tout autre client) de se connecter au broker
-        registry.addEndpoint("/ws").setAllowedOrigins("http://localhost", "http://localhost:80", "https://pointic-cleanic.com").withSockJS();
+        registry.addEndpoint("/ws")
+                .setAllowedOriginPatterns("*")
+                .withSockJS();
     }
 
     /**
