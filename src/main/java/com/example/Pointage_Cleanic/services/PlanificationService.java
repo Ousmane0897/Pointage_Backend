@@ -264,181 +264,154 @@ public class PlanificationService {
 
 
 
-    // TÂCHE DE DÉMARRAGE (exécutée exactement à dateDebut + heureDebut)
     private void startTask(Planification planification) {
 
-        // 🛡️ 1. PROTECTION BASIQUE
         if (planification == null || planification.getId() == null) {
+            log.warn("⚠️ Planification invalide");
             return;
         }
 
-        // 🛡️ 2. RECHERCHE EN BASE (source de vérité)
-        Optional<Planification> opt = repository.findById(planification.getId());
-        if (opt.isEmpty()) {
+        Planification plan = repository.findById(planification.getId())
+                .orElseThrow(() -> new IllegalStateException("Planification introuvable : " + planification.getId()));
+
+        if (plan.getStatut() == Planification.Statut.ANNULEE
+                || plan.getStatut() == Planification.Statut.EN_COURS
+                || plan.getStatut() == Planification.Statut.EXECUTEE) {
             return;
         }
 
-        Planification plan = opt.get();
-
-        // 🛡️ 3. STATUTS BLOQUANTS
-        if (Planification.Statut.ANNULEE.equals(plan.getStatut())
-                || Planification.Statut.EN_COURS.equals(plan.getStatut())
-                || Planification.Statut.EXECUTEE.equals(plan.getStatut())) {
-            return;
-        }
-
-        // 🛡️ 4. DONNÉES MÉTIER OBLIGATOIRES
         if (plan.getSiteDestination() == null || plan.getSiteDestination().length == 0) {
-            throw new IllegalStateException("Site destination manquant pour la planification " + plan.getId());
+            throw new IllegalStateException("Site destination manquant pour " + plan.getId());
         }
-
-        // ⬇️ ⬇️ ⬇️ TON CODE EXISTANT COMMENCE ICI ⬇️ ⬇️ ⬇️
-
-        Employe employe = employeServices.getBycodeSecret(plan.getCodeSecret());
-        Agence agenceDeDepart = agencesServices.getByNom(plan.getNomSite());
-        Agence agenceArrivee = agencesServices.getByNom(plan.getSiteDestination()[0]);
-
-        plan.setStatut(Planification.Statut.EN_COURS);
-        repository.save(plan);
 
         try {
 
+            Employe employe = employeServices.getBycodeSecret(plan.getCodeSecret());
             if (employe == null) {
-                log.warn("⚠️ Employé introuvable pour le codeSecret: {}", plan.getCodeSecret());
+                log.warn("⚠️ Employé introuvable pour {}", plan.getCodeSecret());
                 return;
             }
 
-            if (!agenceArrivee.getNom().equals(agenceDeDepart.getNom())) {
+            Agence agenceDepart = agencesServices.getByNom(plan.getNomSite());
+            Agence agenceArrivee = agencesServices.getByNom(plan.getSiteDestination()[0]);
 
-                agenceDeDepart.setDeplacementEmploye(true);
-                agencesRepository.save(agenceDeDepart);
+            plan.setStatut(Planification.Statut.EN_COURS);
+            repository.save(plan);
 
+            if (!agenceDepart.getNom().equals(agenceArrivee.getNom())) {
+
+                agenceDepart.setDeplacementEmploye(true);
                 agenceArrivee.setReceptionEmploye(true);
+
+                agencesRepository.save(agenceDepart);
                 agencesRepository.save(agenceArrivee);
 
             } else {
 
-                agenceDeDepart.setDeplacementInterne(true);
-                agencesRepository.save(agenceDeDepart);
+                agenceDepart.setDeplacementInterne(true);
+                agencesRepository.save(agenceDepart);
+
             }
 
-            String personneRemplacee = plan.getPersonneRemplacee();
-            String[] parts = personneRemplacee.split(" ");
-            String prenom = parts[0];
-            String nom = parts[1];
+            // Gestion remplacement
+            String[] parts = plan.getPersonneRemplacee().split(" ");
+            Employe employeRemplace = employeServices.employeeRemplacee(parts[0], parts[1]);
 
-            Employe employe1 = employeServices.employeeRemplacee(prenom, nom);
-            employe1.setRemplacement(true);
-            employeRepository.save(employe1);
+            if (employeRemplace != null) {
+                employeRemplace.setRemplacement(true);
+                employeRepository.save(employeRemplace);
+            }
 
+            // Déplacement employé
             employe.setSiteAvantDeplacement(plan.getNomSite());
             employe.setSite(plan.getSiteDestination());
+            employe.setDeplacement(true);
             employe.setHorairesDeRemplacement(plan.getHeureDebut() + "-" + plan.getHeureFin());
-            employe.setPersonneRemplacee(prenom + " " + nom);
+            employe.setPersonneRemplacee(plan.getPersonneRemplacee());
 
             employeServices.save(employe);
 
+            log.info("✅ Début planification {} pour employé {}", plan.getId(), employe.getCodeSecret());
+
         } catch (Exception ex) {
-            log.error("Erreur lors de l'exécution de la méthode startTask", ex);
+            log.error("❌ Erreur startTask {}", plan.getId(), ex);
         }
 
-        // 🧹 NETTOYAGE
         startFutures.remove(plan.getId());
     }
 
 
-    // 🔹 Fin
     private void endTask(Planification planification) {
 
-        // 🛡️ 1. PROTECTION BASIQUE
         if (planification == null || planification.getId() == null) {
+            log.warn("⚠️ Planification invalide");
             return;
         }
 
-        // 🛡️ 2. SOURCE DE VÉRITÉ : BDD
-        Optional<Planification> opt = repository.findById(planification.getId());
-        if (opt.isEmpty()) {
+        Planification plan = repository.findById(planification.getId())
+                .orElseThrow(() -> new IllegalStateException("Planification introuvable : " + planification.getId()));
+
+        if (plan.getStatut() == Planification.Statut.ANNULEE
+                || plan.getStatut() == Planification.Statut.EXECUTEE) {
             return;
         }
 
-        Planification plan = opt.get();
+        try {
 
-        // 🛡️ 3. STATUTS BLOQUANTS
-        if (Planification.Statut.ANNULEE.equals(plan.getStatut())
-                || Planification.Statut.EXECUTEE.equals(plan.getStatut())) {
-            return;
-        }
-
-        // 🛡️ 4. DONNÉES MÉTIER OBLIGATOIRES
-        if (plan.getSiteDestination() == null || plan.getSiteDestination().length == 0) {
-            throw new IllegalStateException(
-                    "Site destination manquant pour la planification " + plan.getId()
-            );
-        }
-
-
-        Employe employe = employeServices.getBycodeSecret(plan.getCodeSecret());
-        Agence agenceDeDepart = agencesServices.getByNom(plan.getNomSite());
-        Agence agenceArrivee = agencesServices.getByNom(plan.getSiteDestination()[0]);
-
-        repository.findById(planification.getId()).ifPresent(p -> {
-            if (!Planification.Statut.ANNULEE.equals(plan.getStatut())
-                    && !Planification.Statut.EXECUTEE.equals(plan.getStatut())) {
-
-                plan.setStatut(Planification.Statut.EXECUTEE);
-                repository.save(plan);
-
-                try {
-                    //Méthode pour la mise à jour de l'heure d'arrivée, heure de départ et changer false -> true pour la variable deplacement,
-                    //quand un employé est déplacé d'une agence à une autre temporairement.
-                    if (employe == null) {
-                        log.warn("⚠️ l'employé est introuvable pour le codeSecret: {}", planification.getCodeSecret());
-                        return; // On sort directement, pas besoin d’aller plus loin
-                    }
-
-                    if(!agenceArrivee.getNom().equals(agenceDeDepart.getNom())) { //
-
-
-                        agenceDeDepart.setDeplacementEmploye(false);
-                        agencesRepository.save(agenceDeDepart);
-                        agenceArrivee.setReceptionEmploye(false);
-                        agencesRepository.save(agenceArrivee);
-
-
-                    } else{
-
-                        agenceArrivee.setDeplacementInterne(false);
-                        agencesRepository.save(agenceArrivee);
-                        agenceDeDepart.setDeplacementInterne(false); // ou  agenceArrivee.setDeplacementInterne(false);
-                        agencesRepository.save(agenceDeDepart);
-
-                    }
-
-                        String personneRemplacee = planification.getPersonneRemplacee(); // Retourne le prenom et nom de l'agent remplacé
-                        String[] parts = personneRemplacee.split(" ");
-                        String prenom = parts[0];
-                        String nom = parts[1];
-                        Employe employe1 = employeServices.employeeRemplacee(prenom, nom);
-                        employe1.setRemplacement(false);
-                        employeRepository.save(employe1);
-
-                        employe.setSite(new String[]{employe.getSiteAvantDeplacement()}); // Retour de l'employé dans son site d'origine (qui ne change pas vu que c'est un shift interne)
-                        employe.setDeplacement(false);
-                        employe.setHorairesDeRemplacement(null);
-                        employe.setPersonneRemplacee(null);
-
-
-
-                    employeServices.save(employe);
-                    System.out.println("✅ Fin du traitement métier pour " + plan.getId() + " à " + LocalDateTime.now());
-                } catch (Exception ex) {
-                    log.error("Erreur lors de l'exécution de la méthode endTask", ex);
-                }
+            Employe employe = employeServices.getBycodeSecret(plan.getCodeSecret());
+            if (employe == null) {
+                log.warn("⚠️ Employé introuvable pour {}", plan.getCodeSecret());
+                return;
             }
-        });
 
-        // on supprime la référence car la tâche est déjà exécutée
-        endFutures.remove(planification.getId());
+            Agence agenceDepart = agencesServices.getByNom(plan.getNomSite());
+            Agence agenceArrivee = agencesServices.getByNom(plan.getSiteDestination()[0]);
+
+            plan.setStatut(Planification.Statut.EXECUTEE);
+            repository.save(plan);
+
+            if (!agenceDepart.getNom().equals(agenceArrivee.getNom())) {
+
+                agenceDepart.setDeplacementEmploye(false);
+                agenceArrivee.setReceptionEmploye(false);
+
+                agencesRepository.save(agenceDepart);
+                agencesRepository.save(agenceArrivee);
+
+            } else {
+
+                agenceDepart.setDeplacementInterne(false);
+                agencesRepository.save(agenceDepart);
+
+            }
+
+            // Gestion remplacement
+            String[] parts = plan.getPersonneRemplacee().split(" ");
+            Employe employeRemplace = employeServices.employeeRemplacee(parts[0], parts[1]);
+
+            if (employeRemplace != null) {
+                employeRemplace.setRemplacement(false);
+                employeRepository.save(employeRemplace);
+            }
+
+            // Retour employé
+            if (employe.getSiteAvantDeplacement() != null) {
+                employe.setSite(new String[]{employe.getSiteAvantDeplacement()});
+            }
+
+            employe.setDeplacement(false);
+            employe.setHorairesDeRemplacement(null);
+            employe.setPersonneRemplacee(null);
+
+            employeServices.save(employe);
+
+            log.info("✅ Fin planification {} pour employé {}", plan.getId(), employe.getCodeSecret());
+
+        } catch (Exception ex) {
+            log.error("❌ Erreur endTask {}", plan.getId(), ex);
+        }
+
+        endFutures.remove(plan.getId());
     }
 
       // ✅ Helper : conversion Date + "HH:mm" → LocalDateTime

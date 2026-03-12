@@ -45,7 +45,8 @@ public class SecurityConfig {
                             "https://app.pointic-cleanic.com",
                             "http://localhost",
                             "http://127.0.0.1:*",
-                            "https://*.ngrok-free.dev"
+                            "https://*.ngrok-free.dev",
+                            "https://sizably-unhonored-bryce.ngrok-free.dev"
                     ));
 
                     // Méthodes autorisées
