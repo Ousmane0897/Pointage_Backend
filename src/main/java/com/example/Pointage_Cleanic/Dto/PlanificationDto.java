@@ -6,11 +6,15 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.time.LocalDate;
+import java.time.ZoneId;
+import java.util.Date;
+
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-public class PlanificationDto {
+public class  PlanificationDto {
     private String id;
     private String prenomNom;
     private String codeSecret;
@@ -19,13 +23,13 @@ public class PlanificationDto {
     private String personneRemplacee;
     private boolean matin;
     private boolean apresMidi;
-    private String dateDebut;
-    private String dateFin;
+    private LocalDate dateDebut;
+    private LocalDate dateFin;
     private String heureDebut;
     private String heureFin;
     private String commentaires;
     private String statut;
-    private String dateCreation;
+    private LocalDate dateCreation;
     private String motifAnnulation;
     
     private long joursRestants;  // ✅ Calculé dynamiquement
@@ -42,8 +46,8 @@ public class PlanificationDto {
         dto.setPersonneRemplacee(plan.getPersonneRemplacee());
         dto.setMatin(plan.isMatin());
         dto.setApresMidi(plan.isApresMidi());
-        dto.setDateDebut(plan.getDateDebut() != null ? plan.getDateDebut().toString() : null);
-        dto.setDateFin(plan.getDateFin() != null ? plan.getDateFin().toString() : null);
+        dto.setDateDebut(plan.getDateDebut() != null ? convertToLocalDate(plan.getDateDebut()) : null);
+        dto.setDateFin(plan.getDateFin() != null ? convertToLocalDate(plan.getDateFin()) : null);
         dto.setHeureDebut(plan.getHeureDebut());
         dto.setHeureFin(plan.getHeureFin());
         dto.setCommentaires(plan.getCommentaires());
@@ -52,6 +56,16 @@ public class PlanificationDto {
         dto.setJoursRestants(plan.getJoursRestants()); // ✅ Calcul dynamique
         dto.setMotifAnnulation(plan.getMotifAnnulation()); // ✅ ICI !
         return dto;
+    }
+
+    /**
+     * Convertit java.util.Date en java.time.LocalDate
+     */
+    public static LocalDate convertToLocalDate(Date date) {
+        if (date == null) return null;
+        return date.toInstant()
+                .atZone(ZoneId.systemDefault())
+                .toLocalDate();
     }
 
 }

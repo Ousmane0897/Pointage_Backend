@@ -2,6 +2,7 @@ package com.example.Pointage_Cleanic.security;
 
 import com.example.Pointage_Cleanic.Enum.RoleAdmin;
 import com.example.Pointage_Cleanic.Enum.RoleSuperviseur;
+import com.example.Pointage_Cleanic.entities.GestionModules.ModulesAutorises;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
@@ -37,7 +38,7 @@ public class JwtUtil {
         this.secretKey = Keys.hmacShaKeyFor(secret.getBytes());
     }
 
-    public String generateToken(UserDetails userDetails, String prenom, String nom, RoleAdmin role, String email, String poste, boolean mustChangePassword, Map<String, Boolean> modules) {
+    public String generateToken(UserDetails userDetails, String prenom, String nom, RoleAdmin role, String email, String poste, boolean mustChangePassword, ModulesAutorises modules) {
         return Jwts.builder()
                 .setSubject(userDetails.getUsername())
                 .claim("prenom",prenom)

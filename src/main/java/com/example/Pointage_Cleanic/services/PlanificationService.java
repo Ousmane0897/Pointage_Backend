@@ -76,7 +76,7 @@ public class PlanificationService {
     //  - sauvegarde en BDD avec statut "EN_ATTENTE"
     //  - planifie l’exécution à dateDebut/heureDebut et dateFin/heureFin
     public PlanificationDto createPlanification(Planification plan) {
-        plan.setDateCreation(LocalDateTime.now().toString());
+        plan.setDateCreation(LocalDate.now());
         Employe employe = employeServices.getBycodeSecret(plan.getCodeSecret());
         // employe.deplacement = true au moment de la création de la planification, AVANT le début réel du déplacement.
         employe.setDeplacement(true);

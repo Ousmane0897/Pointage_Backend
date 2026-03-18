@@ -57,7 +57,7 @@ public class Planification {
     private long joursRestants; // Jours restant avant le début de la tache (ex: j-7)
 
     //private String creePar;             // Nom ou ID du planificateur
-    private String dateCreation;
+    private LocalDate dateCreation;
 
 
     private String requestedBy; // L'admin qui envoie la demande d'annulation

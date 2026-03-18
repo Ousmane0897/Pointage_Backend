@@ -2,6 +2,7 @@ package com.example.Pointage_Cleanic.entities;
 
 
 import com.example.Pointage_Cleanic.Enum.RoleAdmin;
+import com.example.Pointage_Cleanic.entities.GestionModules.ModulesAutorises;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -26,7 +27,7 @@ public class Utilisateur {
     private String poste;
     private RoleAdmin role;
     private boolean mustChangePassword = true;
-    private Map<String, Boolean> modulesAutorises;
+    private ModulesAutorises modulesAutorises;
     private String motifDesactivation;
     private boolean active;
 }

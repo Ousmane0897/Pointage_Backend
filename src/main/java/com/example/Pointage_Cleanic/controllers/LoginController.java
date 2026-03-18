@@ -2,6 +2,7 @@ package com.example.Pointage_Cleanic.controllers;
 
 import com.example.Pointage_Cleanic.Dto.AuthRequest;
 import com.example.Pointage_Cleanic.Dto.AuthResponse;
+import com.example.Pointage_Cleanic.Dto.AuthResponse2;
 import com.example.Pointage_Cleanic.Dto.ChangePasswordRequest;
 import com.example.Pointage_Cleanic.entities.Utilisateur;
 import com.example.Pointage_Cleanic.entities.User;

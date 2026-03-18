@@ -29,7 +29,7 @@ public class UtilisateurController {
 
     @PostMapping
     public ResponseEntity<?> save(@RequestBody Utilisateur utilisateur) {
-
+        System.out.println("DATA RECU: " + utilisateur);
         String email = utilisateur.getEmail().trim().toLowerCase();
 
         if (!utilisateurRepository.findAllByEmail(email).isEmpty()
