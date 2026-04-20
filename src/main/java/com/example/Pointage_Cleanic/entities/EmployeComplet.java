@@ -60,6 +60,8 @@ public class EmployeComplet {
     private String managerOps2;
     private String poste;
     private String typeContrat;
+    private byte[] contrat;
+    private String contratNom;
 
     private LocalDate dateEmbauche;
 
@@ -85,6 +87,8 @@ public class EmployeComplet {
 
     private byte[] photo;
     private String observations;
+    private Integer dureeEssaiMois;
+    private Boolean essaiTermine;
 
 
     @Indexed(unique = true)
