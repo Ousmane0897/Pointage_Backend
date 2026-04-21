@@ -77,6 +77,8 @@ public class EmployeComplet {
     private String banque;
     private String cnssOuIpres;
     private String ipmNumero;
+    private String categorieCode;
+    private String numeroCss;
     private PermisConduire permisConduire;
     private String categoriePermis;
     private StatutEmploye statut;

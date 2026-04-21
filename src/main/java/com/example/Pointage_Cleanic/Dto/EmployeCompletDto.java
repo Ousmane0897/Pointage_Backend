@@ -76,6 +76,8 @@ public class EmployeCompletDto {
     private String banque;
     private String cnssOuIpres;
     private String ipmNumero;
+    private String categorieCode;
+    private String numeroCss;
 
     private EmployeComplet.PermisConduire permisConduire;
     private String categoriePermis;
