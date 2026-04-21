@@ -52,16 +52,16 @@ class DemandeCongeControllerTest {
     @Test
     void get_solde_ok() throws Exception {
         SoldeCongeDto solde = new SoldeCongeDto();
-        solde.setSoldeDisponible(18);
-        solde.setJoursPris(12);
-        solde.setJoursEnAttente(0);
+        solde.setSolde(18);
+        solde.setPris(12);
+        solde.setEnCours(0);
 
         when(demandeCongeService.getSolde("emp-1")).thenReturn(solde);
 
         mockMvc.perform(get("/api/conges/solde/emp-1"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.soldeDisponible").value(18))
-                .andExpect(jsonPath("$.joursPris").value(12));
+                .andExpect(jsonPath("$.solde").value(18))
+                .andExpect(jsonPath("$.pris").value(12));
     }
 
     @Test

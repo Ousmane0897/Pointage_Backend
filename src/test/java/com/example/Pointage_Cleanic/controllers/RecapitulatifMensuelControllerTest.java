@@ -32,13 +32,14 @@ class RecapitulatifMensuelControllerTest {
     @MockBean private JwtUtil jwtUtil;
     @MockBean private JwtRequestFilter jwtRequestFilter;
 
-    private RecapitulatifMensuelService.LigneRecapDto buildLigne(String nom) {
-        RecapitulatifMensuelService.LigneRecapDto ligne = new RecapitulatifMensuelService.LigneRecapDto();
-        ligne.setNom(nom);
-        ligne.setPrenom("Test");
-        ligne.setJoursPresents(20);
-        ligne.setJoursAbsents(2);
-        return ligne;
+    private RecapitulatifMensuelService.LigneRecapDto buildLigne(String nomComplet) {
+        return RecapitulatifMensuelService.LigneRecapDto.builder()
+                .nomComplet(nomComplet)
+                .matricule("M001")
+                .joursPresents(20)
+                .joursAbsents(2)
+                .joursOuvrables(22)
+                .build();
     }
 
     @Test
@@ -50,7 +51,7 @@ class RecapitulatifMensuelControllerTest {
                         .param("mois", "4")
                         .param("annee", "2026"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].nom").value("Diop"))
+                .andExpect(jsonPath("$[0].nomComplet").value("Diop"))
                 .andExpect(jsonPath("$[0].joursPresents").value(20));
     }
 
@@ -64,7 +65,7 @@ class RecapitulatifMensuelControllerTest {
                         .param("annee", "2026")
                         .param("departement", "RH"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].nom").value("Fall"));
+                .andExpect(jsonPath("$[0].nomComplet").value("Fall"));
     }
 
     @Test
