@@ -38,7 +38,10 @@ public class EmployeCompletService {
     }
 
     // On utilise MapStruct pour créer l'entité. Puis on ajoute la photo si fournie. Enfin on sauvegarde.
-    public EmployeComplet create(EmployeCompletDto dto, MultipartFile photo) throws IOException {
+    public EmployeComplet create(EmployeCompletDto dto,
+                                 MultipartFile photo,
+                                 MultipartFile contrat
+                                 ) throws IOException {
 
         // ===========================================================
         //        1️⃣ Construction du nom complet (unique)
@@ -76,11 +79,17 @@ public class EmployeCompletService {
         EmployeComplet employeComplet = employeCompletMapper.toEntity(dto);
 
         // Ajouter le champ nomComplet
-        employeComplet.setNomComplet(nomComplet);
-
+    employeComplet.setNomComplet(nomComplet);
         // Ajouter la photo si disponible
         if (photo != null && !photo.isEmpty()) {
             employeComplet.setPhoto(photo.getBytes());
+        }
+
+        // 📄 CONTRAT
+        if (contrat != null && !contrat.isEmpty()) {
+            employeComplet.setContrat(contrat.getBytes());
+            employeComplet.setContratNom(contrat.getOriginalFilename()); // Ça récupère le nom du fichier envoyé par l’utilisateur. ex: contrat.getOriginalFilename() = "contrat_stage_ousmane.pdf". Ce nom est stocké pour afficher le nom du fichier dans l’UI aussi permettre le téléchargement avec un nom correct
+            //employeComplet.setTypeContrat(contrat.getContentType()); // Ça récupère le type MIME du fichier. ex: 'application/pdf' pour un fichier pdf.
         }
 
         // Sauvegarde EmployeComplet
@@ -129,7 +138,7 @@ public class EmployeCompletService {
         for (EmployeCompletDto dto : dtos) {
             System.out.println("➡️ Traitement ligne " + line + " | " + dto.getAgentId());
             try {
-                create(dto, null); // réutilise la méthode existante sans photo
+                create(dto, null, null); // réutilise la méthode existante sans photo
                 success.add(dto);
             } catch (EmployeAlreadyExistsException e) {
                 errors.add(new ImportError(line, dto.getAgentId(), e.getMessage()));
