@@ -1,25 +1,24 @@
 package com.example.Pointage_Cleanic.services;
 
 import com.example.Pointage_Cleanic.Dto.KpiRhDto;
+import com.example.Pointage_Cleanic.Dto.PointageCentraliseDto;
 import com.example.Pointage_Cleanic.Dto.RepartitionItemDto;
 import com.example.Pointage_Cleanic.entities.BulletinPaie;
 import com.example.Pointage_Cleanic.entities.EmployeComplet;
-import com.example.Pointage_Cleanic.entities.RhAbsence;
 import com.example.Pointage_Cleanic.entities.Sanction;
 import com.example.Pointage_Cleanic.entities.SessionFormation;
 import com.example.Pointage_Cleanic.repositories.BulletinPaieRepository;
 import com.example.Pointage_Cleanic.repositories.EmployeCompletRepository;
 import com.example.Pointage_Cleanic.repositories.ParticipationFormationRepository;
-import com.example.Pointage_Cleanic.repositories.RhAbsenceRepository;
 import com.example.Pointage_Cleanic.repositories.SanctionRepository;
 import com.example.Pointage_Cleanic.repositories.SessionFormationRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.time.format.DateTimeFormatter;
-import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Function;
@@ -29,27 +28,31 @@ import java.util.stream.Collectors;
  * Agrège les KPIs du tableau de bord RH à partir des collections 6.1 à 6.4.
  *
  * Stratégie : agrégations parallèles via CompletableFuture plutôt qu'un
- * $lookup unique. Les collections sources n'ont pas de clé de jointure
- * commune évidente ; chaque KPI reste testable isolément et la réponse
- * finale est composée à partir des futures.
+ * $lookup unique. Chaque KPI reste testable isolément.
  *
- * Note : EmployeComplet n'a pas de champ "departement" direct. On utilise
- * `poste` comme proxy pour les répartitions et filtres partant des employés.
- * Les collections RH (Sanction, RhAbsence, DemandeConge, EvaluationPeriodique,
- * BulletinPaie) exposent un vrai `departement` et sont filtrées comme tel.
+ * Département : côté EmployeComplet on utilise `agence[0]` (même convention
+ * que PointageCentraliseService). Les collections RH (Sanction, BulletinPaie,
+ * EvaluationPeriodique…) exposent un vrai `departement` et sont filtrées
+ * tel quel. Site : codeSite / villeSite (2 postes possibles).
+ *
+ * Le calcul des présences / retards réutilise PointageCentraliseService
+ * (source de vérité 6.2) — itération jour par jour sur la fenêtre. Adapté
+ * aux dashboards mensuels (~30 jours) ; pour des périodes plus longues,
+ * une pipeline Mongo dédiée serait plus efficace.
  */
 @Service
 @RequiredArgsConstructor
 public class TableauBordRhService {
 
     private static final DateTimeFormatter MOIS_FMT = DateTimeFormatter.ofPattern("yyyy-MM");
+    private static final int TAILLE_PAGE_POINTAGES = 10_000;
 
     private final EmployeCompletRepository employeCompletRepository;
-    private final RhAbsenceRepository rhAbsenceRepository;
     private final BulletinPaieRepository bulletinPaieRepository;
     private final SessionFormationRepository sessionFormationRepository;
     private final ParticipationFormationRepository participationFormationRepository;
     private final SanctionRepository sanctionRepository;
+    private final PointageCentraliseService pointageCentraliseService;
 
     public KpiRhDto calculer(LocalDate dateDebut, LocalDate dateFin,
                              String departement, String site) {
@@ -59,9 +62,9 @@ public class TableauBordRhService {
         CompletableFuture<KpiRhDto> personnel = CompletableFuture.supplyAsync(
                 () -> calculerPersonnel(departement, site));
         CompletableFuture<KpiRhDto> tempsPresence = CompletableFuture.supplyAsync(
-                () -> calculerTempsPresence(debut, fin, departement));
+                () -> calculerTempsPresence(debut, fin, departement, site));
         CompletableFuture<KpiRhDto> paie = CompletableFuture.supplyAsync(
-                () -> calculerPaie(debut, fin, departement));
+                () -> calculerPaie(fin, departement));
         CompletableFuture<KpiRhDto> formation = CompletableFuture.supplyAsync(
                 () -> calculerFormation(debut, fin));
         CompletableFuture<KpiRhDto> sanctions = CompletableFuture.supplyAsync(
@@ -90,7 +93,7 @@ public class TableauBordRhService {
         List<EmployeComplet> tous = employeCompletRepository.findAll();
 
         List<EmployeComplet> filtres = tous.stream()
-                .filter(e -> departement == null || departement.equals(e.getPoste()))
+                .filter(e -> departement == null || departement.equalsIgnoreCase(departementDe(e)))
                 .filter(e -> site == null || matchSite(e, site))
                 .collect(Collectors.toList());
 
@@ -107,16 +110,21 @@ public class TableauBordRhService {
 
         return KpiRhDto.builder()
                 .effectifTotal(nbActifs)
-                .repartitionDepartement(grouper(actifs, EmployeComplet::getPoste))
+                .repartitionDepartement(grouper(actifs, this::departementDe))
                 .repartitionSite(grouper(actifs, EmployeComplet::getCodeSite))
                 .repartitionTypeContrat(grouper(actifs, EmployeComplet::getTypeContrat))
                 .turnover(turnover)
                 .build();
     }
 
+    private String departementDe(EmployeComplet e) {
+        if (e.getAgence() == null || e.getAgence().length == 0) return null;
+        return e.getAgence()[0];
+    }
+
     private boolean matchSite(EmployeComplet e, String site) {
-        if (site.equals(e.getCodeSite()) || site.equals(e.getVilleSite())) return true;
-        if (site.equals(e.getCodeSite2()) || site.equals(e.getVilleSite2())) return true;
+        if (site.equalsIgnoreCase(e.getCodeSite()) || site.equalsIgnoreCase(e.getVilleSite())) return true;
+        if (site.equalsIgnoreCase(e.getCodeSite2()) || site.equalsIgnoreCase(e.getVilleSite2())) return true;
         return false;
     }
 
@@ -134,40 +142,43 @@ public class TableauBordRhService {
 
     // ====================== 6.2 Temps & Présences ======================
 
-    private KpiRhDto calculerTempsPresence(LocalDate debut, LocalDate fin, String departement) {
-        List<RhAbsence> absences = rhAbsenceRepository.findAll().stream()
-                .filter(a -> a.getDateDebut() != null
-                        && !a.getDateDebut().isAfter(fin)
-                        && (a.getDateFin() == null || !a.getDateFin().isBefore(debut)))
-                .filter(a -> departement == null || departement.equals(a.getDepartement()))
-                .collect(Collectors.toList());
+    private KpiRhDto calculerTempsPresence(LocalDate debut, LocalDate fin,
+                                           String departement, String site) {
+        long totalRetardMinutes = 0;
+        long nbRetards = 0;
+        long totalAbsents = 0;
+        long totalObservations = 0;
 
-        long joursAbsence = absences.stream()
-                .mapToLong(a -> a.getNombreJours() != null ? a.getNombreJours() : 0)
-                .sum();
+        for (LocalDate d = debut; !d.isAfter(fin); d = d.plusDays(1)) {
+            Page<PointageCentraliseDto> page = pointageCentraliseService.getPointages(
+                    d, departement, site, null, null, 0, TAILLE_PAGE_POINTAGES);
+            for (PointageCentraliseDto p : page.getContent()) {
+                totalObservations++;
+                String statut = p.getStatut();
+                if ("ABSENT".equals(statut)) {
+                    totalAbsents++;
+                } else if ("RETARD".equals(statut)
+                        && p.getRetardMinutes() != null && p.getRetardMinutes() > 0) {
+                    totalRetardMinutes += p.getRetardMinutes();
+                    nbRetards++;
+                }
+            }
+        }
 
-        long joursPeriode = ChronoUnit.DAYS.between(debut, fin) + 1;
-        long effectifActif = employeCompletRepository.findAll().stream()
-                .filter(e -> e.getStatut() == EmployeComplet.StatutEmploye.ACTIF)
-                .count();
-        long joursOuvresTheoriques = Math.max(1L, joursPeriode * effectifActif);
+        double tauxAbsenteisme = totalObservations == 0 ? 0.0
+                : Math.round(((double) totalAbsents / totalObservations) * 10000.0) / 100.0;
+        double retardsMoyens = nbRetards == 0 ? 0.0
+                : Math.round(((double) totalRetardMinutes / nbRetards) * 100.0) / 100.0;
 
-        double tauxAbsenteisme = Math.round(
-                ((double) joursAbsence / joursOuvresTheoriques) * 10000.0) / 100.0;
-
-        // retardsMoyensMinutes et soldeCongesMoyen : nécessitent des schémas
-        // enrichis (minutes de retard sur Pointage, compteur de solde sur
-        // DemandeConge). Valeurs neutres en attendant.
         return KpiRhDto.builder()
                 .tauxAbsenteisme(tauxAbsenteisme)
-                .retardsMoyensMinutes(0.0)
-                .soldeCongesMoyen(0.0)
+                .retardsMoyensMinutes(retardsMoyens)
                 .build();
     }
 
     // ====================== 6.3 Paie ======================
 
-    private KpiRhDto calculerPaie(LocalDate debut, LocalDate fin, String departement) {
+    private KpiRhDto calculerPaie(LocalDate fin, String departement) {
         YearMonth moisCourant = YearMonth.from(fin);
         List<BulletinPaie> bulletinsMois = bulletinPaieRepository
                 .findByPeriodeMoisAndPeriodeAnnee(moisCourant.getMonthValue(), moisCourant.getYear()).stream()
@@ -178,15 +189,40 @@ public class TableauBordRhService {
                 .mapToLong(b -> b.getSalaireBrut() == null ? 0L : b.getSalaireBrut())
                 .sum();
 
-        long masseAnnuelle = bulletinPaieRepository.findByPeriodeAnnee(fin.getYear()).stream()
+        List<BulletinPaie> bulletinsAnnee = bulletinPaieRepository.findByPeriodeAnnee(fin.getYear()).stream()
                 .filter(b -> departement == null || departement.equals(b.getDepartement()))
+                .collect(Collectors.toList());
+
+        long masseAnnuelle = bulletinsAnnee.stream()
                 .mapToLong(b -> b.getSalaireBrut() == null ? 0L : b.getSalaireBrut())
                 .sum();
+
+        // Solde congés moyen : dernier bulletin par employé sur l'année en cours
+        Map<String, BulletinPaie> derniers = new HashMap<>();
+        for (BulletinPaie b : bulletinsAnnee) {
+            derniers.merge(b.getEmployeId(), b, (prev, curr) -> comparePeriode(curr, prev) > 0 ? curr : prev);
+        }
+        double soldeMoyen = derniers.values().stream()
+                .filter(b -> b.getSoldeConges() != null)
+                .mapToInt(BulletinPaie::getSoldeConges)
+                .average()
+                .orElse(0.0);
+        soldeMoyen = Math.round(soldeMoyen * 100.0) / 100.0;
 
         return KpiRhDto.builder()
                 .masseSalarialeMensuelle(masseMensuelle)
                 .masseSalarialeAnnuelle(masseAnnuelle)
+                .soldeCongesMoyen(soldeMoyen)
                 .build();
+    }
+
+    private int comparePeriode(BulletinPaie a, BulletinPaie b) {
+        if (a.getPeriode() == null && b.getPeriode() == null) return 0;
+        if (a.getPeriode() == null) return -1;
+        if (b.getPeriode() == null) return 1;
+        int cmp = Integer.compare(a.getPeriode().getAnnee(), b.getPeriode().getAnnee());
+        if (cmp != 0) return cmp;
+        return Integer.compare(a.getPeriode().getMois(), b.getPeriode().getMois());
     }
 
     // ====================== 6.4 Formation ======================
