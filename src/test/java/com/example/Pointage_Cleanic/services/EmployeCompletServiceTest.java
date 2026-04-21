@@ -61,7 +61,7 @@ class EmployeCompletServiceTest {
         when(employeMapper.toEmploye(dto)).thenReturn(employe);
         when(employeCompletRepository.save(any())).thenReturn(complet);
 
-        EmployeComplet result = service.create(dto, null);
+        EmployeComplet result = service.create(dto, null, null);
 
         assertNotNull(result);
         verify(employeCompletRepository).save(any());
@@ -77,7 +77,7 @@ class EmployeCompletServiceTest {
         when(employeCompletRepository.existsByAgentId("AG-0001")).thenReturn(true);
 
         assertThrows(EmployeAlreadyExistsException.class,
-                () -> service.create(dto, null));
+                () -> service.create(dto, null, null));
     }
 
     // ==========================================================

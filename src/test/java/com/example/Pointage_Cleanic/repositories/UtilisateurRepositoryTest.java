@@ -1,6 +1,7 @@
 package com.example.Pointage_Cleanic.repositories;
 
 import com.example.Pointage_Cleanic.config.MongoTestContainer;
+import com.example.Pointage_Cleanic.entities.GestionModules.ModulesAutorises;
 import com.example.Pointage_Cleanic.entities.Utilisateur;
 import com.example.Pointage_Cleanic.Enum.RoleAdmin;
 import org.junit.jupiter.api.BeforeEach;
@@ -11,8 +12,6 @@ import org.springframework.boot.test.autoconfigure.data.mongo.DataMongoTest;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.test.context.TestPropertySource;
 
-import java.util.HashMap;
-import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -37,9 +36,8 @@ class UtilisateurRepositoryTest extends MongoTestContainer {
     @DisplayName("Doit trouver un utilisateur par email")
     void shouldFindUtilisateurByEmail() {
         // GIVEN
-        Map<String, Boolean> modules = new HashMap<>();
-        modules.put("STOCK", true);
-        modules.put("RH", false);
+        ModulesAutorises modules = new ModulesAutorises();
+        modules.setEmployes(true);
 
         Utilisateur utilisateur = new Utilisateur();
         utilisateur.setPrenom("Ousmane");

@@ -42,7 +42,7 @@ class ProduitRepositoryTest extends MongoTestContainer {
                 .nomProduit(nom)
                 .description("Description test")
                 .categorie(categorie)
-                .destination(destination)
+                .destination(new String[]{destination})
                 .uniteDeMesure("pièce")
                 .conditionnement("carton")
                 .prixDeVente(2500.0)
