@@ -87,6 +87,15 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(body);
     }
 
+    @ExceptionHandler(BulkInsertPartialFailureException.class)
+    public ResponseEntity<Map<String, Object>> handleBulkInsertPartialFailure(
+            BulkInsertPartialFailureException ex) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("error", "BULK_INSERT_PARTIAL_FAILURE");
+        body.put("message", ex.getMessage());
+        body.put("idsDejaInseres", ex.getIdsDejaInseres());
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(body);
+    }
 
 
     // Optionnel : gestion d'autres exceptions
