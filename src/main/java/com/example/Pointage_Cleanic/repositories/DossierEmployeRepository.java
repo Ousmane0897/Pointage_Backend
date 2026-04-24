@@ -6,6 +6,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.mongodb.repository.MongoRepository;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -14,6 +15,10 @@ public interface DossierEmployeRepository extends MongoRepository<DossierEmploye
     Optional<DossierEmploye> findByMatricule(String matricule);
 
     boolean existsByMatricule(String matricule);
+
+    // Lookup en une seule requête pour l'import bulk (éviter les N+1
+    // sur la vérification d'unicité des matricules).
+    List<DossierEmploye> findByMatriculeIn(Collection<String> matricules);
 
     List<DossierEmploye> findByStatut(StatutDossierEmploye statut);
 
