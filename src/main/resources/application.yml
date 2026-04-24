@@ -7,6 +7,11 @@ spring:
     date-format: dd/MM/yyyy
     time-zone: Africa/Dakar
 
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 15MB
+
 jwt:
   secret: w9awKW+/x+VOzOyvg5DY3D7qWVZhipaV6VH8h9c4JS8=
 

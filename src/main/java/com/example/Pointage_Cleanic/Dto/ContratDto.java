@@ -36,4 +36,9 @@ public class ContratDto {
     private Integer joursAvantAlerte;
     private List<Renouvellement> renouvellements;
     private List<Avenant> avenants;
+
+    // Fichier contrat PDF (méta-données exposées, byte[] servi via endpoint dédié)
+    private String fichierContratUrl;
+    private String fichierContratNom;
+    private String fichierContratMimeType;
 }

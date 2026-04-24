@@ -46,4 +46,9 @@ public class Contrat {
 
     @Builder.Default
     private List<Avenant> avenants = new ArrayList<>();
+
+    // Fichier PDF du contrat (optionnel, stocké directement en Mongo)
+    private byte[] fichierContrat;
+    private String fichierContratNom;
+    private String fichierContratMimeType;
 }

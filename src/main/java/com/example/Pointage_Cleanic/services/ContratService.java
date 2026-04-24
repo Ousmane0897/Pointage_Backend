@@ -8,14 +8,16 @@ import com.example.Pointage_Cleanic.Enum.StatutContrat;
 import com.example.Pointage_Cleanic.Mapper.ContratMapper;
 import com.example.Pointage_Cleanic.entities.Avenant;
 import com.example.Pointage_Cleanic.entities.Contrat;
-import com.example.Pointage_Cleanic.entities.EmployeComplet;
+import com.example.Pointage_Cleanic.entities.DossierEmploye;
 import com.example.Pointage_Cleanic.entities.Renouvellement;
 import com.example.Pointage_Cleanic.exception.ResourceNotFoundException;
 import com.example.Pointage_Cleanic.repositories.ContratRepository;
-import com.example.Pointage_Cleanic.repositories.EmployeCompletRepository;
+import com.example.Pointage_Cleanic.repositories.DossierEmployeRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.Comparator;
@@ -28,12 +30,12 @@ import java.util.stream.Collectors;
 public class ContratService {
 
     private final ContratRepository contratRepository;
-    private final EmployeCompletRepository employeCompletRepository;
+    private final DossierEmployeRepository dossierEmployeRepository;
     private final ContratMapper contratMapper;
 
-    public ContratDto create(ContratDto dto) {
-        EmployeComplet employe = employeCompletRepository.findById(dto.getEmployeId())
-                .orElseThrow(() -> new ResourceNotFoundException("Employé introuvable : " + dto.getEmployeId()));
+    public ContratDto create(ContratDto dto, MultipartFile fichier) throws IOException {
+        DossierEmploye employe = dossierEmployeRepository.findById(dto.getEmployeId())
+                .orElseThrow(() -> new ResourceNotFoundException("Dossier employé introuvable : " + dto.getEmployeId()));
 
         Contrat contrat = contratMapper.toEntity(dto);
         contrat.setEmployeNom(employe.getNom());
@@ -46,42 +48,41 @@ public class ContratService {
             contrat.setJoursAvantAlerte(30);
         }
 
-        return contratMapper.toDto(contratRepository.save(contrat));
+        applyFichier(contrat, fichier);
+
+        return toDto(contratRepository.save(contrat));
     }
 
     public ContratDto getById(String id) {
-        return contratMapper.toDto(contratRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Contrat introuvable : " + id)));
+        return toDto(requireById(id));
     }
 
     public List<ContratDto> getAll() {
         return contratRepository.findAll().stream()
-                .map(contratMapper::toDto)
+                .map(this::toDto)
                 .collect(Collectors.toList());
     }
 
     public List<ContratDto> getByEmployeId(String employeId) {
         return contratRepository.findByEmployeId(employeId).stream()
-                .map(contratMapper::toDto)
+                .map(this::toDto)
                 .collect(Collectors.toList());
     }
 
-    public ContratDto update(String id, ContratDto dto) {
-        Contrat existing = contratRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Contrat introuvable : " + id));
+    public ContratDto update(String id, ContratDto dto, MultipartFile fichier) throws IOException {
+        Contrat existing = requireById(id);
         contratMapper.updateEntityFromDto(dto, existing);
-        return contratMapper.toDto(contratRepository.save(existing));
+        applyFichier(existing, fichier);
+        return toDto(contratRepository.save(existing));
     }
 
     public void delete(String id) {
-        Contrat contrat = contratRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Contrat introuvable : " + id));
+        Contrat contrat = requireById(id);
         contratRepository.delete(contrat);
     }
 
     public ContratDto renouveler(String id, RenouvellerContratRequest request) {
-        Contrat contrat = contratRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Contrat introuvable : " + id));
+        Contrat contrat = requireById(id);
 
         Renouvellement renouvellement = Renouvellement.builder()
                 .id(UUID.randomUUID().toString())
@@ -96,12 +97,11 @@ public class ContratService {
         contrat.setDateFin(request.getNouvelleDateFin());
         contrat.setStatut(StatutContrat.RENOUVELE);
 
-        return contratMapper.toDto(contratRepository.save(contrat));
+        return toDto(contratRepository.save(contrat));
     }
 
     public ContratDto ajouterAvenant(String id, AjouterAvenantRequest request) {
-        Contrat contrat = contratRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Contrat introuvable : " + id));
+        Contrat contrat = requireById(id);
 
         Avenant avenant = Avenant.builder()
                 .id(UUID.randomUUID().toString())
@@ -114,14 +114,13 @@ public class ContratService {
 
         contrat.getAvenants().add(avenant);
 
-        return contratMapper.toDto(contratRepository.save(contrat));
+        return toDto(contratRepository.save(contrat));
     }
 
     public ContratDto resilier(String id) {
-        Contrat contrat = contratRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Contrat introuvable : " + id));
+        Contrat contrat = requireById(id);
         contrat.setStatut(StatutContrat.RESILIE);
-        return contratMapper.toDto(contratRepository.save(contrat));
+        return toDto(contratRepository.save(contrat));
     }
 
     public List<AlerteContratDto> getAlertesEcheance() {
@@ -148,5 +147,39 @@ public class ContratService {
                 })
                 .sorted(Comparator.comparingLong(AlerteContratDto::getJoursRestants))
                 .collect(Collectors.toList());
+    }
+
+    public Contrat getFichier(String id) {
+        return requireById(id);
+    }
+
+    public void deleteFichier(String id) {
+        Contrat contrat = requireById(id);
+        contrat.setFichierContrat(null);
+        contrat.setFichierContratNom(null);
+        contrat.setFichierContratMimeType(null);
+        contratRepository.save(contrat);
+    }
+
+    private Contrat requireById(String id) {
+        return contratRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Contrat introuvable : " + id));
+    }
+
+    private void applyFichier(Contrat contrat, MultipartFile fichier) throws IOException {
+        if (fichier != null && !fichier.isEmpty()) {
+            contrat.setFichierContrat(fichier.getBytes());
+            contrat.setFichierContratNom(fichier.getOriginalFilename());
+            contrat.setFichierContratMimeType(
+                    fichier.getContentType() != null ? fichier.getContentType() : "application/pdf");
+        }
+    }
+
+    private ContratDto toDto(Contrat contrat) {
+        ContratDto dto = contratMapper.toDto(contrat);
+        if (contrat.getFichierContrat() != null && contrat.getFichierContrat().length > 0) {
+            dto.setFichierContratUrl("/api/contrats/" + contrat.getId() + "/fichier");
+        }
+        return dto;
     }
 }

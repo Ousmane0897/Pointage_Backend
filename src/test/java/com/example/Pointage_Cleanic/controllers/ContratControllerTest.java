@@ -3,6 +3,7 @@ package com.example.Pointage_Cleanic.controllers;
 import com.example.Pointage_Cleanic.Dto.*;
 import com.example.Pointage_Cleanic.Enum.StatutContrat;
 import com.example.Pointage_Cleanic.Enum.TypeContratRh;
+import com.example.Pointage_Cleanic.entities.Contrat;
 import com.example.Pointage_Cleanic.exception.ResourceNotFoundException;
 import com.example.Pointage_Cleanic.security.JwtRequestFilter;
 import com.example.Pointage_Cleanic.security.JwtUtil;
@@ -16,6 +17,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.LocalDate;
@@ -83,11 +85,13 @@ class ContratControllerTest {
         input.setEmployeId("emp1");
         input.setTypeContrat(TypeContratRh.CDD);
 
-        Mockito.when(contratService.create(Mockito.any())).thenReturn(buildDto());
+        Mockito.when(contratService.create(Mockito.any(), Mockito.any())).thenReturn(buildDto());
 
-        mockMvc.perform(post("/api/contrats")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsBytes(input)))
+        MockMultipartFile contrat = new MockMultipartFile(
+                "contrat", "contrat", "application/json",
+                objectMapper.writeValueAsBytes(input));
+
+        mockMvc.perform(multipart("/api/contrats").file(contrat))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.id").value("c1"));
     }
@@ -97,13 +101,50 @@ class ContratControllerTest {
         ContratDto updated = buildDto();
         updated.setStatut(StatutContrat.RENOUVELE);
 
-        Mockito.when(contratService.update(Mockito.eq("c1"), Mockito.any())).thenReturn(updated);
+        Mockito.when(contratService.update(Mockito.eq("c1"), Mockito.any(), Mockito.any()))
+                .thenReturn(updated);
 
-        mockMvc.perform(put("/api/contrats/c1")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsBytes(buildDto())))
+        MockMultipartFile contrat = new MockMultipartFile(
+                "contrat", "contrat", "application/json",
+                objectMapper.writeValueAsBytes(buildDto()));
+
+        mockMvc.perform(multipart("/api/contrats/c1").file(contrat).with(req -> {
+                    req.setMethod("PUT");
+                    return req;
+                }))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.statut").value("RENOUVELE"));
+    }
+
+    @Test
+    void get_fichier_not_found_ok() throws Exception {
+        Contrat contrat = Contrat.builder().id("c1").build();
+        Mockito.when(contratService.getFichier("c1")).thenReturn(contrat);
+
+        mockMvc.perform(get("/api/contrats/c1/fichier"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void get_fichier_ok() throws Exception {
+        Contrat contrat = Contrat.builder()
+                .id("c1")
+                .fichierContrat(new byte[]{1, 2, 3})
+                .fichierContratNom("contrat.pdf")
+                .fichierContratMimeType("application/pdf")
+                .build();
+        Mockito.when(contratService.getFichier("c1")).thenReturn(contrat);
+
+        mockMvc.perform(get("/api/contrats/c1/fichier"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Content-Type", "application/pdf"));
+    }
+
+    @Test
+    void delete_fichier_ok() throws Exception {
+        mockMvc.perform(delete("/api/contrats/c1/fichier"))
+                .andExpect(status().isNoContent());
+        Mockito.verify(contratService).deleteFichier("c1");
     }
 
     @Test
