@@ -54,4 +54,12 @@ public class DossierEmployeDto {
 
     // Urgence
     private ContactUrgenceDto contactUrgence;
+
+    // Données paie (optionnelles côté frontend, nécessaires au calcul
+    // de bulletin lorsque présentes)
+    private String categorieCode;
+    private String numeroIpres;
+    private String numeroCss;
+    private String rib;
+    private String banque;
 }

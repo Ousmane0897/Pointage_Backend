@@ -5,8 +5,11 @@ import com.example.Pointage_Cleanic.Dto.ValiderBulletinRequest;
 import com.example.Pointage_Cleanic.Enum.NatureLigne;
 import com.example.Pointage_Cleanic.Enum.StatutBulletin;
 import com.example.Pointage_Cleanic.Mapper.BulletinPaieMapper;
+import com.example.Pointage_Cleanic.entities.AvanceCategorie;
 import com.example.Pointage_Cleanic.entities.BulletinPaie;
 import com.example.Pointage_Cleanic.entities.LigneBulletin;
+import com.example.Pointage_Cleanic.entities.PretCategorie;
+import com.example.Pointage_Cleanic.entities.RetenueCategorie;
 import com.example.Pointage_Cleanic.exception.ResourceNotFoundException;
 import com.example.Pointage_Cleanic.repositories.BulletinPaieRepository;
 import com.lowagie.text.*;
@@ -232,9 +235,60 @@ public class BulletinPaieService {
             ajouterTotalCell(totaux, "Total cotisations salariales", fmt(b.getTotalCotisationsSalariales()));
             ajouterTotalCell(totaux, "Impôt sur le revenu", fmt(b.getImpotRevenu()));
             ajouterTotalCell(totaux, "TRIMF", fmt(b.getTrimf()));
+            if (nv(b.getTotalPrets()) + nv(b.getTotalAvances()) + nv(b.getTotalRetenues()) > 0) {
+                ajouterTotalCell(totaux, "Total retenues personnelles",
+                        fmt(nv(b.getTotalPrets()) + nv(b.getTotalAvances()) + nv(b.getTotalRetenues())));
+            }
             ajouterTotalCell(totaux, "NET À PAYER", fmt(b.getNetAPayer()));
             ajouterTotalCell(totaux, "Coût total employeur", fmt(b.getCoutTotalEmployeur()));
             doc.add(totaux);
+
+            // ── Section conditionnelle : détail des retenues personnelles ──
+            boolean aRetenues = (b.getPretsAppliques() != null && !b.getPretsAppliques().isEmpty())
+                    || (b.getAvancesAppliquees() != null && !b.getAvancesAppliquees().isEmpty())
+                    || (b.getRetenuesAppliquees() != null && !b.getRetenuesAppliquees().isEmpty());
+            if (aRetenues) {
+                doc.add(Chunk.NEWLINE);
+                Paragraph sousTitre = new Paragraph("Retenues personnelles",
+                        FontFactory.getFont(FontFactory.HELVETICA_BOLD, 10));
+                doc.add(sousTitre);
+
+                PdfPTable detail = new PdfPTable(3);
+                detail.setWidthPercentage(80);
+                detail.setWidths(new float[]{3f, 2f, 2f});
+                String[] hs = {"Libellé", "Montant", "Durée"};
+                for (String h : hs) {
+                    PdfPCell c = new PdfPCell(new Phrase(h,
+                            FontFactory.getFont(FontFactory.HELVETICA_BOLD, 9)));
+                    c.setBackgroundColor(java.awt.Color.LIGHT_GRAY);
+                    detail.addCell(c);
+                }
+                if (b.getPretsAppliques() != null) {
+                    for (PretCategorie pr : b.getPretsAppliques()) {
+                        detail.addCell(new Phrase("Prêt : " + ns(pr.getLibelle()),
+                                FontFactory.getFont(FontFactory.HELVETICA, 8)));
+                        detail.addCell(fmt(pr.getMontant()));
+                        detail.addCell(pr.getDureeMois() != null ? pr.getDureeMois() + " mois" : "");
+                    }
+                }
+                if (b.getAvancesAppliquees() != null) {
+                    for (AvanceCategorie av : b.getAvancesAppliquees()) {
+                        detail.addCell(new Phrase("Avance : " + ns(av.getLibelle()),
+                                FontFactory.getFont(FontFactory.HELVETICA, 8)));
+                        detail.addCell(fmt(av.getMontant()));
+                        detail.addCell(av.getDureeMois() != null ? av.getDureeMois() + " mois" : "");
+                    }
+                }
+                if (b.getRetenuesAppliquees() != null) {
+                    for (RetenueCategorie re : b.getRetenuesAppliquees()) {
+                        detail.addCell(new Phrase("Retenue : " + ns(re.getLibelle()),
+                                FontFactory.getFont(FontFactory.HELVETICA, 8)));
+                        detail.addCell(fmt(re.getMontant()));
+                        detail.addCell("");
+                    }
+                }
+                doc.add(detail);
+            }
 
             doc.add(Chunk.NEWLINE);
             doc.add(new Paragraph("Date de calcul : "

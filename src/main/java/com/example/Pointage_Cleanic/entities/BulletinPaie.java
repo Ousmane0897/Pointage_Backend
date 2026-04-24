@@ -53,6 +53,22 @@ public class BulletinPaie {
     @Builder.Default
     private List<LigneBulletin> lignes = new ArrayList<>();
 
+    // Snapshots des rubriques de retenues personnelles appliquées sur
+    // ce bulletin (traçabilité : la grille peut être modifiée
+    // ultérieurement sans impacter les bulletins déjà calculés)
+    @Builder.Default
+    private List<PretCategorie> pretsAppliques = new ArrayList<>();
+
+    @Builder.Default
+    private List<AvanceCategorie> avancesAppliquees = new ArrayList<>();
+
+    @Builder.Default
+    private List<RetenueCategorie> retenuesAppliquees = new ArrayList<>();
+
+    private Long totalPrets;
+    private Long totalAvances;
+    private Long totalRetenues;
+
     private Long salaireBrut;
     private Long totalCotisationsSalariales;
     private Long totalCotisationsPatronales;

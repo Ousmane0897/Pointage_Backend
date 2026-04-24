@@ -7,7 +7,7 @@ import com.example.Pointage_Cleanic.Enum.StatutValidationHS;
 import com.example.Pointage_Cleanic.entities.*;
 import com.example.Pointage_Cleanic.exception.ResourceNotFoundException;
 import com.example.Pointage_Cleanic.repositories.CategorieProfessionnelleRepository;
-import com.example.Pointage_Cleanic.repositories.EmployeCompletRepository;
+import com.example.Pointage_Cleanic.repositories.DossierEmployeRepository;
 import com.example.Pointage_Cleanic.repositories.HeureSupplementaireRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -29,6 +29,9 @@ public class CalculPaieService {
     public static final String CODE_SAL_BASE = "SAL_BASE";
     public static final String CODE_PRIME_PREFIX = "PRIME_";
     public static final String CODE_INDEM_PREFIX = "INDEM_";
+    public static final String CODE_PRET_PREFIX = "PRET_";
+    public static final String CODE_AVANCE_PREFIX = "AVANCE_";
+    public static final String CODE_RETENUE_PREFIX = "RETENUE_";
     public static final String CODE_HS = "HS_TOTAL";
     public static final String CODE_IPRES_GEN_SAL = "IPRES_GEN_SAL";
     public static final String CODE_IPRES_GEN_EMP = "IPRES_GEN_EMP";
@@ -41,7 +44,7 @@ public class CalculPaieService {
 
     private static final double HEURES_PAR_JOUR_STANDARD = 8.0;
 
-    private final EmployeCompletRepository employeCompletRepository;
+    private final DossierEmployeRepository dossierEmployeRepository;
     private final CategorieProfessionnelleRepository categorieProfessionnelleRepository;
     private final ParametresPaieService parametresPaieService;
     private final HeureSupplementaireRepository heureSupplementaireRepository;
@@ -65,6 +68,33 @@ public class CalculPaieService {
 
     public long somme(List<Long> montants) {
         return montants.stream().filter(m -> m != null).mapToLong(Long::longValue).sum();
+    }
+
+    // ─── Retenues personnelles (spec RH 6.3) ─────────────────────────────
+    // N'impactent PAS les assiettes IPRES/CSS/IR — retenues post-cotisations.
+
+    public long calculerTotalPrets(List<PretCategorie> prets) {
+        if (prets == null || prets.isEmpty()) return 0L;
+        return prets.stream()
+                .filter(p -> p != null && p.getMontant() != null)
+                .mapToLong(PretCategorie::getMontant)
+                .sum();
+    }
+
+    public long calculerTotalAvances(List<AvanceCategorie> avances) {
+        if (avances == null || avances.isEmpty()) return 0L;
+        return avances.stream()
+                .filter(a -> a != null && a.getMontant() != null)
+                .mapToLong(AvanceCategorie::getMontant)
+                .sum();
+    }
+
+    public long calculerTotalRetenues(List<RetenueCategorie> retenues) {
+        if (retenues == null || retenues.isEmpty()) return 0L;
+        return retenues.stream()
+                .filter(r -> r != null && r.getMontant() != null)
+                .mapToLong(RetenueCategorie::getMontant)
+                .sum();
     }
 
     // ─── IPRES ───────────────────────────────────────────────────────────
@@ -145,8 +175,9 @@ public class CalculPaieService {
     // ─── Orchestration : compose un BulletinPaie complet ─────────────────
 
     public BulletinPaie orchestrer(String employeId, int mois, int annee) {
-        EmployeComplet emp = employeCompletRepository.findById(employeId)
-                .orElseThrow(() -> new ResourceNotFoundException("Employé introuvable : " + employeId));
+        DossierEmploye emp = dossierEmployeRepository.findById(employeId)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Dossier employé introuvable : " + employeId));
 
         if (emp.getCategorieCode() == null || emp.getCategorieCode().isBlank()) {
             throw new IllegalStateException(
@@ -277,9 +308,47 @@ public class CalculPaieService {
         lignes.add(ligneCotisation(CODE_TRIMF, "TRIMF", NatureLigne.RETENUE_SALARIALE,
                 null, null, trimf, 0L));
 
-        // ── 5. Totaux & net ──
+        // ── 5. Retenues personnelles (prêts, avances, retenues diverses) ──
+        // Snapshot pour traçabilité (grille peut évoluer après).
+        List<PretCategorie> pretsSnapshot = new ArrayList<>(
+                cat.getPrets() != null ? cat.getPrets() : List.of());
+        List<AvanceCategorie> avancesSnapshot = new ArrayList<>(
+                cat.getAvancesSurSalaire() != null ? cat.getAvancesSurSalaire() : List.of());
+        List<RetenueCategorie> retenuesSnapshot = new ArrayList<>(
+                cat.getRetenues() != null ? cat.getRetenues() : List.of());
+
+        long totalPrets = calculerTotalPrets(pretsSnapshot);
+        long totalAvances = calculerTotalAvances(avancesSnapshot);
+        long totalRetenues = calculerTotalRetenues(retenuesSnapshot);
+
+        for (PretCategorie pr : pretsSnapshot) {
+            long montant = pr.getMontant() != null ? pr.getMontant() : 0L;
+            String libelle = "Prêt : " + (pr.getLibelle() != null ? pr.getLibelle() : "");
+            lignes.add(ligneCotisation(
+                    CODE_PRET_PREFIX + normaliseCode(pr.getLibelle()),
+                    libelle, NatureLigne.RETENUE_SALARIALE, null, null, montant, 0L));
+        }
+        for (AvanceCategorie av : avancesSnapshot) {
+            long montant = av.getMontant() != null ? av.getMontant() : 0L;
+            String libelle = "Avance : " + (av.getLibelle() != null ? av.getLibelle() : "");
+            lignes.add(ligneCotisation(
+                    CODE_AVANCE_PREFIX + normaliseCode(av.getLibelle()),
+                    libelle, NatureLigne.RETENUE_SALARIALE, null, null, montant, 0L));
+        }
+        for (RetenueCategorie re : retenuesSnapshot) {
+            long montant = re.getMontant() != null ? re.getMontant() : 0L;
+            String libelle = "Retenue : " + (re.getLibelle() != null ? re.getLibelle() : "");
+            lignes.add(ligneCotisation(
+                    CODE_RETENUE_PREFIX + normaliseCode(re.getLibelle()),
+                    libelle, NatureLigne.RETENUE_SALARIALE, null, null, montant, 0L));
+        }
+
+        // ── 6. Totaux & net ──
+        // Les retenues personnelles diminuent le net POST-cotisations sans
+        // impacter les assiettes IPRES/CSS/IR (calculées plus haut sur le brut).
         long totalCotisPatronales = ipresGenEmp + ipresCompEmp + cssPfEmp + cssAtMpEmp;
-        long netAPayer = salaireBrut - totalCotisSalariales - irMensuel - trimf;
+        long netAPayer = salaireBrut - totalCotisSalariales - irMensuel - trimf
+                - totalPrets - totalAvances - totalRetenues;
         long coutTotalEmployeur = salaireBrut + totalCotisPatronales;
 
         return BulletinPaie.builder()
@@ -288,11 +357,11 @@ public class CalculPaieService {
                 .nom(emp.getNom())
                 .prenom(emp.getPrenom())
                 .poste(emp.getPoste())
-                .departement(emp.getAgence() != null && emp.getAgence().length > 0 ? emp.getAgence()[0] : null)
+                .departement(emp.getDepartement())
                 .categorieCode(cat.getCode())
-                .numeroIpres(emp.getCnssOuIpres())
+                .numeroIpres(emp.getNumeroIpres())
                 .numeroCss(emp.getNumeroCss())
-                .rib(emp.getRibCompteBancaire())
+                .rib(emp.getRib())
                 .banque(emp.getBanque())
                 .periode(PeriodePaie.builder().mois(mois).annee(annee).build())
                 .joursTravailles(recap.getJoursPresents())
@@ -301,6 +370,12 @@ public class CalculPaieService {
                 .heuresSupTotal(heuresSupTotal)
                 .heuresSupMajoreesEquivalent(heuresSupMajoreesEquivalent)
                 .lignes(lignes)
+                .pretsAppliques(pretsSnapshot)
+                .avancesAppliquees(avancesSnapshot)
+                .retenuesAppliquees(retenuesSnapshot)
+                .totalPrets(totalPrets)
+                .totalAvances(totalAvances)
+                .totalRetenues(totalRetenues)
                 .salaireBrut(salaireBrut)
                 .totalCotisationsSalariales(totalCotisSalariales)
                 .totalCotisationsPatronales(totalCotisPatronales)

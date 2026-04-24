@@ -1,8 +1,11 @@
 package com.example.Pointage_Cleanic.Dto;
 
 import com.example.Pointage_Cleanic.Enum.StatutBulletin;
+import com.example.Pointage_Cleanic.entities.AvanceCategorie;
 import com.example.Pointage_Cleanic.entities.LigneBulletin;
 import com.example.Pointage_Cleanic.entities.PeriodePaie;
+import com.example.Pointage_Cleanic.entities.PretCategorie;
+import com.example.Pointage_Cleanic.entities.RetenueCategorie;
 import com.fasterxml.jackson.annotation.JsonFormat;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import lombok.*;
@@ -41,6 +44,13 @@ public class BulletinPaieDto {
     private double heuresSupMajoreesEquivalent;
 
     private List<LigneBulletin> lignes;
+
+    private List<PretCategorie> pretsAppliques;
+    private List<AvanceCategorie> avancesAppliquees;
+    private List<RetenueCategorie> retenuesAppliquees;
+    private Long totalPrets;
+    private Long totalAvances;
+    private Long totalRetenues;
 
     private Long salaireBrut;
     private Long totalCotisationsSalariales;

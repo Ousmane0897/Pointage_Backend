@@ -61,4 +61,13 @@ public class DossierEmploye {
 
     // Photo (stockée en byte[], exposée via endpoint dédié)
     private byte[] photo;
+
+    // Données paie (non présentes dans le modèle TS DossierEmploye, mais
+    // nécessaires au module 6.3 pour générer le bulletin — saisies côté
+    // RH/paie, peuvent rester null en création initiale)
+    private String categorieCode;
+    private String numeroIpres;
+    private String numeroCss;
+    private String rib;
+    private String banque;
 }

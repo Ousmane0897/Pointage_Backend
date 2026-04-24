@@ -1,6 +1,9 @@
 package com.example.Pointage_Cleanic.services;
 
+import com.example.Pointage_Cleanic.entities.AvanceCategorie;
 import com.example.Pointage_Cleanic.entities.ParametresPaie;
+import com.example.Pointage_Cleanic.entities.PretCategorie;
+import com.example.Pointage_Cleanic.entities.RetenueCategorie;
 import com.example.Pointage_Cleanic.entities.TrancheIr;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -239,5 +242,49 @@ class CalculPaieServiceTest {
     void trimfMensuel_non_configure_retourne_zero() {
         ParametresPaie vide = ParametresPaie.builder().build();
         assertThat(service.calculTrimfMensuel(vide)).isEqualTo(0L);
+    }
+
+    // ─── Retenues personnelles (RH 6.3) ────────────────────────────────
+
+    @Test
+    void totalPrets_liste_vide_ou_null_retourne_zero() {
+        assertThat(service.calculerTotalPrets(null)).isEqualTo(0L);
+        assertThat(service.calculerTotalPrets(List.of())).isEqualTo(0L);
+    }
+
+    @Test
+    void totalPrets_somme_les_montants() {
+        List<PretCategorie> prets = List.of(
+                PretCategorie.builder().libelle("Moto").montant(50_000L).dureeMois(12).build(),
+                PretCategorie.builder().libelle("Maison").montant(100_000L).dureeMois(24).build()
+        );
+        assertThat(service.calculerTotalPrets(prets)).isEqualTo(150_000L);
+    }
+
+    @Test
+    void totalPrets_null_montant_est_ignore() {
+        List<PretCategorie> prets = List.of(
+                PretCategorie.builder().libelle("Moto").montant(50_000L).build(),
+                PretCategorie.builder().libelle("Incomplet").montant(null).build()
+        );
+        assertThat(service.calculerTotalPrets(prets)).isEqualTo(50_000L);
+    }
+
+    @Test
+    void totalAvances_somme_les_montants() {
+        List<AvanceCategorie> avances = List.of(
+                AvanceCategorie.builder().libelle("Avril").montant(30_000L).dureeMois(3).build(),
+                AvanceCategorie.builder().libelle("Mai").montant(20_000L).dureeMois(2).build()
+        );
+        assertThat(service.calculerTotalAvances(avances)).isEqualTo(50_000L);
+    }
+
+    @Test
+    void totalRetenues_somme_les_montants() {
+        List<RetenueCategorie> retenues = List.of(
+                RetenueCategorie.builder().libelle("Cantine").montant(10_000L).build(),
+                RetenueCategorie.builder().libelle("Uniforme").montant(5_000L).build()
+        );
+        assertThat(service.calculerTotalRetenues(retenues)).isEqualTo(15_000L);
     }
 }
