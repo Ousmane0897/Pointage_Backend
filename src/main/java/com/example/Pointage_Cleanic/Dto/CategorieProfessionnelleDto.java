@@ -1,8 +1,11 @@
 package com.example.Pointage_Cleanic.Dto;
 
 import com.example.Pointage_Cleanic.Enum.RegimeIpres;
+import com.example.Pointage_Cleanic.entities.AvanceCategorie;
 import com.example.Pointage_Cleanic.entities.IndemniteCategorie;
+import com.example.Pointage_Cleanic.entities.PretCategorie;
 import com.example.Pointage_Cleanic.entities.PrimeCategorie;
+import com.example.Pointage_Cleanic.entities.RetenueCategorie;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import lombok.*;
 
@@ -26,6 +29,9 @@ public class CategorieProfessionnelleDto {
 
     private List<PrimeCategorie> primes;
     private List<IndemniteCategorie> indemnites;
+    private List<PretCategorie> prets;
+    private List<AvanceCategorie> avancesSurSalaire;
+    private List<RetenueCategorie> retenues;
 
     private RegimeIpres regimeIpres;
     private Double tauxAtMp;

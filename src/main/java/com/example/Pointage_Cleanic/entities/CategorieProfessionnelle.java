@@ -35,6 +35,15 @@ public class CategorieProfessionnelle {
     @Builder.Default
     private List<IndemniteCategorie> indemnites = new ArrayList<>();
 
+    @Builder.Default
+    private List<PretCategorie> prets = new ArrayList<>();
+
+    @Builder.Default
+    private List<AvanceCategorie> avancesSurSalaire = new ArrayList<>();
+
+    @Builder.Default
+    private List<RetenueCategorie> retenues = new ArrayList<>();
+
     private RegimeIpres regimeIpres;
 
     private Double tauxAtMp;
