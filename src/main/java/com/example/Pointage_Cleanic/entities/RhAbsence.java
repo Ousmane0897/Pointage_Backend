@@ -31,6 +31,9 @@ public class RhAbsence {
 
     private TypeAbsence type;
 
+    // Précision libre obligatoire quand type = AUTRE, nullable sinon
+    private String typeAutrePrecision;
+
     @JsonFormat(pattern = "yyyy-MM-dd")
     private LocalDate dateDebut;
 

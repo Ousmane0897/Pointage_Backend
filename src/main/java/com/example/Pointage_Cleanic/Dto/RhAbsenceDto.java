@@ -23,6 +23,7 @@ public class RhAbsenceDto {
     private String prenom;
     private String departement;
     private TypeAbsence type;
+    private String typeAutrePrecision;
 
     @JsonFormat(pattern = "yyyy-MM-dd")
     private LocalDate dateDebut;
