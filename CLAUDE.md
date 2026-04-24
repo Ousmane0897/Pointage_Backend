@@ -165,6 +165,35 @@ Endpoints livrés :
   (categorieCode, numeroIpres, numeroCss, rib, banque) également portés sur l'entité.
   Endpoints additionnels : `GET /{id}/photo` (permitAll), `PUT /{id}/statut`,
   `PUT /{id}/titulariser`, `GET /alertes-essai`.
+- **Import bulk de dossiers employés** : `POST /api/dossier-employe/bulk` (JSON pur,
+  sans photos — le CRUD unitaire reste utilisé ensuite pour les photos). Remplace
+  la boucle d'appels unitaires que faisait le frontend lors d'un import Excel.
+  Body : `{ employes: DossierEmployeBulkLigneDto[], strategieErreurs: "TOUT_OU_RIEN"
+  | "IMPORTER_LIGNES_VALIDES" }`. Réponse : `{ total, inserted, failed, insertedIds,
+  errors: [{ index, matricule, field, code, message }] }`. Codes : **200** tout
+  inséré, **207** partiel (IMPORTER_LIGNES_VALIDES avec erreurs), **422** TOUT_OU_RIEN
+  avec ≥ 1 erreur (aucune insertion), **400** payload invalide (vide / trop grand
+  / stratégie null). Limite configurable `rh.import.bulk.max-size: 1000`.
+  Codes d'erreur métier : `CHAMP_OBLIGATOIRE`, `VALEUR_INVALIDE`,
+  `MATRICULE_DUPLIQUE_PAYLOAD`, `MATRICULE_DUPLIQUE_BASE`, `SUPERIEUR_INEXISTANT`,
+  `VALIDATION_CONDITIONNELLE`, `REFERENCE_CIRCULAIRE` (cycle de supérieurs détecté
+  par DFS 3-couleurs sur le graphe intra-payload). Le supérieur hiérarchique peut
+  être référencé via `superieurHierarchiqueMatricule` (champ spécifique au DTO bulk) :
+  résolu en deux passes — soit dans le payload lui-même (pass B d'`updateFirst`
+  post-`saveAll()`), soit en base (pass A).
+  **Atomicité** : MongoDB en standalone ne supportant pas les transactions multi-
+  documents, l'atomicité `TOUT_OU_RIEN` est garantie par validation préalable
+  complète du batch avant tout `saveAll()`. Si `saveAll()` échoue à mi-parcours
+  (race condition sur l'index unique `matricule`, erreur I/O), une
+  `BulkInsertPartialFailureException` est levée → HTTP 500 avec body
+  `{error: "BULK_INSERT_PARTIAL_FAILURE", message, idsDejaInseres: [...]}` ;
+  aucun rollback compensatoire n'est tenté.
+  **RBAC fine-grained sur l'import bulk à traiter dans une PR dédiée** — pour
+  l'instant l'endpoint tombe sous l'authentification JWT standard
+  (`.anyRequest().authenticated()` dans `SecurityConfig`).
+  Validation plus stricte qu'au CRUD unitaire sur un point : `situationMatrimoniale
+  = MARIE` exige `nombreEnfants` non null dans le bulk (alors que `create()` se
+  contente de nullifier `nombreEnfants` hors MARIE).
 - **Contrats** : CRUD multipart `/api/contrats` (part JSON `contrat` + `fichier` optionnel).
   `Contrat.fichierContrat` (byte[]) + `fichierContratNom` + `fichierContratMimeType`.
   Nouveaux endpoints `GET /api/contrats/{id}/fichier` (télécharge le PDF),

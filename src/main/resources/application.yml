@@ -29,6 +29,12 @@ google:
     api:
       key: "AIzaSyAijDeBFgsJUYLqS6Nn3EQfi56cPPMtN_Q"
 
+rh:
+  import:
+    bulk:
+      # Taille maximale d'un import bulk de dossiers employés (POST /api/dossier-employe/bulk).
+      max-size: 1000
+
 
 logging:
   level:
