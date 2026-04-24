@@ -28,7 +28,7 @@ public class FormationService {
     private final SessionFormationRepository sessionFormationRepository;
     private final ParticipationFormationRepository participationFormationRepository;
     private final EvaluationFormationRepository evaluationFormationRepository;
-    private final EmployeCompletRepository employeCompletRepository;
+    private final DossierEmployeRepository dossierEmployeRepository;
 
     private final FormationMapper formationMapper;
     private final SessionFormationMapper sessionFormationMapper;
@@ -113,8 +113,9 @@ public class FormationService {
         if (participationFormationRepository.existsBySessionIdAndEmployeId(sessionId, dto.getEmployeId())) {
             throw new IllegalStateException("Employé déjà inscrit à cette session");
         }
-        EmployeComplet employe = employeCompletRepository.findById(dto.getEmployeId())
-                .orElseThrow(() -> new ResourceNotFoundException("Employé introuvable : " + dto.getEmployeId()));
+        DossierEmploye employe = dossierEmployeRepository.findById(dto.getEmployeId())
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Dossier employé introuvable : " + dto.getEmployeId()));
 
         ParticipationFormation participation = participationFormationMapper.toEntity(dto);
         participation.setSessionId(sessionId);
@@ -122,8 +123,7 @@ public class FormationService {
         participation.setMatricule(employe.getMatricule());
         participation.setNom(employe.getNom());
         participation.setPrenom(employe.getPrenom());
-        // Pas de champ "departement" sur EmployeComplet — on utilise le poste comme proxy.
-        participation.setDepartement(employe.getPoste());
+        participation.setDepartement(employe.getDepartement());
 
         ParticipationFormation saved = participationFormationRepository.save(participation);
 

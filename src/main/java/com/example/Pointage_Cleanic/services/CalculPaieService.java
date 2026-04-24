@@ -7,7 +7,7 @@ import com.example.Pointage_Cleanic.Enum.StatutValidationHS;
 import com.example.Pointage_Cleanic.entities.*;
 import com.example.Pointage_Cleanic.exception.ResourceNotFoundException;
 import com.example.Pointage_Cleanic.repositories.CategorieProfessionnelleRepository;
-import com.example.Pointage_Cleanic.repositories.DossierEmployeRepository;
+import com.example.Pointage_Cleanic.repositories.EmployeCompletRepository;
 import com.example.Pointage_Cleanic.repositories.HeureSupplementaireRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -44,7 +44,10 @@ public class CalculPaieService {
 
     private static final double HEURES_PAR_JOUR_STANDARD = 8.0;
 
-    private final DossierEmployeRepository dossierEmployeRepository;
+    // Exception : CalculPaieService fait la jointure avec le pointage mobile
+    // via RecapitulatifMensuelService et a besoin de EmployeComplet.agentId.
+    // Reste sur EmployeCompletRepository (même exception que PointageCentraliseService).
+    private final EmployeCompletRepository employeCompletRepository;
     private final CategorieProfessionnelleRepository categorieProfessionnelleRepository;
     private final ParametresPaieService parametresPaieService;
     private final HeureSupplementaireRepository heureSupplementaireRepository;
@@ -175,9 +178,9 @@ public class CalculPaieService {
     // ─── Orchestration : compose un BulletinPaie complet ─────────────────
 
     public BulletinPaie orchestrer(String employeId, int mois, int annee) {
-        DossierEmploye emp = dossierEmployeRepository.findById(employeId)
+        EmployeComplet emp = employeCompletRepository.findById(employeId)
                 .orElseThrow(() -> new ResourceNotFoundException(
-                        "Dossier employé introuvable : " + employeId));
+                        "Employé introuvable : " + employeId));
 
         if (emp.getCategorieCode() == null || emp.getCategorieCode().isBlank()) {
             throw new IllegalStateException(
@@ -357,11 +360,12 @@ public class CalculPaieService {
                 .nom(emp.getNom())
                 .prenom(emp.getPrenom())
                 .poste(emp.getPoste())
-                .departement(emp.getDepartement())
+                .departement(emp.getAgence() != null && emp.getAgence().length > 0
+                        ? emp.getAgence()[0] : null)
                 .categorieCode(cat.getCode())
-                .numeroIpres(emp.getNumeroIpres())
+                .numeroIpres(emp.getCnssOuIpres())
                 .numeroCss(emp.getNumeroCss())
-                .rib(emp.getRib())
+                .rib(emp.getRibCompteBancaire())
                 .banque(emp.getBanque())
                 .periode(PeriodePaie.builder().mois(mois).annee(annee).build())
                 .joursTravailles(recap.getJoursPresents())

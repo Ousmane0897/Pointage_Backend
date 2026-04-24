@@ -3,12 +3,13 @@ package com.example.Pointage_Cleanic.services;
 import com.example.Pointage_Cleanic.Dto.KpiRhDto;
 import com.example.Pointage_Cleanic.Dto.PointageCentraliseDto;
 import com.example.Pointage_Cleanic.Dto.RepartitionItemDto;
+import com.example.Pointage_Cleanic.Enum.StatutDossierEmploye;
 import com.example.Pointage_Cleanic.entities.BulletinPaie;
-import com.example.Pointage_Cleanic.entities.EmployeComplet;
+import com.example.Pointage_Cleanic.entities.DossierEmploye;
 import com.example.Pointage_Cleanic.entities.Sanction;
 import com.example.Pointage_Cleanic.entities.SessionFormation;
 import com.example.Pointage_Cleanic.repositories.BulletinPaieRepository;
-import com.example.Pointage_Cleanic.repositories.EmployeCompletRepository;
+import com.example.Pointage_Cleanic.repositories.DossierEmployeRepository;
 import com.example.Pointage_Cleanic.repositories.ParticipationFormationRepository;
 import com.example.Pointage_Cleanic.repositories.SanctionRepository;
 import com.example.Pointage_Cleanic.repositories.SessionFormationRepository;
@@ -47,7 +48,10 @@ public class TableauBordRhService {
     private static final DateTimeFormatter MOIS_FMT = DateTimeFormatter.ofPattern("yyyy-MM");
     private static final int TAILLE_PAGE_POINTAGES = 10_000;
 
-    private final EmployeCompletRepository employeCompletRepository;
+    // KPIs effectif / turnover / répartitions : DossierEmploye (indépendance RH).
+    // Les KPIs de présence (retards, absentéisme) passent par
+    // PointageCentraliseService qui reste sur EmployeComplet (exception).
+    private final DossierEmployeRepository dossierEmployeRepository;
     private final BulletinPaieRepository bulletinPaieRepository;
     private final SessionFormationRepository sessionFormationRepository;
     private final ParticipationFormationRepository participationFormationRepository;
@@ -90,42 +94,32 @@ public class TableauBordRhService {
     // ====================== 6.1 Personnel ======================
 
     private KpiRhDto calculerPersonnel(String departement, String site) {
-        List<EmployeComplet> tous = employeCompletRepository.findAll();
+        List<DossierEmploye> tous = dossierEmployeRepository.findAll();
 
-        List<EmployeComplet> filtres = tous.stream()
-                .filter(e -> departement == null || departement.equalsIgnoreCase(departementDe(e)))
-                .filter(e -> site == null || matchSite(e, site))
+        List<DossierEmploye> filtres = tous.stream()
+                .filter(e -> departement == null || departement.equalsIgnoreCase(e.getDepartement()))
+                .filter(e -> site == null || site.equalsIgnoreCase(e.getSiteAffecte()))
                 .collect(Collectors.toList());
 
-        List<EmployeComplet> actifs = filtres.stream()
-                .filter(e -> e.getStatut() == EmployeComplet.StatutEmploye.ACTIF)
+        List<DossierEmploye> actifs = filtres.stream()
+                .filter(e -> e.getStatut() == StatutDossierEmploye.ACTIF
+                        || e.getStatut() == StatutDossierEmploye.EN_PERIODE_ESSAI)
                 .collect(Collectors.toList());
 
         long nbActifs = actifs.size();
         long nbSorties = filtres.stream()
-                .filter(e -> e.getStatut() == EmployeComplet.StatutEmploye.SORTIE)
+                .filter(e -> e.getStatut() == StatutDossierEmploye.SORTI)
                 .count();
         double turnover = (nbActifs + nbSorties) == 0 ? 0.0
                 : Math.round(((double) nbSorties / (nbActifs + nbSorties)) * 1000.0) / 10.0;
 
         return KpiRhDto.builder()
                 .effectifTotal(nbActifs)
-                .repartitionDepartement(grouper(actifs, this::departementDe))
-                .repartitionSite(grouper(actifs, EmployeComplet::getCodeSite))
-                .repartitionTypeContrat(grouper(actifs, EmployeComplet::getTypeContrat))
+                .repartitionDepartement(grouper(actifs, DossierEmploye::getDepartement))
+                .repartitionSite(grouper(actifs, DossierEmploye::getSiteAffecte))
+                .repartitionTypeContrat(grouper(actifs, d -> d.getStatut() != null ? d.getStatut().name() : null))
                 .turnover(turnover)
                 .build();
-    }
-
-    private String departementDe(EmployeComplet e) {
-        if (e.getAgence() == null || e.getAgence().length == 0) return null;
-        return e.getAgence()[0];
-    }
-
-    private boolean matchSite(EmployeComplet e, String site) {
-        if (site.equalsIgnoreCase(e.getCodeSite()) || site.equalsIgnoreCase(e.getVilleSite())) return true;
-        if (site.equalsIgnoreCase(e.getCodeSite2()) || site.equalsIgnoreCase(e.getVilleSite2())) return true;
-        return false;
     }
 
     private <T> List<RepartitionItemDto> grouper(List<T> items, Function<T, String> keyFn) {

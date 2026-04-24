@@ -4,10 +4,10 @@ import com.example.Pointage_Cleanic.Dto.DemandeCongeDto;
 import com.example.Pointage_Cleanic.Dto.SoldeCongeDto;
 import com.example.Pointage_Cleanic.Enum.StatutDemande;
 import com.example.Pointage_Cleanic.entities.DemandeConge;
-import com.example.Pointage_Cleanic.entities.EmployeComplet;
+import com.example.Pointage_Cleanic.entities.DossierEmploye;
 import com.example.Pointage_Cleanic.exception.ResourceNotFoundException;
 import com.example.Pointage_Cleanic.repositories.DemandeCongeRepository;
-import com.example.Pointage_Cleanic.repositories.EmployeCompletRepository;
+import com.example.Pointage_Cleanic.repositories.DossierEmployeRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -23,13 +23,19 @@ public class DemandeCongeService {
     private static final int JOURS_ACQUIS_PAR_AN = 30;
 
     private final DemandeCongeRepository demandeCongeRepository;
-    private final EmployeCompletRepository employeCompletRepository;
+    private final DossierEmployeRepository dossierEmployeRepository;
 
     public DemandeCongeDto create(DemandeCongeDto dto) {
-        employeCompletRepository.findById(dto.getEmployeId())
-                .orElseThrow(() -> new ResourceNotFoundException("Employé introuvable : " + dto.getEmployeId()));
+        DossierEmploye employe = dossierEmployeRepository.findById(dto.getEmployeId())
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Dossier employé introuvable : " + dto.getEmployeId()));
 
         DemandeConge demande = toEntity(dto);
+        // Snapshot employé
+        demande.setMatricule(employe.getMatricule());
+        demande.setNom(employe.getNom());
+        demande.setPrenom(employe.getPrenom());
+        demande.setDepartement(employe.getDepartement());
         demande.setNombreJours(computeNombreJours(demande.getDateDebut(), demande.getDateFin()));
         demande.setDateDemande(LocalDate.now());
         if (demande.getStatut() == null) demande.setStatut(StatutDemande.EN_ATTENTE);
@@ -91,8 +97,9 @@ public class DemandeCongeService {
     }
 
     public SoldeCongeDto getSolde(String employeId) {
-        EmployeComplet employe = employeCompletRepository.findById(employeId)
-                .orElseThrow(() -> new ResourceNotFoundException("Employé introuvable : " + employeId));
+        DossierEmploye employe = dossierEmployeRepository.findById(employeId)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Dossier employé introuvable : " + employeId));
 
         int annee = LocalDate.now().getYear();
         LocalDate debut = LocalDate.of(annee, 1, 1);
@@ -116,8 +123,7 @@ public class DemandeCongeService {
                 .matricule(employe.getMatricule())
                 .nom(employe.getNom())
                 .prenom(employe.getPrenom())
-                .departement(employe.getAgence() != null && employe.getAgence().length > 0
-                        ? employe.getAgence()[0] : null)
+                .departement(employe.getDepartement())
                 .anneeReference(annee)
                 .acquis(JOURS_ACQUIS_PAR_AN)
                 .pris(pris)

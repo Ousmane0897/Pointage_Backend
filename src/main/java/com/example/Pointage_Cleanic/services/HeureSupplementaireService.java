@@ -3,9 +3,10 @@ package com.example.Pointage_Cleanic.services;
 import com.example.Pointage_Cleanic.Dto.HeureSupplementaireDto;
 import com.example.Pointage_Cleanic.Enum.StatutValidationHS;
 import com.example.Pointage_Cleanic.Enum.TypeMajoration;
+import com.example.Pointage_Cleanic.entities.DossierEmploye;
 import com.example.Pointage_Cleanic.entities.HeureSupplementaire;
 import com.example.Pointage_Cleanic.exception.ResourceNotFoundException;
-import com.example.Pointage_Cleanic.repositories.EmployeCompletRepository;
+import com.example.Pointage_Cleanic.repositories.DossierEmployeRepository;
 import com.example.Pointage_Cleanic.repositories.HeureSupplementaireRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -27,13 +28,19 @@ public class HeureSupplementaireService {
     );
 
     private final HeureSupplementaireRepository heureSupplementaireRepository;
-    private final EmployeCompletRepository employeCompletRepository;
+    private final DossierEmployeRepository dossierEmployeRepository;
 
     public HeureSupplementaireDto create(HeureSupplementaireDto dto) {
-        employeCompletRepository.findById(dto.getEmployeId())
-                .orElseThrow(() -> new ResourceNotFoundException("Employé introuvable : " + dto.getEmployeId()));
+        DossierEmploye employe = dossierEmployeRepository.findById(dto.getEmployeId())
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Dossier employé introuvable : " + dto.getEmployeId()));
 
         HeureSupplementaire hs = toEntity(dto);
+        // Snapshot employé
+        hs.setMatricule(employe.getMatricule());
+        hs.setNom(employe.getNom());
+        hs.setPrenom(employe.getPrenom());
+        hs.setDepartement(employe.getDepartement());
         hs.setDateDeclaration(LocalDate.now());
         if (hs.getStatut() == null) hs.setStatut(StatutValidationHS.EN_ATTENTE);
 
