@@ -76,9 +76,11 @@ Things that only make sense after reading several files:
 | `/api/dashboard`, `/api/dashboard_par_agence` | DashboardController, DashboardParAgence |
 | `/ws` | STOMP endpoint |
 | **— RH 6.1 —** | |
-| `/api/contrats`, `/api/periodes-essai` | ContratController, PeriodeEssaiController |
-| `/api/organigramme` | OrganigrammeController |
-| `/api/rh-employes` | RhEmployeController |
+| `/api/dossier-employe` | DossierEmployeController (source de vérité RH depuis 2026-04) |
+| `/api/contrats` | ContratController (multipart, fichier PDF inline) |
+| `/api/periodes-essai` | PeriodeEssaiController (legacy, sur EmployeComplet) |
+| `/api/organigramme` | OrganigrammeController (legacy, sur EmployeComplet) |
+| `/api/rh-employes`, `/api/employes` | RhEmployeController (legacy, sur EmployeComplet) |
 | **— RH 6.2 —** | |
 | `/api/pointage-centralise` | PointageCentraliseController |
 | `/api/rh-absences`, `/api/conges` | RhAbsenceController, DemandeCongeController |
@@ -118,7 +120,7 @@ Les 4 sous-modules RH sont livrés. Le frontend Angular (repo séparé) consomme
 
 | Sous-module | Collection(s) |
 | --- | --- |
-| 6.1 Personnel | `employes`, `employes_complet`, `contrats` |
+| 6.1 Personnel | `dossiers_employes` (source de vérité RH), `contrats`. `employes` + `employes_complet` restent pour le pointage mobile/legacy. |
 | 6.2 Temps & Présences | `rh_absences`, `conges`, `heures_supplementaires` (réutilise aussi `pointages` pré-RH) |
 | 6.3 Paie | `categories_professionnelles`, `bulletins_paie`, `declarations_sociales`, `parametres_paie` |
 | 6.4 Développement RH | `formations`, `sessions_formation`, `participations_formation`, `evaluations_formation`, `besoins_formation`, `grilles_evaluation`, `evaluations_periodiques`, `sanctions` |
@@ -127,7 +129,7 @@ Les 4 sous-modules RH sont livrés. Le frontend Angular (repo séparé) consomme
 
 | Sous-module | Services |
 | --- | --- |
-| 6.1 | `EmployeServices`, `EmployeCompletService`, `ContratService`, `OrganigrammeService`, `PeriodeEssaiService`, `RhEmployeService` |
+| 6.1 | `DossierEmployeService` (CRUD RH, source de vérité), `ContratService` (multipart + fichier PDF). `EmployeServices`, `EmployeCompletService`, `OrganigrammeService`, `PeriodeEssaiService`, `RhEmployeService` subsistent pour le pointage mobile / legacy. |
 | 6.2 | `PointageCentraliseService`, `RhAbsenceService`, `DemandeCongeService`, `HeureSupplementaireService`, `RecapitulatifMensuelService` |
 | 6.3 | `CategorieProfessionnelleService`, `BulletinPaieService`, `CalculPaieService` (moteur de paie : IPRES/CSS/AT-MP/TRIMF/IR), `DeclarationSocialeService`, `ParametresPaieService` |
 | 6.4 | `FormationService`, `EvaluationPeriodiqueService`, `SanctionService`, `BesoinFormationService`, `TableauBordRhService` |
@@ -138,9 +140,10 @@ Voir la table « Controller URL map » ci-dessus, sections RH 6.1 à 6.4.
 
 #### Points d'implémentation à connaître
 
-- **`TableauBordRhService` agrège en parallèle** via `CompletableFuture.supplyAsync` plutôt qu'un `$lookup` géant — les collections sources n'ont pas de clé de jointure commune, chaque KPI reste testable isolément.
+- **Principe d'indépendance du module RH** (depuis 2026-04) : les services RH — `ContratService`, `RhAbsenceService`, `DemandeCongeService`, `HeureSupplementaireService`, `BesoinFormationService`, `SanctionService`, `EvaluationPeriodiqueService`, `FormationService` (addParticipant), `TableauBordRhService` (KPIs effectif/turnover/répartitions) — valident et dénormalisent depuis `DossierEmployeRepository` ; ne plus les brancher sur `EmployeCompletRepository`. **Exceptions maintenues** : `PointageCentraliseService`, `RecapitulatifMensuelService` et `CalculPaieService` utilisent encore `EmployeComplet` car ils font la jointure avec `Pointage` via `agentId`/`codeSecret` et lisent `heureDebut` pour le calcul des retards.
+- **`TableauBordRhService` agrège en parallèle** via `CompletableFuture.supplyAsync` plutôt qu'un `$lookup` géant — les collections sources n'ont pas de clé de jointure commune, chaque KPI reste testable isolément. `calculerPersonnel` lit `DossierEmploye` ; `calculerTempsPresence` passe par `PointageCentraliseService`.
 - **Source de vérité pour les présences/retards** : `PointageCentraliseService` (6.2) — parse `HH:mm` de `EmployeComplet.heureDebut` vs `Pointage.heureArrive` pour calculer `retardMinutes`. Ne pas réimplémenter ailleurs.
-- **Département côté `EmployeComplet`** : utiliser `agence[0]` (tableau de sites/agences). Le champ `poste` n'est pas un département. Les collections RH plus récentes (`Sanction`, `RhAbsence`, `DemandeConge`, `EvaluationPeriodique`, `BulletinPaie`) portent un vrai `departement` dénormalisé.
+- **Département** : sur `DossierEmploye` c'est un champ de 1er niveau. Côté `EmployeComplet` legacy on utilise `agence[0]`. Les collections RH récentes (`Sanction`, `RhAbsence`, `DemandeConge`, `EvaluationPeriodique`, `BulletinPaie`) portent un vrai `departement` dénormalisé.
 - **Récidive disciplinaire** : `SanctionService.estRecidiviste(employeId, type, dateRef)` via `countByEmployeIdAndTypeAndDateSanctionBetween` sur 12 mois glissants, seuil ≥ 2. `alertesRecidive()` élargit à tous types confondus.
 - **Workflow évaluation périodique** : `BROUILLON → AUTO_EVALUATION → EVALUATION_MANAGER → VALIDE`. La note globale est la moyenne pondérée `Σ(note×poids)/Σpoids` selon la `GrilleEvaluation` référencée ; mapping alphabétique A≥4.5, B≥3.5, C≥2.5, sinon D. À la validation, les `BesoinFormation` portés par la `ValidationEvaluationRequest` sont créés automatiquement (`source=EVALUATION`).
 - **Procédure disciplinaire sénégalaise** : `Sanction.dureeMiseAPied` plafonnée à 8 jours (Code du Travail), délai de respect calculé automatiquement entre `dateConvocation` et `dateEntretien`.
@@ -150,26 +153,64 @@ Voir la table « Controller URL map » ci-dessus, sections RH 6.1 à 6.4.
 
 Endpoints livrés :
 
-- Dossier employé : CRUD `/api/employes`, `/api/employe-complet` (avec photo et contrat PDF en multipart)
-- Contrats : CRUD `/api/contrats`, GET `/api/contrats/alertes-echeance`
-- Organigramme : GET `/api/organigramme?departement=`, GET `/api/organigramme/arbre`
-- Période d'essai : GET `/api/periodes-essai/alertes`, PUT `/api/periodes-essai/{id}/titulariser`
-- Documents employé : upload du contrat PDF inline (`POST /api/employe-complet/employe` part `contrat`, GET/DELETE `/api/employe-complet/{id}/contrat`)
+- **Dossier employé RH (nouvelle source de vérité, depuis 2026-04)** :
+  CRUD multipart `/api/dossier-employe` (part JSON `dossier` + `photo` optionnelle).
+  Champs : matricule (unique), identité (nom, prénom, genre HOMME/FEMME, dateNaissance,
+  nationalité, numeroIdentification, situationMatrimoniale CELIBATAIRE/MARIE,
+  nombreEnfants conditionnel), poste, département, siteAffecte, dateEntrée,
+  statut `ACTIF | EN_PERIODE_ESSAI | SUSPENDU | SORTI`, superieurHierarchiqueId/Nom,
+  dureeEssaiMois (stocké uniquement si statut=EN_PERIODE_ESSAI, remis à null à la
+  titularisation), contacts (tél, email, adresse), contactUrgence (sous-doc
+  {nom, lienParente, telephone}), photo (byte[]). Champs paie techniques
+  (categorieCode, numeroIpres, numeroCss, rib, banque) également portés sur l'entité.
+  Endpoints additionnels : `GET /{id}/photo` (permitAll), `PUT /{id}/statut`,
+  `PUT /{id}/titulariser`, `GET /alertes-essai`.
+- **Contrats** : CRUD multipart `/api/contrats` (part JSON `contrat` + `fichier` optionnel).
+  `Contrat.fichierContrat` (byte[]) + `fichierContratNom` + `fichierContratMimeType`.
+  Nouveaux endpoints `GET /api/contrats/{id}/fichier` (télécharge le PDF),
+  `DELETE /api/contrats/{id}/fichier`. GET `/api/contrats/alertes-echeance`.
+  `ContratService` valide désormais l'employé via `DossierEmployeRepository`.
+  `TypeContratRh` : **ALTERNANCE remplacé par PRESTATION** ({CDI, CDD, STAGE, PRESTATION}).
+  `ContratAlternanceMigrationRunner` (CommandLineRunner, `@Order(1000)`) migre
+  les documents existants au démarrage via `mongoTemplate.updateMulti` — idempotent.
+- **Legacy / coexistence** : CRUD `/api/employe-complet` (EmployeComplet, photo + contrat PDF),
+  `/api/employes` et `/api/rh-employes` (RhEmployeController sur EmployeComplet),
+  `/api/organigramme`, `/api/periodes-essai` restent en fonction pour le pointage
+  mobile et les flux legacy.
 
 ### 6.2 Temps & Présences — ✅ Terminé
 
 - Pointage centralisé : GET `/api/pointage-centralise?date=&departement=&site=&statut=&q=&page=&size=`, GET `/api/pointage-centralise/resume?date=`
-- Absences : CRUD `/api/rh-absences`, POST `/api/rh-absences/{id}/justificatif` (upload)
-- Congés : CRUD `/api/conges`, PUT `/api/conges/{id}/approuver`, PUT `/api/conges/{id}/refuser`, GET `/api/conges/solde/{employeId}`
-- Heures supplémentaires : CRUD `/api/heures-supplementaires`, PUT `/api/heures-supplementaires/{id}/valider`
-- Récapitulatif mensuel : GET `/api/recapitulatif-mensuel?mois=&annee=&departement=`, exports Excel/PDF
+- **Absences** : CRUD `/api/rh-absences`, POST `/api/rh-absences/{id}/justificatif` (upload).
+  Champ `typeAutrePrecision` obligatoire quand `type=AUTRE` (validation dans
+  `RhAbsenceService.validerCoherenceType` → 400 `VALIDATION_ERROR` via le nouveau
+  handler `IllegalArgumentException`). Nettoyage à null si `type != AUTRE` pour
+  éviter les résidus incohérents. Validation employé via `DossierEmployeRepository`.
+- Congés : CRUD `/api/conges`, PUT `/api/conges/{id}/approuver`, PUT `/api/conges/{id}/refuser`, GET `/api/conges/solde/{employeId}`. Validation employé via `DossierEmployeRepository`.
+- Heures supplémentaires : CRUD `/api/heures-supplementaires`, PUT `/api/heures-supplementaires/{id}/valider`. Validation employé via `DossierEmployeRepository`.
+- Récapitulatif mensuel : GET `/api/recapitulatif-mensuel?mois=&annee=&departement=`, exports Excel/PDF. Reste sur `EmployeComplet` (jointure Pointage).
 
 ### 6.3 Paie — ✅ Terminé
 
-- Grille salariale (catégories professionnelles) : CRUD `/api/grille-salariale`
-- Bulletin de paie : POST `/api/bulletins-paie/calculer`, CRUD `/api/bulletins-paie`, workflow `/valider` `/payer` `/annuler`, GET `/{id}/pdf`, GET `/historique?employeId=&annee=`
-- Déclarations sociales : GET `/api/declarations-sociales/ipres?periode=`, GET `/api/declarations-sociales/css?periode=`, exports PDF/Excel, PUT `/{id}/transmettre`
-- Paramètres de paie : GET/PUT `/api/parametres-paie` (taux IPRES/CSS/AT-MP/TRIMF et barème IR — stockés en Mongo, pas en dur)
+- **Grille salariale** (catégories professionnelles) : CRUD `/api/grille-salariale`.
+  `CategorieProfessionnelle` porte désormais 3 listes embedded supplémentaires
+  (spec frontend 2026-04) : `prets` (`{libelle, montant, dureeMois}`),
+  `avancesSurSalaire` (idem), `retenues` (`{libelle, montant}` sans durée).
+  Ces rubriques sont des retenues personnelles qui **diminuent le net POST-cotisations**
+  — elles n'impactent **pas** les assiettes IPRES/CSS/IR (restent sur le brut).
+- **Bulletin de paie** : POST `/api/bulletins-paie/calculer`, CRUD `/api/bulletins-paie`,
+  workflow `/valider` `/payer` `/annuler`, GET `/{id}/pdf`, GET `/historique?employeId=&annee=`.
+  `CalculPaieService` expose 3 méthodes publiques testables :
+  `calculerTotalPrets(List<PretCategorie>)`, `calculerTotalAvances(...)`,
+  `calculerTotalRetenues(...)`. Formule du net :
+  `netAPayer = brut - totalCotisSalariales - IR - TRIMF - totalPrets - totalAvances - totalRetenues`.
+  `BulletinPaie` snapshot les rubriques appliquées (`pretsAppliques`,
+  `avancesAppliquees`, `retenuesAppliquees`, `totalPrets/Avances/Retenues`) pour
+  traçabilité — une modification ultérieure de la grille n'affecte pas les bulletins
+  déjà générés. Le PDF (OpenPDF) affiche une **section conditionnelle « Retenues
+  personnelles »** uniquement si au moins une rubrique est présente.
+- Déclarations sociales : GET `/api/declarations-sociales/ipres?periode=`, GET `/api/declarations-sociales/css?periode=`, exports PDF/Excel, PUT `/{id}/transmettre`. **Aucun impact** des nouvelles retenues (agrégation somme `totalCotisationsSalariales` et `totalCotisationsPatronales` des bulletins, tous deux calculés sur le brut).
+- Paramètres de paie : GET/PUT `/api/parametres-paie` (taux IPRES/CSS/AT-MP/TRIMF et barème IR — stockés en Mongo, pas en dur).
 
 ### 6.4 Développement RH — ✅ Terminé
 
@@ -194,3 +235,9 @@ Déviations par rapport à la spec initiale du frontend :
 - Taux de cotisation (IPRES, CSS, IR) dans un fichier de configuration
   ou une collection MongoDB dédiée, pas en dur dans le code
 - Réponses API en JSON, pagination avec `page` et `size` pour les listes
+- **Gestion des erreurs de validation métier** : lever `IllegalArgumentException`
+  avec un message explicite ; `GlobalExceptionHandler` renvoie
+  `400 VALIDATION_ERROR` automatiquement. `ResourceNotFoundException` →
+  404 NOT_FOUND. `EmployeAlreadyExistsException` → 409 CONFLICT.
+- **Multipart** : config globale `spring.servlet.multipart.max-file-size: 10MB`,
+  `max-request-size: 15MB` (PDF de contrat peuvent dépasser le défaut 1MB Spring).
