@@ -22,7 +22,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * Tests HTTP de l'endpoint POST /api/dossier-employe/bulk.
+ * Tests HTTP de l'endpoint POST /api/gestion-personnel/employes/bulk.
  * Vérifie le mapping des codes 200 / 207 / 400 / 422 selon le rapport renvoyé
  * par le service (lui-même mocké).
  */
@@ -56,7 +56,7 @@ class DossierEmployeBulkImportControllerTest {
                 .thenReturn(new DossierEmployeBulkImportResponse(
                         2, 2, 0, List.of("id-1", "id-2"), List.of()));
 
-        mockMvc.perform(post("/api/dossier-employe/bulk")
+        mockMvc.perform(post("/api/gestion-personnel/employes/bulk")
                         .contentType("application/json")
                         .content(PAYLOAD_DEUX_LIGNES))
                 .andExpect(status().isOk())
@@ -73,7 +73,7 @@ class DossierEmployeBulkImportControllerTest {
                                 1, "M002", "nom", "CHAMP_OBLIGATOIRE",
                                 "Le champ nom est obligatoire"))));
 
-        mockMvc.perform(post("/api/dossier-employe/bulk")
+        mockMvc.perform(post("/api/gestion-personnel/employes/bulk")
                         .contentType("application/json")
                         .content(PAYLOAD_DEUX_LIGNES))
                 .andExpect(status().isUnprocessableEntity())
@@ -92,7 +92,7 @@ class DossierEmployeBulkImportControllerTest {
 
         String payload = PAYLOAD_DEUX_LIGNES.replace("TOUT_OU_RIEN", "IMPORTER_LIGNES_VALIDES");
 
-        mockMvc.perform(post("/api/dossier-employe/bulk")
+        mockMvc.perform(post("/api/gestion-personnel/employes/bulk")
                         .contentType("application/json")
                         .content(payload))
                 .andExpect(status().isMultiStatus())
@@ -109,7 +109,7 @@ class DossierEmployeBulkImportControllerTest {
                 {"strategieErreurs":"TOUT_OU_RIEN","employes":[]}
                 """;
 
-        mockMvc.perform(post("/api/dossier-employe/bulk")
+        mockMvc.perform(post("/api/gestion-personnel/employes/bulk")
                         .contentType("application/json")
                         .content(payload))
                 .andExpect(status().isBadRequest())
@@ -121,7 +121,7 @@ class DossierEmployeBulkImportControllerTest {
         Mockito.when(service.importBulk(ArgumentMatchers.any(), ArgumentMatchers.any()))
                 .thenThrow(new IllegalArgumentException("Taille du batch supérieure à la limite autorisée : 1001 > 1000"));
 
-        mockMvc.perform(post("/api/dossier-employe/bulk")
+        mockMvc.perform(post("/api/gestion-personnel/employes/bulk")
                         .contentType("application/json")
                         .content(PAYLOAD_DEUX_LIGNES))
                 .andExpect(status().isBadRequest())

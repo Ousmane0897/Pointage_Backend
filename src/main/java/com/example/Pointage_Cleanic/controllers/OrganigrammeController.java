@@ -10,20 +10,20 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/organigramme")
+@RequestMapping("/api/gestion-personnel/organigramme")
 @RequiredArgsConstructor
 public class OrganigrammeController {
 
     private final OrganigrammeService organigrammeService;
 
-    @GetMapping
+    @GetMapping("/departements")
     public ResponseEntity<List<OrganigrammeNodeDto>> getOrganigramme(
             @RequestParam(defaultValue = "") String departement
     ) {
         return ResponseEntity.ok(organigrammeService.getOrganigramme(departement));
     }
 
-    @GetMapping("/arbre")
+    @GetMapping
     public ResponseEntity<List<OrganigrammeArbreDto>> getArbre() {
         return ResponseEntity.ok(organigrammeService.getArbre());
     }

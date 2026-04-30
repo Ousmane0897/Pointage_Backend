@@ -5,6 +5,7 @@ import com.example.Pointage_Cleanic.Dto.AlerteContratDto;
 import com.example.Pointage_Cleanic.Dto.ContratDto;
 import com.example.Pointage_Cleanic.Dto.RenouvellerContratRequest;
 import com.example.Pointage_Cleanic.Enum.StatutContrat;
+import com.example.Pointage_Cleanic.Enum.TypeContratRh;
 import com.example.Pointage_Cleanic.Mapper.ContratMapper;
 import com.example.Pointage_Cleanic.entities.Avenant;
 import com.example.Pointage_Cleanic.entities.Contrat;
@@ -14,15 +15,24 @@ import com.example.Pointage_Cleanic.exception.ResourceNotFoundException;
 import com.example.Pointage_Cleanic.repositories.ContratRepository;
 import com.example.Pointage_Cleanic.repositories.DossierEmployeRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.query.Criteria;
+import org.springframework.data.mongodb.core.query.Query;
+import org.springframework.data.support.PageableExecutionUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 @Service
@@ -32,6 +42,8 @@ public class ContratService {
     private final ContratRepository contratRepository;
     private final DossierEmployeRepository dossierEmployeRepository;
     private final ContratMapper contratMapper;
+    private final MongoTemplate mongoTemplate;
+    private final PeriodeEssaiService periodeEssaiService;
 
     public ContratDto create(ContratDto dto, MultipartFile fichier) throws IOException {
         DossierEmploye employe = dossierEmployeRepository.findById(dto.getEmployeId())
@@ -50,17 +62,71 @@ public class ContratService {
 
         applyFichier(contrat, fichier);
 
-        return toDto(contratRepository.save(contrat));
+        Contrat saved = contratRepository.save(contrat);
+
+        Integer dureeEssaiMois = resoudreDureeEssaiMois(saved, employe);
+        if (dureeEssaiMois != null && dureeEssaiMois > 0) {
+            periodeEssaiService.seedFromContrat(saved, dureeEssaiMois);
+        }
+
+        return toDto(saved);
+    }
+
+    /**
+     * Détermine la durée d'essai (en mois) à appliquer à la création d'un contrat.
+     * Priorité au champ explicite {@code Contrat.dureeEssaiMois} (si l'API
+     * cliente le fournit en override) ; sinon, dérivation depuis
+     * {@code DossierEmploye.dureeEssaiMois} quand l'employé est en
+     * {@code EN_PERIODE_ESSAI}. La conversion en jours calendaires
+     * (via {@code plusMonths}) est faite dans
+     * {@link PeriodeEssaiService#seedFromContrat}.
+     * Le frontend Angular {@code Contrat} n'expose pas {@code dureeEssaiMois}
+     * pour l'instant : c'est donc la branche dérivation qui est empruntée par
+     * défaut.
+     */
+    private Integer resoudreDureeEssaiMois(Contrat contrat, DossierEmploye employe) {
+        if (contrat.getDureeEssaiMois() != null && contrat.getDureeEssaiMois() > 0) {
+            return contrat.getDureeEssaiMois();
+        }
+        if (employe.getStatut() != com.example.Pointage_Cleanic.Enum.StatutDossierEmploye.EN_PERIODE_ESSAI) {
+            return null;
+        }
+        if (employe.getDureeEssaiMois() == null || employe.getDureeEssaiMois() <= 0) {
+            return null;
+        }
+        return employe.getDureeEssaiMois();
     }
 
     public ContratDto getById(String id) {
         return toDto(requireById(id));
     }
 
-    public List<ContratDto> getAll() {
-        return contratRepository.findAll().stream()
-                .map(this::toDto)
-                .collect(Collectors.toList());
+    public Page<ContratDto> list(int page, int size, String q, String typeContrat) {
+        Pageable pageable = PageRequest.of(page, size);
+        List<Criteria> criterias = new ArrayList<>();
+
+        if (q != null && !q.isBlank()) {
+            String escaped = Pattern.quote(q);
+            criterias.add(new Criteria().orOperator(
+                    Criteria.where("employeNom").regex(escaped, "i"),
+                    Criteria.where("employePrenom").regex(escaped, "i"),
+                    Criteria.where("employeId").regex(escaped, "i")
+            ));
+        }
+        if (typeContrat != null && !typeContrat.isBlank()) {
+            criterias.add(Criteria.where("typeContrat").is(TypeContratRh.valueOf(typeContrat)));
+        }
+
+        Query query = new Query();
+        if (!criterias.isEmpty()) {
+            query.addCriteria(new Criteria().andOperator(criterias.toArray(new Criteria[0])));
+        }
+        long total = mongoTemplate.count(Query.of(query).limit(-1).skip(-1), Contrat.class);
+        query.with(pageable);
+        List<Contrat> results = mongoTemplate.find(query, Contrat.class);
+
+        return PageableExecutionUtils.getPage(results, pageable, () -> total)
+                .map(this::toDto);
     }
 
     public List<ContratDto> getByEmployeId(String employeId) {

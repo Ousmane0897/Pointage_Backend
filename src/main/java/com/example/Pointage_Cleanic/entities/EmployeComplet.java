@@ -97,6 +97,7 @@ public class EmployeComplet {
     private String nomComplet; // nom + prenom
 
     public enum PermisConduire {
+
         OUI, NON
     }
 

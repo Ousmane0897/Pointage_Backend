@@ -1,6 +1,6 @@
 package com.example.Pointage_Cleanic.entities;
 
-import com.example.Pointage_Cleanic.Enum.StatutContrat;
+import com.example.Pointage_Cleanic.Enum.StatutPeriodeEssai;
 import com.example.Pointage_Cleanic.Enum.TypeContratRh;
 import com.fasterxml.jackson.annotation.JsonFormat;
 import lombok.*;
@@ -17,8 +17,8 @@ import java.util.List;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-@Document(collection = "contrats")
-public class Contrat {
+@Document(collection = "periodes_essai")
+public class PeriodeEssai {
 
     @Id
     private String id;
@@ -29,6 +29,9 @@ public class Contrat {
     private String employeNom;
     private String employePrenom;
 
+    @Indexed
+    private String contratId;
+
     private TypeContratRh typeContrat;
 
     @JsonFormat(pattern = "yyyy-MM-dd")
@@ -37,20 +40,13 @@ public class Contrat {
     @JsonFormat(pattern = "yyyy-MM-dd")
     private LocalDate dateFin;
 
-    private StatutContrat statut;
-    private String clauses;
-    private Integer joursAvantAlerte;
+    private Integer dureeJours;
 
-    private Integer dureeEssaiMois;
+    private StatutPeriodeEssai statut;
 
     @Builder.Default
-    private List<Renouvellement> renouvellements = new ArrayList<>();
+    private List<AlertePeriodeEssai> alertes = new ArrayList<>();
 
     @Builder.Default
-    private List<Avenant> avenants = new ArrayList<>();
-
-    // Fichier PDF du contrat (optionnel, stocké directement en Mongo)
-    private byte[] fichierContrat;
-    private String fichierContratNom;
-    private String fichierContratMimeType;
+    private List<DecisionPeriodeEssai> decisions = new ArrayList<>();
 }

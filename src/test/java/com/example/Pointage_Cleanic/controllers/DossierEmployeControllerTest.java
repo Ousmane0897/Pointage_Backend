@@ -50,7 +50,7 @@ class DossierEmployeControllerTest {
         Page<DossierEmployeDto> page = new PageImpl<>(List.of(dto), PageRequest.of(0, 10), 1);
         Mockito.when(service.list(0, 10, null, null, null, null, null)).thenReturn(page);
 
-        mockMvc.perform(get("/api/dossier-employe"))
+        mockMvc.perform(get("/api/gestion-personnel/employes"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content[0].matricule").value("M001"));
     }
@@ -62,7 +62,7 @@ class DossierEmployeControllerTest {
                 .build();
         Mockito.when(service.getById("1")).thenReturn(dto);
 
-        mockMvc.perform(get("/api/dossier-employe/1"))
+        mockMvc.perform(get("/api/gestion-personnel/employes/1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.nom").value("DIOP"));
     }
@@ -78,7 +78,7 @@ class DossierEmployeControllerTest {
                 "dossier", "dossier", "application/json",
                 "{\"matricule\":\"M001\",\"nom\":\"DIOP\",\"prenom\":\"Mamadou\"}".getBytes());
 
-        mockMvc.perform(multipart("/api/dossier-employe").file(dossier))
+        mockMvc.perform(multipart("/api/gestion-personnel/employes").file(dossier))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.matricule").value("M001"));
     }
@@ -91,7 +91,7 @@ class DossierEmployeControllerTest {
         Mockito.when(service.updateStatut(ArgumentMatchers.eq("1"), ArgumentMatchers.any()))
                 .thenReturn(updated);
 
-        mockMvc.perform(put("/api/dossier-employe/1/statut")
+        mockMvc.perform(put("/api/gestion-personnel/employes/1/statut")
                         .contentType("application/json")
                         .content("{\"statut\":\"ACTIF\"}"))
                 .andExpect(status().isOk())
@@ -105,7 +105,7 @@ class DossierEmployeControllerTest {
                 .build();
         Mockito.when(service.titulariser("1")).thenReturn(updated);
 
-        mockMvc.perform(put("/api/dossier-employe/1/titulariser"))
+        mockMvc.perform(put("/api/gestion-personnel/employes/1/titulariser"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.statut").value("ACTIF"));
     }
@@ -114,7 +114,7 @@ class DossierEmployeControllerTest {
     void get_photo_not_found_ok() throws Exception {
         Mockito.when(service.getPhoto("1")).thenReturn(null);
 
-        mockMvc.perform(get("/api/dossier-employe/1/photo"))
+        mockMvc.perform(get("/api/gestion-personnel/employes/1/photo"))
                 .andExpect(status().isNotFound());
     }
 
@@ -125,14 +125,14 @@ class DossierEmployeControllerTest {
                 .build();
         Mockito.when(service.getAlertesPeriodeEssai()).thenReturn(List.of(alerte));
 
-        mockMvc.perform(get("/api/dossier-employe/alertes-essai"))
+        mockMvc.perform(get("/api/gestion-personnel/employes/alertes-essai"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].joursRestants").value(10));
     }
 
     @Test
     void delete_ok() throws Exception {
-        mockMvc.perform(delete("/api/dossier-employe/1"))
+        mockMvc.perform(delete("/api/gestion-personnel/employes/1"))
                 .andExpect(status().isNoContent());
     }
 }

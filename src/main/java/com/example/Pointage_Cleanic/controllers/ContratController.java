@@ -1,10 +1,13 @@
 package com.example.Pointage_Cleanic.controllers;
 
 import com.example.Pointage_Cleanic.Dto.*;
+import com.example.Pointage_Cleanic.entities.Avenant;
 import com.example.Pointage_Cleanic.entities.Contrat;
+import com.example.Pointage_Cleanic.entities.Renouvellement;
 import com.example.Pointage_Cleanic.services.ContratService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -15,21 +18,26 @@ import java.io.IOException;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/contrats")
+@RequestMapping("/api/gestion-personnel/contrats")
 @RequiredArgsConstructor
 public class ContratController {
 
     private final ContratService contratService;
     private final ObjectMapper objectMapper;
 
-    @GetMapping("/alertes-echeance")
+    @GetMapping("/alertes")
     public ResponseEntity<List<AlerteContratDto>> getAlertesEcheance() {
         return ResponseEntity.ok(contratService.getAlertesEcheance());
     }
 
     @GetMapping
-    public ResponseEntity<List<ContratDto>> getAll() {
-        return ResponseEntity.ok(contratService.getAll());
+    public ResponseEntity<Page<ContratDto>> list(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(required = false) String q,
+            @RequestParam(required = false) String typeContrat
+    ) {
+        return ResponseEntity.ok(contratService.list(page, size, q, typeContrat));
     }
 
     @GetMapping("/{id}")
@@ -67,12 +75,22 @@ public class ContratController {
         return ResponseEntity.noContent().build();
     }
 
+    @GetMapping("/{id}/renouvellements")
+    public ResponseEntity<List<Renouvellement>> getRenouvellements(@PathVariable String id) {
+        return ResponseEntity.ok(contratService.getById(id).getRenouvellements());
+    }
+
     @PostMapping("/{id}/renouveler")
     public ResponseEntity<ContratDto> renouveler(
             @PathVariable String id,
             @RequestBody RenouvellerContratRequest request
     ) {
         return ResponseEntity.ok(contratService.renouveler(id, request));
+    }
+
+    @GetMapping("/{id}/avenants")
+    public ResponseEntity<List<Avenant>> getAvenants(@PathVariable String id) {
+        return ResponseEntity.ok(contratService.getById(id).getAvenants());
     }
 
     @PostMapping("/{id}/avenants")

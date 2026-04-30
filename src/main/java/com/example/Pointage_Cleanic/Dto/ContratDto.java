@@ -34,6 +34,7 @@ public class ContratDto {
     private StatutContrat statut;
     private String clauses;
     private Integer joursAvantAlerte;
+    private Integer dureeEssaiMois;
     private List<Renouvellement> renouvellements;
     private List<Avenant> avenants;
 

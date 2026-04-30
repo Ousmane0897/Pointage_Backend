@@ -9,6 +9,7 @@ import com.example.Pointage_Cleanic.Dto.DossierEmployeImportError;
 import com.example.Pointage_Cleanic.Dto.DossierEmployeStatutRequest;
 import com.example.Pointage_Cleanic.Enum.SituationMatrimoniale;
 import com.example.Pointage_Cleanic.Enum.StatutDossierEmploye;
+import com.example.Pointage_Cleanic.Enum.StatutPeriodeEssai;
 import com.example.Pointage_Cleanic.Enum.StrategieErreursImport;
 import com.example.Pointage_Cleanic.Mapper.DossierEmployeMapper;
 import com.example.Pointage_Cleanic.entities.DossierEmploye;
@@ -28,6 +29,8 @@ import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.data.support.PageableExecutionUtils;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -53,9 +56,13 @@ public class DossierEmployeService {
     private final DossierEmployeRepository dossierEmployeRepository;
     private final DossierEmployeMapper mapper;
     private final MongoTemplate mongoTemplate;
+    private final PeriodeEssaiService periodeEssaiService;
 
     @Value("${rh.import.bulk.max-size:1000}")
     private int bulkMaxSize;
+
+    private static final String COMMENTAIRE_TRANSITION_AUTO =
+            "Transition automatique depuis dossier employé";
 
     public Page<DossierEmployeDto> list(int page, int size, String q, String departement,
                                         String site, String poste, String statut) {
@@ -118,11 +125,13 @@ public class DossierEmployeService {
         }
 
         DossierEmploye saved = dossierEmployeRepository.save(entity);
+        seedPeriodeEssaiSafe(saved);
         return toDtoWithUrl(saved);
     }
 
     public DossierEmployeDto update(String id, DossierEmployeDto dto, MultipartFile photo) throws IOException {
         DossierEmploye existing = requireById(id);
+        StatutDossierEmploye ancienStatut = existing.getStatut();
 
         if (dto.getMatricule() != null && !dto.getMatricule().equals(existing.getMatricule())
                 && dossierEmployeRepository.existsByMatricule(dto.getMatricule())) {
@@ -139,7 +148,9 @@ public class DossierEmployeService {
             existing.setPhoto(photo.getBytes());
         }
 
-        return toDtoWithUrl(dossierEmployeRepository.save(existing));
+        DossierEmploye saved = dossierEmployeRepository.save(existing);
+        synchroniserPeriodeEssaiSafe(saved, ancienStatut);
+        return toDtoWithUrl(saved);
     }
 
     public void delete(String id) {
@@ -149,6 +160,7 @@ public class DossierEmployeService {
 
     public DossierEmployeDto updateStatut(String id, DossierEmployeStatutRequest request) {
         DossierEmploye existing = requireById(id);
+        StatutDossierEmploye ancienStatut = existing.getStatut();
 
         existing.setStatut(request.getStatut());
         if (request.getStatut() == StatutDossierEmploye.EN_PERIODE_ESSAI) {
@@ -160,14 +172,19 @@ public class DossierEmployeService {
             existing.setDureeEssaiMois(null);
         }
 
-        return toDtoWithUrl(dossierEmployeRepository.save(existing));
+        DossierEmploye saved = dossierEmployeRepository.save(existing);
+        synchroniserPeriodeEssaiSafe(saved, ancienStatut);
+        return toDtoWithUrl(saved);
     }
 
     public DossierEmployeDto titulariser(String id) {
         DossierEmploye existing = requireById(id);
+        StatutDossierEmploye ancienStatut = existing.getStatut();
         existing.setStatut(StatutDossierEmploye.ACTIF);
         existing.setDureeEssaiMois(null);
-        return toDtoWithUrl(dossierEmployeRepository.save(existing));
+        DossierEmploye saved = dossierEmployeRepository.save(existing);
+        synchroniserPeriodeEssaiSafe(saved, ancienStatut);
+        return toDtoWithUrl(saved);
     }
 
     public byte[] getPhoto(String id) {
@@ -392,6 +409,15 @@ public class DossierEmployeService {
                     idsDejaInseres, ex);
         }
 
+        // Auto-création des PeriodeEssai pour les employés EN_PERIODE_ESSAI
+        // insérés dans ce batch. Les erreurs ne cassent pas l'import : l'employé
+        // est déjà persisté, seul le seed peut louper et sera repris au prochain
+        // démarrage par PeriodeEssaiBackfillRunner.
+        for (String idInsere : insertedIds) {
+            dossierEmployeRepository.findById(idInsere)
+                    .ifPresent(this::seedPeriodeEssaiSafe);
+        }
+
         long durationMs = System.currentTimeMillis() - t0;
         log.info("Import bulk RH terminé : total={}, inserted={}, failed={}, durée={}ms, user={}",
                 total, insertedIds.size(), allErrors.size(), durationMs, userEmail);
@@ -404,13 +430,61 @@ public class DossierEmployeService {
                 total, insertedIds.size(), allErrors.size(), insertedIds, allErrors);
     }
 
+    // =========================================================================
+    //  Synchronisation PeriodeEssai (auto-création / auto-clôture)
+    // =========================================================================
+
+    private void seedPeriodeEssaiSafe(DossierEmploye dossier) {
+        try {
+            periodeEssaiService.seedFromDossier(dossier);
+        } catch (RuntimeException ex) {
+            log.warn("Auto-création PeriodeEssai échouée pour employé {} : {}",
+                    dossier.getId(), ex.getMessage());
+        }
+    }
+
+    /**
+     * Synchronise la PeriodeEssai active selon la transition de statut côté
+     * DossierEmploye. À utiliser après tout save qui peut faire entrer ou
+     * sortir l'employé du statut EN_PERIODE_ESSAI.
+     */
+    private void synchroniserPeriodeEssaiSafe(
+            DossierEmploye saved, StatutDossierEmploye ancienStatut) {
+        try {
+            if (saved.getStatut() == StatutDossierEmploye.EN_PERIODE_ESSAI) {
+                periodeEssaiService.seedFromDossier(saved);
+                return;
+            }
+            if (ancienStatut == StatutDossierEmploye.EN_PERIODE_ESSAI) {
+                StatutPeriodeEssai cible = mapStatutSortantVersCible(saved.getStatut());
+                if (cible != null) {
+                    periodeEssaiService.applyTransitionStatutForEmploye(
+                            saved.getId(), cible, currentUserName(), COMMENTAIRE_TRANSITION_AUTO);
+                }
+            }
+        } catch (RuntimeException ex) {
+            log.warn("Synchronisation PeriodeEssai échouée pour employé {} : {}",
+                    saved.getId(), ex.getMessage());
+        }
+    }
+
+    private StatutPeriodeEssai mapStatutSortantVersCible(StatutDossierEmploye nouveauStatut) {
+        if (nouveauStatut == null) return null;
+        return switch (nouveauStatut) {
+            case ACTIF -> StatutPeriodeEssai.TITULARISE;
+            case SUSPENDU, SORTI -> StatutPeriodeEssai.NON_RENOUVELE;
+            case EN_PERIODE_ESSAI -> null;
+        };
+    }
+
+    private String currentUserName() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        return auth != null ? auth.getName() : "system";
+    }
+
     private void validerGardeFousRequete(DossierEmployeBulkImportRequest request) {
         if (request == null) {
             throw new IllegalArgumentException("La requête d'import est obligatoire");
-        }
-        if (request.strategieErreurs() == null) {
-            throw new IllegalArgumentException(
-                    "strategieErreurs est obligatoire (TOUT_OU_RIEN ou IMPORTER_LIGNES_VALIDES)");
         }
         if (request.employes() == null || request.employes().isEmpty()) {
             throw new IllegalArgumentException("Le batch d'import ne peut pas être vide");

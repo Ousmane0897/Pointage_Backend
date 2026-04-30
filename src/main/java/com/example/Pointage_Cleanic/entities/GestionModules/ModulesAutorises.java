@@ -21,6 +21,7 @@ public class ModulesAutorises {
     private boolean JourFeries;
     private boolean Employes;
     private boolean Agences;
+    private boolean RH;
 
     private CollecteLivraison CollecteLivraison;
     private Absences Absences;

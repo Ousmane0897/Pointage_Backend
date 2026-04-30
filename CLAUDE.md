@@ -51,7 +51,7 @@ Things that only make sense after reading several files:
 
 - **Two parallel user models coexist.** `User` (collection used by `LoginRepository` + `DataLoader` bootstrap superadmin `diarra.niang@cleanicsenegal.com`) and `Utilisateur` (richer admin entity with `RoleAdmin`, `ModulesAutorises`, activation flags). `MyUserDetailsService` bridges them for Spring Security. Don't collapse them without understanding which flows use which.
 
-- **Module-based authorization.** `Utilisateur.modulesAutorises: ModulesAutorises` is a per-user feature-flag object (booleans for top-level modules + nested sub-module objects under `entities/GestionModules/SousModules/`). Route-level authorization in `SecurityConfig` is coarse (`.authenticated()`); fine-grained gating is enforced in service/controller logic against this object.
+- **Module-based authorization.** `Utilisateur.modulesAutorises: ModulesAutorises` is a per-user feature-flag object (booleans for top-level modules + nested sub-module objects under `entities/GestionModules/SousModules/`). Route-level authorization in `SecurityConfig` is coarse (`.authenticated()`); fine-grained gating is **delegated to the Angular frontend** which reads `ModulesAutorises` from the JWT/`AuthResponse2` to show/hide screens — there are **no `@PreAuthorize`/`@Secured` annotations** on the backend. Top-level flags include `Dashboard, Admin, StatistiquesAgences, Planifications, Calendrier, JourFeries, Employes, Agences, RH`; sub-modules `CollecteLivraison, Absences, Pointages, Stock` carry nested booleans. The `RH` flag (added 2026-04-30) gates the entire RH module 6.1–6.4. `RoleAdmin.RH` exists in the enum but is just a profile tag — without `ModulesAutorises.RH=true`, the RH screens stay hidden.
 
 - **WebSockets (STOMP over SockJS) are a first-class channel**, not an afterthought. `WebSocketConfig` exposes `/ws`, broadcast prefixes `/topic` + `/queue`, client-to-server prefix `/app`. Used for the admin ↔ superadmin cancel/validate workflow (see `Dto/AnnulationRequestMessage.java`, `Dto/AnnulationDecisionMessage.java`, `Dto/CancelRequestDto.java`, `Dto/ValidationRequestDto.java`). `/ws/**` is permitAll but `/ws/info` requires auth — mirror that pattern for new endpoints.
 
@@ -76,9 +76,10 @@ Things that only make sense after reading several files:
 | `/api/dashboard`, `/api/dashboard_par_agence` | DashboardController, DashboardParAgence |
 | `/ws` | STOMP endpoint |
 | **— RH 6.1 —** | |
-| `/api/dossier-employe` | DossierEmployeController (source de vérité RH depuis 2026-04) |
+| `/api/gestion-personnel/employes` | DossierEmployeController (source de vérité RH depuis 2026-04) |
 | `/api/contrats` | ContratController (multipart, fichier PDF inline) |
-| `/api/periodes-essai` | PeriodeEssaiController (legacy, sur EmployeComplet) |
+| `/api/gestion-personnel/periodes-essai` | PeriodeEssaiController (sur PeriodeEssai, source de vérité depuis 2026-04-29) |
+| `/api/gestion-personnel/documents` | DocumentEmployeController (pièces administratives génériques + workflow validation) |
 | `/api/organigramme` | OrganigrammeController (legacy, sur EmployeComplet) |
 | `/api/rh-employes`, `/api/employes` | RhEmployeController (legacy, sur EmployeComplet) |
 | **— RH 6.2 —** | |
@@ -120,7 +121,7 @@ Les 4 sous-modules RH sont livrés. Le frontend Angular (repo séparé) consomme
 
 | Sous-module | Collection(s) |
 | --- | --- |
-| 6.1 Personnel | `dossiers_employes` (source de vérité RH), `contrats`. `employes` + `employes_complet` restent pour le pointage mobile/legacy. |
+| 6.1 Personnel | `dossiers_employes` (source de vérité RH), `contrats`, `periodes_essai`, `demandes_validation_periode_essai`, `documents_employes`. `employes` + `employes_complet` restent pour le pointage mobile/legacy. |
 | 6.2 Temps & Présences | `rh_absences`, `conges`, `heures_supplementaires` (réutilise aussi `pointages` pré-RH) |
 | 6.3 Paie | `categories_professionnelles`, `bulletins_paie`, `declarations_sociales`, `parametres_paie` |
 | 6.4 Développement RH | `formations`, `sessions_formation`, `participations_formation`, `evaluations_formation`, `besoins_formation`, `grilles_evaluation`, `evaluations_periodiques`, `sanctions` |
@@ -129,7 +130,7 @@ Les 4 sous-modules RH sont livrés. Le frontend Angular (repo séparé) consomme
 
 | Sous-module | Services |
 | --- | --- |
-| 6.1 | `DossierEmployeService` (CRUD RH, source de vérité), `ContratService` (multipart + fichier PDF). `EmployeServices`, `EmployeCompletService`, `OrganigrammeService`, `PeriodeEssaiService`, `RhEmployeService` subsistent pour le pointage mobile / legacy. |
+| 6.1 | `DossierEmployeService` (CRUD RH, source de vérité), `ContratService` (multipart + fichier PDF), `PeriodeEssaiService` + `DemandeValidationPeriodeEssaiService` (workflow Manager → RH → Confirmation), `DocumentEmployeService` (pièces administratives + workflow validation). `EmployeServices`, `EmployeCompletService`, `OrganigrammeService`, `RhEmployeService` subsistent pour le pointage mobile / legacy. |
 | 6.2 | `PointageCentraliseService`, `RhAbsenceService`, `DemandeCongeService`, `HeureSupplementaireService`, `RecapitulatifMensuelService` |
 | 6.3 | `CategorieProfessionnelleService`, `BulletinPaieService`, `CalculPaieService` (moteur de paie : IPRES/CSS/AT-MP/TRIMF/IR), `DeclarationSocialeService`, `ParametresPaieService` |
 | 6.4 | `FormationService`, `EvaluationPeriodiqueService`, `SanctionService`, `BesoinFormationService`, `TableauBordRhService` |
@@ -154,7 +155,7 @@ Voir la table « Controller URL map » ci-dessus, sections RH 6.1 à 6.4.
 Endpoints livrés :
 
 - **Dossier employé RH (nouvelle source de vérité, depuis 2026-04)** :
-  CRUD multipart `/api/dossier-employe` (part JSON `dossier` + `photo` optionnelle).
+  CRUD multipart `/api/gestion-personnel/employes` (part JSON `dossier` + `photo` optionnelle).
   Champs : matricule (unique), identité (nom, prénom, genre HOMME/FEMME, dateNaissance,
   nationalité, numeroIdentification, situationMatrimoniale CELIBATAIRE/MARIE,
   nombreEnfants conditionnel), poste, département, siteAffecte, dateEntrée,
@@ -165,15 +166,18 @@ Endpoints livrés :
   (categorieCode, numeroIpres, numeroCss, rib, banque) également portés sur l'entité.
   Endpoints additionnels : `GET /{id}/photo` (permitAll), `PUT /{id}/statut`,
   `PUT /{id}/titulariser`, `GET /alertes-essai`.
-- **Import bulk de dossiers employés** : `POST /api/dossier-employe/bulk` (JSON pur,
-  sans photos — le CRUD unitaire reste utilisé ensuite pour les photos). Remplace
-  la boucle d'appels unitaires que faisait le frontend lors d'un import Excel.
-  Body : `{ employes: DossierEmployeBulkLigneDto[], strategieErreurs: "TOUT_OU_RIEN"
-  | "IMPORTER_LIGNES_VALIDES" }`. Réponse : `{ total, inserted, failed, insertedIds,
-  errors: [{ index, matricule, field, code, message }] }`. Codes : **200** tout
-  inséré, **207** partiel (IMPORTER_LIGNES_VALIDES avec erreurs), **422** TOUT_OU_RIEN
-  avec ≥ 1 erreur (aucune insertion), **400** payload invalide (vide / trop grand
-  / stratégie null). Limite configurable `rh.import.bulk.max-size: 1000`.
+- **Import bulk de dossiers employés** : `POST /api/gestion-personnel/employes/bulk`
+  (JSON pur, sans photos — le CRUD unitaire reste utilisé ensuite pour les photos).
+  Remplace la boucle d'appels unitaires que faisait le frontend lors d'un import Excel.
+  Body : `{ employes: DossierEmployeBulkLigneDto[], strategieErreurs?: "TOUT_OU_RIEN"
+  | "IMPORTER_LIGNES_VALIDES" }`. Le champ `strategieErreurs` est **optionnel**
+  depuis 2026-04 : si absent ou null, le défaut **TOUT_OU_RIEN** est appliqué par
+  le record `DossierEmployeBulkImportRequest` (rétro-compatibilité frontend).
+  Réponse : `{ total, inserted, failed, insertedIds, errors: [{ index, matricule,
+  field, code, message }] }`. Codes : **200** tout inséré, **207** partiel
+  (IMPORTER_LIGNES_VALIDES avec erreurs), **422** TOUT_OU_RIEN avec ≥ 1 erreur
+  (aucune insertion), **400** payload invalide (vide / trop grand). Limite
+  configurable `rh.import.bulk.max-size: 1000`.
   Codes d'erreur métier : `CHAMP_OBLIGATOIRE`, `VALEUR_INVALIDE`,
   `MATRICULE_DUPLIQUE_PAYLOAD`, `MATRICULE_DUPLIQUE_BASE`, `SUPERIEUR_INEXISTANT`,
   `VALIDATION_CONDITIONNELLE`, `REFERENCE_CIRCULAIRE` (cycle de supérieurs détecté
@@ -197,15 +201,91 @@ Endpoints livrés :
 - **Contrats** : CRUD multipart `/api/contrats` (part JSON `contrat` + `fichier` optionnel).
   `Contrat.fichierContrat` (byte[]) + `fichierContratNom` + `fichierContratMimeType`.
   Nouveaux endpoints `GET /api/contrats/{id}/fichier` (télécharge le PDF),
-  `DELETE /api/contrats/{id}/fichier`. GET `/api/contrats/alertes-echeance`.
+  `DELETE /api/contrats/{id}/fichier`. GET `/api/contrats/alertes`.
   `ContratService` valide désormais l'employé via `DossierEmployeRepository`.
   `TypeContratRh` : **ALTERNANCE remplacé par PRESTATION** ({CDI, CDD, STAGE, PRESTATION}).
   `ContratAlternanceMigrationRunner` (CommandLineRunner, `@Order(1000)`) migre
   les documents existants au démarrage via `mongoTemplate.updateMulti` — idempotent.
+  Champ optionnel `dureeEssaiMois` (Integer, **convention RH en mois**) sur
+  `Contrat` / `ContratDto` : pris en compte s'il est > 0 (override explicite).
+  **Le modèle Angular `Contrat` n'expose pas ce champ pour l'instant** : à
+  défaut, `ContratService.resoudreDureeEssaiMois` dérive la durée depuis
+  `DossierEmploye.dureeEssaiMois` quand l'employé est en `EN_PERIODE_ESSAI`.
+  Si une durée résolue > 0 est trouvée,
+  `PeriodeEssaiService.seedFromContrat(contrat, mois)` crée automatiquement
+  une `PeriodeEssai` (statut EN_COURS, alertes par défaut à 30 / 15 / 7
+  jours). La conversion mois → jours pour `PeriodeEssai.dureeJours` se fait
+  via `dateDebut.plusMonths(mois)` (calendaire-correct, p.ex. 3 mois ≠ 90
+  jours fixes selon les mois traversés).
+- **Période d'essai (depuis 2026-04-29)** : nouvelle source de vérité dans la
+  collection `periodes_essai` (entité `PeriodeEssai`, **liée à un Contrat** via
+  `contratId`). 7 endpoints sous `/api/gestion-personnel/periodes-essai` (consommés
+  directement par le frontend `PeriodeEssaiService` Angular) :
+  - `GET /` (paginé, filtre `statut`), `GET /{id}`,
+    `PUT /{id}/prolonger {nouvelleDateFin, commentaire}` →
+    statut `PROLONGE`, recalcul des alertes, append d'une `DecisionPeriodeEssai`.
+  - `GET /alertes` : retourne les périodes EN_COURS / PROLONGE dont au moins une
+    alerte non envoyée a une `dateAlerte ≤ today`.
+  - `GET /validations?statut=`, `POST /{periodeEssaiId}/validations {commentaire}`,
+    `PUT /validations/{demandeId} {decision, commentaire}` —
+    workflow `EN_ATTENTE_MANAGER → VALIDEE_MANAGER → VALIDEE_RH → CONFIRMEE`,
+    ou `REFUSEE` à n'importe quelle étape (collection
+    `demandes_validation_periode_essai`). `ActionValidation` accepté :
+    `VALIDER`, `CONFIRMER`, `REFUSER`. Transitions illégales → 400
+    `VALIDATION_ERROR`. Doublon de demande active sur la même période → 409
+    `DEMANDE_VALIDATION_CONFLICT` (nouvelle exception
+    `DemandeValidationConflictException`).
+    À l'étape `CONFIRMEE`, `applyTitularisation` bascule
+    `PeriodeEssai.statut → TITULARISE` (avec `DecisionPeriodeEssai` de trace) et
+    `DossierEmploye.statut → ACTIF`, `dureeEssaiMois → null`.
+  - **Pas d'endpoint POST direct sur `periodes-essai`** : la création est
+    déclenchée uniquement à la création d'un `Contrat` portant
+    `dureeEssaiJours > 0` (rétrocompat : un contrat sans ce champ ne crée pas de
+    période). Pas de seed rétroactif sur les contrats existants.
+  - `DossierEmploye.dureeEssaiMois` reste lisible en **lecture-only legacy** ;
+    la source de vérité pour la durée et la date de fin est désormais
+    `PeriodeEssai`. L'endpoint
+    `GET /api/gestion-personnel/employes/alertes-essai` (sur `DossierEmploye`)
+    subsiste pour rétrocompat — préférer
+    `GET /api/gestion-personnel/periodes-essai/alertes` côté frontend.
+- **Documents employé (depuis 2026-04-29)** : nouvelle collection
+  `documents_employes` portant toutes les pièces administratives génériques
+  (CNI, diplôme, certificat, attestation, contrat scanné, autre) attachées à
+  un employé, en complément des cas spécifiques déjà gérés (contrat PDF dans
+  `Contrat`, photo dans `DossierEmploye`, justificatif dans `RhAbsence`).
+  Endpoints `/api/gestion-personnel/documents` (consommés par
+  `DocumentEmployeService` Angular) :
+  - `GET /` paginé avec filtres `employeId` et `categorie`,
+    `GET /employe/{employeId}` (raccourci non paginé),
+    `GET /{id}`, `GET /{id}/telecharger` (flux binaire,
+    `Content-Disposition: attachment`).
+  - `POST /` multipart (`document` JSON + `fichier`) : 404 si employé
+    inexistant, 400 si `nom`/`categorie`/`fichier` manquant. À l'upload,
+    snapshot `employeNom/Prenom` depuis `DossierEmploye`,
+    `dateUpload = now()`, `statut = EN_ATTENTE`. Limite multipart globale
+    10MB (`spring.servlet.multipart.max-file-size`).
+  - `PUT /{id}` JSON (métadonnées only) : `nom`, `categorie`,
+    `dateExpiration`, `commentaire` modifiables ; `statut` et `fichier`
+    NE SONT PAS éditables ici (statut → `/valider`, fichier → DELETE +
+    re-POST).
+  - `PUT /{id}/valider` body `{statut: VALIDE|REFUSE, commentaire?}` :
+    workflow d'approbation RH. La **révision est autorisée** (passage
+    VALIDE ↔ REFUSE possible) tant que le document n'est pas EXPIRE,
+    pour permettre au RH de corriger une décision erronée.
+  - `DELETE /{id}` supprime le document (et son `byte[]`).
+  - **Statut `EXPIRE` dérivé à la lecture, jamais persisté** : si
+    `dateExpiration < today` ET statut stocké ∈ {VALIDE, EN_ATTENTE},
+    le DTO renvoie `EXPIRE`. `REFUSE + dateExpiration passée` reste
+    `REFUSE` (état terminal). Logique implémentée dans
+    `DocumentEmployeService.deriverStatutAffiche`.
+  - Catégories : `CNI, DIPLOME, CERTIFICAT, ATTESTATION, CONTRAT, AUTRE`
+    (enum `CategorieDocument`).
 - **Legacy / coexistence** : CRUD `/api/employe-complet` (EmployeComplet, photo + contrat PDF),
   `/api/employes` et `/api/rh-employes` (RhEmployeController sur EmployeComplet),
-  `/api/organigramme`, `/api/periodes-essai` restent en fonction pour le pointage
-  mobile et les flux legacy.
+  `/api/organigramme` reste en fonction pour le pointage mobile et les flux
+  legacy. **`/api/periodes-essai` (ancien `PeriodeEssaiController` sur
+  `EmployeComplet`) a été supprimé** au profit de
+  `/api/gestion-personnel/periodes-essai`.
 
 ### 6.2 Temps & Présences — ✅ Terminé
 

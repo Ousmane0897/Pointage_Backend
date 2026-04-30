@@ -1,31 +1,42 @@
 package com.example.Pointage_Cleanic.Dto;
 
+import com.example.Pointage_Cleanic.Enum.StatutPeriodeEssai;
+import com.example.Pointage_Cleanic.Enum.TypeContratRh;
 import com.fasterxml.jackson.annotation.JsonFormat;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import lombok.*;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.List;
 
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class PeriodeEssaiDto {
 
     private String id;
-    private String agentId;
-    private String nomComplet;
-    private String poste;
+    private String employeId;
+    private String employeNom;
+    private String employePrenom;
+    private String contratId;
+    private TypeContratRh typeContrat;
 
     @JsonFormat(pattern = "yyyy-MM-dd")
-    private LocalDate dateEmbauche;
-
-    private Integer dureeEssaiMois;
+    private LocalDate dateDebut;
 
     @JsonFormat(pattern = "yyyy-MM-dd")
-    private LocalDate dateFinEssaiCalculee;
+    private LocalDate dateFin;
 
-    private long joursRestants;
-    private Boolean essaiTermine;
-    private String statut;
+    private Integer dureeJours;
+    private StatutPeriodeEssai statut;
+
+    @Builder.Default
+    private List<AlertePeriodeEssaiDto> alertes = new ArrayList<>();
+
+    @Builder.Default
+    private List<DecisionPeriodeEssaiDto> decisions = new ArrayList<>();
 }

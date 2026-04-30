@@ -37,7 +37,8 @@ import static org.mockito.Mockito.when;
 
 /**
  * Tests unitaires de l'import bulk de dossiers employés.
- * Couvre les 12 cas du brief frontend + 1 cas pour la détection de cycles.
+ * Couvre les 12 cas du brief frontend + 1 cas pour la détection de cycles
+ * + 1 cas pour le défaut TOUT_OU_RIEN appliqué quand strategieErreurs est null.
  */
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
@@ -46,12 +47,13 @@ class DossierEmployeBulkImportServiceTest {
     @Mock DossierEmployeRepository repository;
     @Mock DossierEmployeMapper mapper;
     @Mock MongoTemplate mongoTemplate;
+    @Mock PeriodeEssaiService periodeEssaiService;
 
     DossierEmployeService service;
 
     @BeforeEach
     void setUp() {
-        service = new DossierEmployeService(repository, mapper, mongoTemplate);
+        service = new DossierEmployeService(repository, mapper, mongoTemplate, periodeEssaiService);
         ReflectionTestUtils.setField(service, "bulkMaxSize", 1000);
 
         // Mapper mock : copie les champs du DTO vers l'entité (suffisant pour valider le flux).
@@ -311,6 +313,19 @@ class DossierEmployeBulkImportServiceTest {
         assertThat(res.errors())
                 .anyMatch(e -> "VALIDATION_CONDITIONNELLE".equals(e.code())
                         && "dureeEssaiMois".equals(e.field()));
+    }
+
+    /** Cas 14 : payload sans `strategieErreurs` → défaut TOUT_OU_RIEN appliqué par le record. */
+    @Test
+    void import_sans_strategie_applique_tout_ou_rien_par_defaut() {
+        DossierEmployeBulkImportRequest req = new DossierEmployeBulkImportRequest(
+                List.of(ligneValide("M001")), null);
+
+        assertThat(req.strategieErreurs()).isEqualTo(StrategieErreursImport.TOUT_OU_RIEN);
+
+        DossierEmployeBulkImportResponse res = service.importBulk(req, "user@cleanic.sn");
+        assertThat(res.inserted()).isEqualTo(1);
+        assertThat(res.errors()).isEmpty();
     }
 
     /** Cas 13 : cycle A↔B dans le payload → REFERENCE_CIRCULAIRE sur les deux lignes. */

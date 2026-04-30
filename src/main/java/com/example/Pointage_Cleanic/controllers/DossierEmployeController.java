@@ -22,7 +22,7 @@ import java.io.IOException;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/dossier-employe")
+@RequestMapping("/api/gestion-personnel/employes")
 @RequiredArgsConstructor
 public class DossierEmployeController {
 
@@ -59,7 +59,7 @@ public class DossierEmployeController {
     @PutMapping(value = "/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<DossierEmployeDto> update(
             @PathVariable String id,
-            @RequestPart("dossier") String dossierJson,
+            @RequestPart("employe") String dossierJson,
             @RequestPart(value = "photo", required = false) MultipartFile photo
     ) throws IOException {
         DossierEmployeDto dto = objectMapper.readValue(dossierJson, DossierEmployeDto.class);
@@ -103,13 +103,16 @@ public class DossierEmployeController {
 
     /**
      * Import massif de dossiers employés. Consommé par le frontend à la place
-     * d'une boucle d'appels POST /api/dossier-employe pour les imports Excel.
+     * d'une boucle d'appels POST /api/gestion-personnel/employes pour les imports Excel.
+     * <p>
+     * Le champ {@code strategieErreurs} est optionnel : s'il est absent du payload,
+     * la stratégie {@code TOUT_OU_RIEN} est appliquée par défaut.
      * <p>
      * Codes HTTP :
      * <ul>
      *   <li>200 : toutes les lignes insérées.</li>
      *   <li>207 : import partiel (stratégie IMPORTER_LIGNES_VALIDES avec erreurs).</li>
-     *   <li>400 : payload invalide (vide, trop grand, stratégie null).</li>
+     *   <li>400 : payload invalide (vide, trop grand).</li>
      *   <li>422 : stratégie TOUT_OU_RIEN avec au moins une erreur → aucune insertion.</li>
      * </ul>
      */

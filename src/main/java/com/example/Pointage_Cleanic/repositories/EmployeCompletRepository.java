@@ -37,7 +37,4 @@ public interface EmployeCompletRepository extends MongoRepository<EmployeComplet
     List<EmployeComplet> findByStatut(EmployeComplet.StatutEmploye statut);
 
     List<EmployeComplet> findByStatutAndAgenceContaining(EmployeComplet.StatutEmploye statut, String agence);
-
-    // RH — période d'essai
-    List<EmployeComplet> findByDureeEssaiMoisIsNotNullAndEssaiTermineIsNot(Boolean essaiTermine);
 }
