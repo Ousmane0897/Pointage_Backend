@@ -7,6 +7,11 @@ spring:
     date-format: dd/MM/yyyy
     time-zone: Africa/Dakar
 
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 15MB
+
 jwt:
   secret: w9awKW+/x+VOzOyvg5DY3D7qWVZhipaV6VH8h9c4JS8=
 
@@ -23,6 +28,12 @@ google:
   maps:
     api:
       key: "AIzaSyAijDeBFgsJUYLqS6Nn3EQfi56cPPMtN_Q"
+
+rh:
+  import:
+    bulk:
+      # Taille maximale d'un import bulk de dossiers employés (POST /api/dossier-employe/bulk).
+      max-size: 1000
 
 
 logging:

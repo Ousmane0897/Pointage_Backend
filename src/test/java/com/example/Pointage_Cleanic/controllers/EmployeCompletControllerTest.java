@@ -59,7 +59,7 @@ class EmployeCompletControllerTest {
 
         EmployeComplet employe = new EmployeComplet();
 
-        Mockito.when(employeCompletService.create(Mockito.any(), Mockito.any()))
+        Mockito.when(employeCompletService.create(Mockito.any(), Mockito.any(), Mockito.any()))
                 .thenReturn(employe);
 
         MockMultipartFile employeJson = new MockMultipartFile(

@@ -56,6 +56,8 @@ public class EmployeCompletDto {
     private String managerOps2;
     private String poste;
     private String typeContrat;
+    private byte[] contrat;
+    private String contratNom;
 
     @JsonFormat(pattern = "yyyy-MM-dd")
     private LocalDate dateEmbauche;
@@ -74,6 +76,8 @@ public class EmployeCompletDto {
     private String banque;
     private String cnssOuIpres;
     private String ipmNumero;
+    private String categorieCode;
+    private String numeroCss;
 
     private EmployeComplet.PermisConduire permisConduire;
     private String categoriePermis;
@@ -86,5 +90,7 @@ public class EmployeCompletDto {
 
     private byte[] photo;
     private String observations;
+    private Integer dureeEssaiMois;
+    private Boolean essaiTermine;
 
 }

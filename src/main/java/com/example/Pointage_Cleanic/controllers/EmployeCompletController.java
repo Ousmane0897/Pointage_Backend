@@ -9,6 +9,7 @@ import com.example.Pointage_Cleanic.entities.Employe;
 import com.example.Pointage_Cleanic.entities.EmployeComplet;
 import com.example.Pointage_Cleanic.entities.stock.Produit;
 import com.example.Pointage_Cleanic.repositories.EmployeCompletRepository;
+import com.example.Pointage_Cleanic.repositories.EmployeRepository;
 import com.example.Pointage_Cleanic.services.EmployeCompletService;
 import com.example.Pointage_Cleanic.services.EmployeServices;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -34,6 +35,7 @@ public class EmployeCompletController {
     private final EmployeCompletService employeCompletService;
     private final EmployeCompletRepository employeCompletRepository;
     private final ObjectMapper objectMapper; // 🔥 injecté par Spring
+    private final EmployeCompletRepository employeRepository;
 
 
     // ============================================
@@ -43,7 +45,8 @@ public class EmployeCompletController {
     @PostMapping(value = "/employe", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<EmployeComplet> createEmploye(
             @RequestPart("employe") String employeJson,
-            @RequestPart(value = "photo", required = false) MultipartFile photo
+            @RequestPart(value = "photo", required = false) MultipartFile photo,
+            @RequestPart(value = "contrat", required = false) MultipartFile contrat
     ) throws IOException {
 
         System.out.println("RAW JSON = " + employeJson); // 🔥 LOG 1
@@ -54,7 +57,7 @@ public class EmployeCompletController {
         System.out.println("DTO PRENOM = " + dto.getPrenom()); // 🔥 LOG 2
         System.out.println("DTO TELEPHONE = " + dto.getTelephone1());
 
-        return ResponseEntity.ok(employeCompletService.create(dto, photo));
+        return ResponseEntity.ok(employeCompletService.create(dto, photo,contrat));
     }
 
 
@@ -156,6 +159,32 @@ public class EmployeCompletController {
                 employeCompletService.update(agentId, employeCompletDto, photo);
 
         return ResponseEntity.ok(updated);
+    }
+
+    @GetMapping("/{id}/contrat")
+    public ResponseEntity<byte[]> getContrat(@PathVariable String id) {
+
+        EmployeComplet emp = employeRepository.findById(id).orElseThrow();
+
+        return ResponseEntity.ok()
+                .header("Content-Type", emp.getTypeContrat())
+                .header("Content-Disposition", "inline; filename=\"" + emp.getContratNom() + "\"")
+                .body(emp.getContrat());
+    }
+
+    @DeleteMapping("/{id}/contrat")
+    public ResponseEntity<?> deleteContrat(@PathVariable String id) {
+
+        EmployeComplet emp = employeRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Employé introuvable"));
+
+        emp.setContrat(null);
+        emp.setContratNom(null);
+        emp.setTypeContrat(null);
+
+        employeRepository.save(emp);
+
+        return ResponseEntity.ok("Contrat supprimé");
     }
 
 

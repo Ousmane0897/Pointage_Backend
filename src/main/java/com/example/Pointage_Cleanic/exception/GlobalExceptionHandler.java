@@ -2,11 +2,15 @@ package com.example.Pointage_Cleanic.exception;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.authentication.DisabledException;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.support.MissingServletRequestPartException;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -51,6 +55,23 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(body);
     }
 
+    @ExceptionHandler(DemandeValidationConflictException.class)
+    public ResponseEntity<Map<String, Object>> handleDemandeValidationConflict(
+            DemandeValidationConflictException ex) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("error", "DEMANDE_VALIDATION_CONFLICT");
+        body.put("message", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(body);
+    }
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<Map<String, Object>> handleIllegalArgument(IllegalArgumentException ex) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("error", "VALIDATION_ERROR");
+        body.put("message", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
+    }
+
     @ExceptionHandler(RuntimeException.class)
     public ResponseEntity<Map<String, String>> handleRuntime(RuntimeException ex) {
         Map<String, String> body = new HashMap<>();
@@ -79,6 +100,15 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(body);
     }
 
+    @ExceptionHandler(BulkInsertPartialFailureException.class)
+    public ResponseEntity<Map<String, Object>> handleBulkInsertPartialFailure(
+            BulkInsertPartialFailureException ex) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("error", "BULK_INSERT_PARTIAL_FAILURE");
+        body.put("message", ex.getMessage());
+        body.put("idsDejaInseres", ex.getIdsDejaInseres());
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(body);
+    }
 
 
     // Optionnel : gestion d'autres exceptions

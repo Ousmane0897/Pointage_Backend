@@ -41,7 +41,7 @@ class PlanificationRepositoryTest extends MongoTestContainer {
         p.setStatut(statut);
         p.setDateDebut(new Date());
         p.setDateFin(new Date());
-        p.setDateCreation(new Date().toString());
+        p.setDateCreation(java.time.LocalDate.now());
         return p;
     }
 

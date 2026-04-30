@@ -76,7 +76,7 @@ class AbsencesControllersTest {
         request.setPrenom("Ali");
         request.setNom("Diop");
         request.setNumero("770000000");
-        request.setDateAbsence("01/01/2025");
+        request.setDateAbsence(java.time.LocalDate.of(2025, 1, 1));
         request.setMotif("Maladie");
         request.setJustification("Certificat médical");
 
