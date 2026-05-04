@@ -3,6 +3,13 @@ spring:
     mongodb:
       uri: mongodb://localhost:27017/cleanic
 
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    properties:
+      mail.smtp.auth: true
+      mail.smtp.starttls.enable: true
+
   jackson:
     date-format: dd/MM/yyyy
     time-zone: Africa/Dakar
