@@ -16,6 +16,10 @@ repositories {
 	mavenCentral()
 }
 
+configurations {
+	mockitoAgent
+}
+
 dependencyManagement {
 	imports {
 		mavenBom "org.springframework.boot:spring-boot-dependencies:3.3.6"
@@ -79,6 +83,7 @@ dependencies {
 	testImplementation 'org.springframework.security:spring-security-test'
 	testImplementation 'org.testcontainers:junit-jupiter:1.20.2'
 	testImplementation 'org.testcontainers:mongodb:1.19.2'
+	mockitoAgent('net.bytebuddy:byte-buddy-agent:1.14.19') { transitive = false }
 
 
 	implementation 'org.springframework.boot:spring-boot-starter-webflux'
@@ -102,4 +107,5 @@ tasks.withType(Test).configureEach {
 	maxParallelForks = 1
 	forkEvery = 0
 	systemProperty "junit.jupiter.execution.parallel.enabled", "false"
+	jvmArgs "-javaagent:${configurations.mockitoAgent.asPath}"
 }
