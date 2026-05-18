@@ -262,8 +262,8 @@ public class PointageServices {
         mongoTemplate.updateFirst(query, update, Pointage.class);
     }
 
-    public boolean canPoint(String deviceId, int lockDurationInHours) {
-        Instant cutoff = Instant.now().minus(lockDurationInHours, ChronoUnit.MINUTES);
+    public boolean canPoint(String deviceId, int lockDurationInMinutes) {
+        Instant cutoff = Instant.now().minus(lockDurationInMinutes, ChronoUnit.MINUTES);
         return !pointageRepository.existsByDeviceIdAndTimestampAfter(deviceId, cutoff);
     }
 

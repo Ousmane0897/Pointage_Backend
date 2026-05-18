@@ -14,11 +14,17 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import static org.hamcrest.Matchers.containsString;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 
 
+import java.time.LocalDate;
 import java.util.List;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
@@ -100,6 +106,31 @@ class PointagesControllerTest {
         mockMvc.perform(get("/api/pointages"))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$").isArray());
+    }
+
+    // ==========================================
+    // GET /api/pointages/today
+    // ==========================================
+
+    @Test
+    void should_return_paginated_today_pointages() throws Exception {
+
+        Pointage pointage = new Pointage();
+        PageImpl<Pointage> pagePayload = new PageImpl<>(
+                List.of(pointage),
+                PageRequest.of(0, 20),
+                1
+        );
+
+        Mockito.when(pointageRepository.findByDate(eq(LocalDate.now()), any(Pageable.class)))
+                .thenReturn(pagePayload);
+
+        mockMvc.perform(get("/api/pointages/today"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content").isArray())
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.size").value(20))
+                .andExpect(jsonPath("$.number").value(0));
     }
 
     // ==========================================

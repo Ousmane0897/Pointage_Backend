@@ -8,6 +8,9 @@ import com.example.Pointage_Cleanic.repositories.PointageRepository;
 import com.example.Pointage_Cleanic.services.PointageServices;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -40,7 +43,7 @@ public class PointagesController {
         }
 
 
-        if (!pointageServices.canPoint(request.getDeviceId(), 4)) {
+        if (!pointageServices.canPoint(request.getDeviceId(), 20)) {
             return ResponseEntity
                     .status(HttpStatus.TOO_MANY_REQUESTS)
                     .body("Ce téléphone a déjà été utilisé pour un pointage récemment.");
@@ -68,11 +71,13 @@ public class PointagesController {
     }
 
     @GetMapping("/today")
-    public ResponseEntity<List<Pointage>> getTodayPointages() {
-
+    public ResponseEntity<Page<Pointage>> getTodayPointages(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size
+    ) {
         LocalDate today = LocalDate.now();
-
-        List<Pointage> pointages = pointageRepository.findByDateOrderByTimestampDesc(today);
+        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "timestamp"));
+        Page<Pointage> pointages = pointageRepository.findByDate(today, pageable);
 
         return ResponseEntity.ok(pointages);
     }
