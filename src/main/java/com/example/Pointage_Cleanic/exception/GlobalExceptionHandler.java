@@ -5,7 +5,9 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.authentication.DisabledException;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import org.springframework.validation.FieldError;
 import org.springframework.web.HttpMediaTypeNotSupportedException;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -13,7 +15,9 @@ import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.multipart.support.MissingServletRequestPartException;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -108,6 +112,62 @@ public class GlobalExceptionHandler {
         body.put("message", ex.getMessage());
         body.put("idsDejaInseres", ex.getIdsDejaInseres());
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(body);
+    }
+
+    @ExceptionHandler(StockChimieInsuffisantException.class)
+    public ResponseEntity<Map<String, Object>> handleStockChimieInsuffisant(StockChimieInsuffisantException ex) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("error", "STOCK_CHIMIE_INSUFFISANT");
+        body.put("message", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(body);
+    }
+
+    @ExceptionHandler(TransitionOfInterditeException.class)
+    public ResponseEntity<Map<String, Object>> handleTransitionOfInterdite(TransitionOfInterditeException ex) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("error", "TRANSITION_OF_INTERDITE");
+        body.put("message", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(body);
+    }
+
+    @ExceptionHandler(ControleQualiteInvalideException.class)
+    public ResponseEntity<Map<String, Object>> handleControleQualiteInvalide(ControleQualiteInvalideException ex) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("error", "CONTROLE_QUALITE_INVALIDE");
+        body.put("message", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
+    }
+
+    @ExceptionHandler(EntiteReferenceeException.class)
+    public ResponseEntity<Map<String, Object>> handleEntiteReferencee(EntiteReferenceeException ex) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("error", "ENTITE_REFERENCEE");
+        body.put("message", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(body);
+    }
+
+    @ExceptionHandler(ProductionException.class)
+    public ResponseEntity<Map<String, Object>> handleProductionGeneric(ProductionException ex) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("error", "PRODUCTION_ERROR");
+        body.put("message", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(body);
+    }
+
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<Map<String, Object>> handleValidation(MethodArgumentNotValidException ex) {
+        List<Map<String, String>> fieldErrors = ex.getBindingResult().getFieldErrors().stream()
+                .map(fe -> Map.of(
+                        "field", fe.getField(),
+                        "message", fe.getDefaultMessage() == null ? "" : fe.getDefaultMessage()
+                ))
+                .collect(Collectors.toList());
+
+        Map<String, Object> body = new HashMap<>();
+        body.put("error", "VALIDATION_ERROR");
+        body.put("message", "Validation des champs en erreur");
+        body.put("errors", fieldErrors);
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
     }
 
 
