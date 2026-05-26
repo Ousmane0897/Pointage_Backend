@@ -1,0 +1,333 @@
+### Production Chimie — Golden path manuel
+### Usage : remplir {{jwt}} avec un Bearer valide, puis exécuter dans l'ordre.
+
+@host = http://localhost:8080
+@jwt = REMPLACER_PAR_VOTRE_JWT
+
+### 1a. Créer MP "Soude caustique" (KG)
+# @name mpSoude
+POST {{host}}/api/production-chimie/stock-chimie/matieres-premieres
+Authorization: Bearer {{jwt}}
+Content-Type: multipart/form-data; boundary=----PCBoundary
+
+------PCBoundary
+Content-Disposition: form-data; name="matiere"
+Content-Type: application/json
+
+{
+  "code": "MP-SOUDE",
+  "nom": "Soude caustique",
+  "unite": "KG",
+  "seuilCritique": 10,
+  "fournisseur": "ChemCorp",
+  "quantiteEnStock": 0,
+  "actif": true
+}
+------PCBoundary--
+
+### 1b. Créer MP "Hypochlorite" (L)
+# @name mpHypo
+POST {{host}}/api/production-chimie/stock-chimie/matieres-premieres
+Authorization: Bearer {{jwt}}
+Content-Type: multipart/form-data; boundary=----PCBoundary
+
+------PCBoundary
+Content-Disposition: form-data; name="matiere"
+Content-Type: application/json
+
+{
+  "code": "MP-HYPO",
+  "nom": "Hypochlorite de sodium",
+  "unite": "L",
+  "seuilCritique": 50,
+  "quantiteEnStock": 0,
+  "actif": true
+}
+------PCBoundary--
+
+### 1c. Créer MP "Eau déminéralisée" (L)
+# @name mpEau
+POST {{host}}/api/production-chimie/stock-chimie/matieres-premieres
+Authorization: Bearer {{jwt}}
+Content-Type: multipart/form-data; boundary=----PCBoundary
+
+------PCBoundary
+Content-Disposition: form-data; name="matiere"
+Content-Type: application/json
+
+{
+  "code": "MP-EAU",
+  "nom": "Eau déminéralisée",
+  "unite": "L",
+  "seuilCritique": 100,
+  "quantiteEnStock": 0,
+  "actif": true
+}
+------PCBoundary--
+
+### 1d. Réception 100 KG de soude (remplace MP_SOUDE_ID)
+POST {{host}}/api/production-chimie/stock-chimie/mouvements/reception
+Authorization: Bearer {{jwt}}
+Content-Type: application/json
+
+{
+  "matierePremiereId": "{{mpSoude.response.body.id}}",
+  "quantite": 100,
+  "fournisseur": "ChemCorp",
+  "lotFournisseur": "LF-2026-001"
+}
+
+### 1e. Réception 200 L d'hypochlorite
+POST {{host}}/api/production-chimie/stock-chimie/mouvements/reception
+Authorization: Bearer {{jwt}}
+Content-Type: application/json
+
+{
+  "matierePremiereId": "{{mpHypo.response.body.id}}",
+  "quantite": 200
+}
+
+### 1f. Réception 500 L d'eau
+POST {{host}}/api/production-chimie/stock-chimie/mouvements/reception
+Authorization: Bearer {{jwt}}
+Content-Type: application/json
+
+{
+  "matierePremiereId": "{{mpEau.response.body.id}}",
+  "quantite": 500
+}
+
+### 2. Créer un format de conditionnement
+# @name formatBidon5L
+POST {{host}}/api/production-chimie/formats-conditionnement
+Authorization: Bearer {{jwt}}
+Content-Type: application/json
+
+{
+  "code": "BIDON-5L",
+  "libelle": "Bidon 5 litres",
+  "volume": 5,
+  "uniteVolume": "L",
+  "typeContenant": "BIDON",
+  "actif": true
+}
+
+### 3. Créer une fiche de formulation (Eau de javel)
+# @name formulationJavel
+POST {{host}}/api/production-chimie/formulations
+Authorization: Bearer {{jwt}}
+Content-Type: application/json
+
+{
+  "code": "FORM-JAVEL",
+  "nom": "Eau de javel concentrée",
+  "description": "Formule v1 pour bidon 5L",
+  "ingredients": [
+    { "matierePremiereId": "{{mpSoude.response.body.id}}", "matierePremiereNom": "Soude caustique", "dosage": 0.5, "unite": "KG", "ordre": 1 },
+    { "matierePremiereId": "{{mpHypo.response.body.id}}", "matierePremiereNom": "Hypochlorite", "dosage": 2, "unite": "L", "ordre": 2 },
+    { "matierePremiereId": "{{mpEau.response.body.id}}", "matierePremiereNom": "Eau", "dosage": 4, "unite": "L", "ordre": 3 }
+  ],
+  "etapes": [
+    { "ordre": 1, "libelle": "Préparation eau", "dureeMinutes": 10 },
+    { "ordre": 2, "libelle": "Ajout soude", "dureeMinutes": 5, "temperature": 25 },
+    { "ordre": 3, "libelle": "Ajout hypo", "dureeMinutes": 10, "vitesseAgitation": 100 },
+    { "ordre": 4, "libelle": "Homogénéisation", "dureeMinutes": 15, "dureeReposMinutes": 30 }
+  ],
+  "dureePeremptionJours": 180,
+  "uniteProduction": "L",
+  "statut": "VALIDEE"
+}
+
+### 4a. Première modification de formulation → v1 archivée, versionCourante=2
+PUT {{host}}/api/production-chimie/formulations/{{formulationJavel.response.body.id}}
+Authorization: Bearer {{jwt}}
+Content-Type: application/json
+
+{
+  "code": "FORM-JAVEL",
+  "nom": "Eau de javel concentrée",
+  "description": "v2 - dosage ajusté",
+  "ingredients": [
+    { "matierePremiereId": "{{mpSoude.response.body.id}}", "dosage": 0.6, "unite": "KG", "ordre": 1 },
+    { "matierePremiereId": "{{mpHypo.response.body.id}}", "dosage": 2.2, "unite": "L", "ordre": 2 },
+    { "matierePremiereId": "{{mpEau.response.body.id}}", "dosage": 4, "unite": "L", "ordre": 3 }
+  ],
+  "etapes": [
+    { "ordre": 1, "libelle": "Préparation eau", "dureeMinutes": 10 },
+    { "ordre": 2, "libelle": "Ajout soude", "dureeMinutes": 5, "temperature": 25 },
+    { "ordre": 3, "libelle": "Ajout hypo", "dureeMinutes": 12, "vitesseAgitation": 120 },
+    { "ordre": 4, "libelle": "Homogénéisation", "dureeMinutes": 15, "dureeReposMinutes": 30 }
+  ],
+  "dureePeremptionJours": 180,
+  "uniteProduction": "L",
+  "statut": "VALIDEE",
+  "motif": "Ajustement dosage soude/hypo"
+}
+
+### 4b. Deuxième modification → v2 archivée, versionCourante=3
+PUT {{host}}/api/production-chimie/formulations/{{formulationJavel.response.body.id}}
+Authorization: Bearer {{jwt}}
+Content-Type: application/json
+
+{
+  "code": "FORM-JAVEL",
+  "nom": "Eau de javel concentrée",
+  "description": "v3 - durée péremption étendue",
+  "ingredients": [
+    { "matierePremiereId": "{{mpSoude.response.body.id}}", "dosage": 0.6, "unite": "KG", "ordre": 1 },
+    { "matierePremiereId": "{{mpHypo.response.body.id}}", "dosage": 2.2, "unite": "L", "ordre": 2 },
+    { "matierePremiereId": "{{mpEau.response.body.id}}", "dosage": 4, "unite": "L", "ordre": 3 }
+  ],
+  "etapes": [
+    { "ordre": 1, "libelle": "Préparation eau", "dureeMinutes": 10 },
+    { "ordre": 2, "libelle": "Ajout soude", "dureeMinutes": 5, "temperature": 25 },
+    { "ordre": 3, "libelle": "Ajout hypo", "dureeMinutes": 12, "vitesseAgitation": 120 },
+    { "ordre": 4, "libelle": "Homogénéisation", "dureeMinutes": 15, "dureeReposMinutes": 30 }
+  ],
+  "dureePeremptionJours": 365,
+  "uniteProduction": "L",
+  "statut": "VALIDEE",
+  "motif": "Extension péremption pour stockage"
+}
+
+### 5. Comparer v1 et v3
+GET {{host}}/api/production-chimie/formulations/{{formulationJavel.response.body.id}}/versions/comparer?v1=1&v2=3
+Authorization: Bearer {{jwt}}
+
+### 6. Restaurer v1 (versionCourante=4)
+POST {{host}}/api/production-chimie/formulations/{{formulationJavel.response.body.id}}/versions/1/restaurer
+Authorization: Bearer {{jwt}}
+Content-Type: application/json
+
+{
+  "motif": "Retour à la formule originale pour conformité"
+}
+
+### 7. Créer un OF (numéro OF-AAAAMMJJ-001)
+# @name ofJavel
+POST {{host}}/api/production-chimie/ordres
+Authorization: Bearer {{jwt}}
+Content-Type: application/json
+
+{
+  "produitNom": "Eau de javel concentrée",
+  "formulationId": "{{formulationJavel.response.body.id}}",
+  "quantiteCible": 50,
+  "uniteCible": "L",
+  "dateLancementPrevue": "2026-05-20T08:00:00",
+  "operateurResponsableId": "OPERATEUR-001",
+  "operateurResponsableNom": "Jean Diop"
+}
+
+### 8. Disponibilité MP pour l'OF
+GET {{host}}/api/production-chimie/ordres/{{ofJavel.response.body.id}}/disponibilite-mp
+Authorization: Bearer {{jwt}}
+
+### 9. Lancer l'OF (EN_ATTENTE → EN_COURS, SORTIE stock x3)
+POST {{host}}/api/production-chimie/ordres/{{ofJavel.response.body.id}}/lancer
+Authorization: Bearer {{jwt}}
+Content-Type: application/json
+
+{
+  "commentaire": "Lancement nominal"
+}
+
+### 10. Terminer l'OF (EN_COURS → TERMINE, Lot AAAAMMJJ-001 généré)
+# @name terminer
+POST {{host}}/api/production-chimie/ordres/{{ofJavel.response.body.id}}/terminer
+Authorization: Bearer {{jwt}}
+Content-Type: application/json
+
+{
+  "commentaire": "Production terminée"
+}
+
+### 11. Créer la grille de contrôle pour le produit
+# @name grille
+POST {{host}}/api/production-chimie/controle-qualite/grilles
+Authorization: Bearer {{jwt}}
+Content-Type: application/json
+
+{
+  "produitNom": "Eau de javel concentrée",
+  "formulationId": "{{formulationJavel.response.body.id}}",
+  "tests": [
+    { "libelle": "pH", "parametre": "ph", "valeurCible": "12.5", "toleranceMin": 12, "toleranceMax": 13, "unite": "", "obligatoire": true, "type": "NUMERIQUE" },
+    { "libelle": "Densité", "parametre": "densite", "valeurCible": "1.20", "toleranceMin": 1.18, "toleranceMax": 1.22, "unite": "g/cm3", "obligatoire": true, "type": "NUMERIQUE" },
+    { "libelle": "Couleur", "parametre": "couleur", "valeurCible": "jaune clair", "obligatoire": true, "type": "TEXTUEL" }
+  ],
+  "actif": true
+}
+
+### 12. Effectuer le contrôle qualité (VALIDE) — lot passe EN_STOCK
+POST {{host}}/api/production-chimie/controle-qualite/controles
+Authorization: Bearer {{jwt}}
+Content-Type: multipart/form-data; boundary=----PCBoundary
+
+------PCBoundary
+Content-Disposition: form-data; name="controle"
+Content-Type: application/json
+
+{
+  "lotId": "{{terminer.response.body.lotGenereId}}",
+  "grilleId": "{{grille.response.body.id}}",
+  "dateControle": "2026-05-20T15:00:00",
+  "controleurNom": "Marie Sow",
+  "mesures": [
+    { "testLibelle": "pH", "parametre": "ph", "valeurCible": "12.5", "valeurMesuree": "12.7", "unite": "", "conforme": true },
+    { "testLibelle": "Densité", "parametre": "densite", "valeurCible": "1.20", "valeurMesuree": "1.21", "unite": "g/cm3", "conforme": true },
+    { "testLibelle": "Couleur", "parametre": "couleur", "valeurCible": "jaune clair", "valeurMesuree": "jaune clair", "conforme": true }
+  ],
+  "decision": "VALIDE"
+}
+------PCBoundary--
+
+### 13. Récupérer la traçabilité du lot
+GET {{host}}/api/production-chimie/lots/{{terminer.response.body.lotGenereId}}/tracabilite
+Authorization: Bearer {{jwt}}
+
+### 14. Récupérer le rapport tableau de bord
+GET {{host}}/api/production-chimie/tableau-bord/rapport?dateDebut=2026-05-01&dateFin=2026-05-31
+Authorization: Bearer {{jwt}}
+
+
+### ───────── EDGE CASES ─────────
+
+### EC1. Lancement OF avec MP insuffisante → 409 STOCK_CHIMIE_INSUFFISANT
+### (créer un autre OF avec quantiteCible énorme avant de tester)
+POST {{host}}/api/production-chimie/ordres
+Authorization: Bearer {{jwt}}
+Content-Type: application/json
+
+{
+  "produitNom": "Eau de javel concentrée",
+  "formulationId": "{{formulationJavel.response.body.id}}",
+  "quantiteCible": 99999,
+  "uniteCible": "L",
+  "dateLancementPrevue": "2026-05-21T08:00:00",
+  "operateurResponsableId": "OPERATEUR-001"
+}
+
+### EC2. Rejet CQ sans commentaire → 400 CONTROLE_QUALITE_INVALIDE
+POST {{host}}/api/production-chimie/controle-qualite/controles
+Authorization: Bearer {{jwt}}
+Content-Type: multipart/form-data; boundary=----PCBoundary
+
+------PCBoundary
+Content-Disposition: form-data; name="controle"
+Content-Type: application/json
+
+{
+  "lotId": "{{terminer.response.body.lotGenereId}}",
+  "dateControle": "2026-05-20T15:00:00",
+  "decision": "REJET"
+}
+------PCBoundary--
+
+### EC3. Suppression MP référencée → 409 ENTITE_REFERENCEE
+DELETE {{host}}/api/production-chimie/stock-chimie/matieres-premieres/{{mpSoude.response.body.id}}
+Authorization: Bearer {{jwt}}
+
+### EC4. Suppression formulation référencée par un OF → 409 ENTITE_REFERENCEE
+DELETE {{host}}/api/production-chimie/formulations/{{formulationJavel.response.body.id}}
+Authorization: Bearer {{jwt}}
