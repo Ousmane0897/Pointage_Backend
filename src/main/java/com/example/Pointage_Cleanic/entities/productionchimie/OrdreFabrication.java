@@ -35,6 +35,7 @@ public class OrdreFabrication {
 
     private Double quantiteCible;
     private UniteChimie uniteCible;
+    private Double quantiteReelle;
 
     private LocalDateTime dateLancementPrevue;
     private LocalDateTime dateLancementEffective;

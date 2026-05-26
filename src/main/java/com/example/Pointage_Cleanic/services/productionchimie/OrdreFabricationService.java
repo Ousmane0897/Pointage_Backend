@@ -178,6 +178,107 @@ public class OrdreFabricationService {
         FicheFormulation form = formulationService.loadOrThrow(of.getFormulationId());
         List<IngredientFormulation> ingredients = resolveIngredients(form, of.getFormulationVersion());
 
+        double quantiteRef = (form.getQuantiteRef() != null && form.getQuantiteRef() > 0)
+                ? form.getQuantiteRef()
+                : 1.0;
+
+        List<ConsommationMp> consommationsCalc = new ArrayList<>();
+        for (IngredientFormulation i : ingredients) {
+            consommationsCalc.add(ConsommationMp.builder()
+                    .matierePremiereId(i.getMatierePremiereId())
+                    .matierePremiereNom(i.getMatierePremiereNom())
+                    .unite(i.getUnite())
+                    .quantiteTheorique((i.getDosage() / quantiteRef) * of.getQuantiteCible())
+                    .build());
+        }
+
+        for (ConsommationMp c : consommationsCalc) {
+            MatierePremiere mp = matierePremiereService.loadOrThrow(c.getMatierePremiereId());
+            double stock = mp.getQuantiteEnStock() == null ? 0.0 : mp.getQuantiteEnStock();
+            if (stock < c.getQuantiteTheorique()) {
+                throw new StockChimieInsuffisantException(
+                        "MP " + mp.getCode() + " insuffisante : requis " + c.getQuantiteTheorique() + ", dispo " + stock);
+            }
+        }
+
+        List<ConsommationMp> consommationsFinales = new ArrayList<>(consommationsCalc.size());
+        List<MouvementStockChimie> mvtsCreesPourRollback = new ArrayList<>();
+        try {
+            for (ConsommationMp c : consommationsCalc) {
+                MatierePremiere mp = matierePremiereService.loadOrThrow(c.getMatierePremiereId());
+                MouvementStockChimie mvt = MouvementStockChimie.builder()
+                        .matierePremiereId(mp.getId())
+                        .matierePremiereCode(mp.getCode())
+                        .matierePremiereNom(mp.getNom())
+                        .unite(mp.getUnite())
+                        .type(TypeMouvementChimie.SORTIE)
+                        .quantite(c.getQuantiteTheorique())
+                        .date(LocalDateTime.now())
+                        .ordreFabricationId(of.getId())
+                        .ordreFabricationNumero(of.getNumero())
+                        .commentaire("Sortie automatique lancement OF " + of.getNumero())
+                        .build();
+                mvt = mouvementRepository.save(mvt);
+                mvtsCreesPourRollback.add(mvt);
+
+                mongoTemplate.updateFirst(
+                        new Query(Criteria.where("_id").is(mp.getId())),
+                        new Update().inc("quantiteEnStock", -c.getQuantiteTheorique()).set("updatedAt", LocalDateTime.now()),
+                        MatierePremiere.class
+                );
+
+                consommationsFinales.add(ConsommationMp.builder()
+                        .matierePremiereId(c.getMatierePremiereId())
+                        .matierePremiereNom(c.getMatierePremiereNom())
+                        .unite(c.getUnite())
+                        .quantiteTheorique(c.getQuantiteTheorique())
+                        .mouvementStockId(mvt.getId())
+                        .build());
+            }
+        } catch (Exception ex) {
+            log.error("Échec lancement OF {} — compensation des {} sorties déjà créées",
+                    of.getNumero(), mvtsCreesPourRollback.size(), ex);
+            for (MouvementStockChimie mvtFait : mvtsCreesPourRollback) {
+                MouvementStockChimie inverse = MouvementStockChimie.builder()
+                        .matierePremiereId(mvtFait.getMatierePremiereId())
+                        .matierePremiereCode(mvtFait.getMatierePremiereCode())
+                        .matierePremiereNom(mvtFait.getMatierePremiereNom())
+                        .unite(mvtFait.getUnite())
+                        .type(TypeMouvementChimie.ENTREE)
+                        .quantite(mvtFait.getQuantite())
+                        .date(LocalDateTime.now())
+                        .ordreFabricationId(of.getId())
+                        .ordreFabricationNumero(of.getNumero())
+                        .commentaire("Compensation échec lancement OF " + of.getNumero())
+                        .build();
+                mouvementRepository.save(inverse);
+                mongoTemplate.updateFirst(
+                        new Query(Criteria.where("_id").is(mvtFait.getMatierePremiereId())),
+                        new Update().inc("quantiteEnStock", mvtFait.getQuantite()).set("updatedAt", LocalDateTime.now()),
+                        MatierePremiere.class
+                );
+            }
+            throw new ProductionException("Échec lancement OF " + of.getNumero() + " : " + ex.getMessage(), ex);
+        }
+
+        of.setConsommationMp(consommationsFinales);
+        of.setStatut(StatutOf.EN_COURS);
+        of.setDateLancementEffective(LocalDateTime.now());
+        of.setUpdatedAt(LocalDateTime.now());
+        addHistorique(of, StatutOf.EN_ATTENTE, StatutOf.EN_COURS, payload != null ? payload.getCommentaire() : null);
+        return mapper.toDto(repository.save(of));
+    }
+
+
+    /*public OrdreFabricationDto lancer(String id, LancerOfPayload payload) {
+        OrdreFabrication of = loadOrThrow(id);
+        if (of.getStatut() != StatutOf.EN_ATTENTE) {
+            throw new TransitionOfInterditeException("Lancement interdit depuis " + of.getStatut());
+        }
+
+        FicheFormulation form = formulationService.loadOrThrow(of.getFormulationId());
+        List<IngredientFormulation> ingredients = resolveIngredients(form, of.getFormulationVersion());
+
         List<ConsommationMp> consommationsCalc = new ArrayList<>();
         for (IngredientFormulation i : ingredients) {
             consommationsCalc.add(ConsommationMp.builder()
@@ -263,13 +364,17 @@ public class OrdreFabricationService {
         of.setUpdatedAt(LocalDateTime.now());
         addHistorique(of, StatutOf.EN_ATTENTE, StatutOf.EN_COURS, payload != null ? payload.getCommentaire() : null);
         return mapper.toDto(repository.save(of));
-    }
+    }*/
 
     public OrdreFabricationDto terminer(String id, TerminerOfPayload payload) {
         OrdreFabrication of = loadOrThrow(id);
         if (of.getStatut() != StatutOf.EN_COURS) {
             throw new TransitionOfInterditeException("Terminaison interdite depuis " + of.getStatut());
         }
+
+        double quantiteReelle = (payload != null && payload.getQuantiteReelle() != null && payload.getQuantiteReelle() > 0)
+                ? payload.getQuantiteReelle()
+                : of.getQuantiteCible();
 
         String numeroLot = compteurLotService.genererNumero();
         FicheFormulation form = formulationService.loadOrThrow(of.getFormulationId());
@@ -289,7 +394,7 @@ public class OrdreFabricationService {
                 .formulationVersion(of.getFormulationVersion())
                 .dateFabrication(now)
                 .datePeremption(datePeremption)
-                .quantiteProduite(of.getQuantiteCible())
+                .quantiteProduite(quantiteReelle)
                 .uniteProduite(of.getUniteCible())
                 .statutControle(StatutControleLot.EN_ATTENTE_CONTROLE)
                 .statutStock(StatutStockLot.EN_PRODUCTION)
@@ -297,6 +402,7 @@ public class OrdreFabricationService {
                 .build();
         lot = lotRepository.save(lot);
 
+        of.setQuantiteReelle(quantiteReelle);
         of.setLotGenereId(lot.getId());
         of.setLotGenereNumero(lot.getNumero());
         of.setStatut(StatutOf.TERMINE);

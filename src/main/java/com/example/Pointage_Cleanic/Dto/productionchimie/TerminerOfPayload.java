@@ -10,5 +10,6 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class TerminerOfPayload {
+    private Double quantiteReelle;
     private String commentaire;
 }

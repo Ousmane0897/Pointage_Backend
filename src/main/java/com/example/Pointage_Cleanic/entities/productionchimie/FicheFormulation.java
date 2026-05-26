@@ -35,6 +35,7 @@ public class FicheFormulation {
     private List<IngredientFormulation> ingredients;
     private List<EtapeFormulation> etapes;
     private Integer dureePeremptionJours;
+    private Double quantiteRef;
     private UniteChimie uniteProduction;
 
     private StatutFormulation statut;

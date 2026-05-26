@@ -10,7 +10,6 @@ import com.example.Pointage_Cleanic.Dto.productionchimie.VolumeParProduit;
 import com.example.Pointage_Cleanic.Enum.StatutControleLot;
 import com.example.Pointage_Cleanic.Enum.StatutOf;
 import com.example.Pointage_Cleanic.Enum.UniteChimie;
-import com.example.Pointage_Cleanic.entities.productionchimie.ConsommationMp;
 import com.example.Pointage_Cleanic.entities.productionchimie.Lot;
 import com.example.Pointage_Cleanic.entities.productionchimie.OrdreFabrication;
 import lombok.RequiredArgsConstructor;
@@ -62,7 +61,9 @@ public class TableauBordProductionService {
         double tauxReussite = (nbValide + nbRejete) == 0 ? 0.0 : (double) nbValide / (nbValide + nbRejete);
 
         double tauxPerteMoyen = ofs.stream()
-                .filter(o -> o.getStatut() == StatutOf.TERMINE && o.getConsommationMp() != null)
+                .filter(o -> o.getStatut() == StatutOf.TERMINE
+                        && o.getQuantiteCible() != null
+                        && o.getQuantiteReelle() != null)
                 .mapToDouble(this::tauxPerteOf)
                 .average()
                 .orElse(0.0);
@@ -117,15 +118,11 @@ public class TableauBordProductionService {
                 .toList();
         Map<String, double[]> agg = new LinkedHashMap<>();
         for (OrdreFabrication of : ofs) {
-            if (of.getConsommationMp() == null) continue;
-            double sommeTh = 0, sommeRe = 0;
-            for (ConsommationMp c : of.getConsommationMp()) {
-                if (c.getQuantiteTheorique() != null) sommeTh += c.getQuantiteTheorique();
-                if (c.getQuantiteReelle() != null) sommeRe += c.getQuantiteReelle();
-            }
+            double cibleLitres = toLitres(of.getQuantiteCible(), of.getUniteCible());
+            double reelleLitres = toLitres(of.getQuantiteReelle(), of.getUniteCible());
             agg.computeIfAbsent(of.getProduitNom(), k -> new double[]{0.0, 0.0, 0.0});
-            agg.get(of.getProduitNom())[0] += sommeTh;
-            agg.get(of.getProduitNom())[1] += sommeRe;
+            agg.get(of.getProduitNom())[0] += cibleLitres;
+            agg.get(of.getProduitNom())[1] += reelleLitres;
             agg.get(of.getProduitNom())[2] += 1;
         }
         List<RendementProduit> result = new ArrayList<>();
@@ -192,14 +189,10 @@ public class TableauBordProductionService {
     }
 
     private double tauxPerteOf(OrdreFabrication of) {
-        if (of.getConsommationMp() == null || of.getConsommationMp().isEmpty()) return 0.0;
-        double sommeTh = 0, sommeRe = 0;
-        for (ConsommationMp c : of.getConsommationMp()) {
-            if (c.getQuantiteTheorique() != null) sommeTh += c.getQuantiteTheorique();
-            if (c.getQuantiteReelle() != null) sommeRe += c.getQuantiteReelle();
-        }
-        if (sommeTh == 0) return 0.0;
-        return (sommeTh - sommeRe) / sommeTh;
+        double cible = toLitres(of.getQuantiteCible(), of.getUniteCible());
+        double reelle = toLitres(of.getQuantiteReelle(), of.getUniteCible());
+        if (cible == 0) return 0.0;
+        return Math.max(0.0, (cible - reelle) / cible);
     }
 
     private double toLitres(Double quantite, UniteChimie unite) {

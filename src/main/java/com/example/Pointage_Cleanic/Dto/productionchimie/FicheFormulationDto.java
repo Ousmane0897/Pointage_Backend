@@ -37,6 +37,8 @@ public class FicheFormulationDto {
 
     private Integer versionCourante;
 
+    private Double quantiteRef;
+
     @NotEmpty
     private List<IngredientFormulation> ingredients;
 

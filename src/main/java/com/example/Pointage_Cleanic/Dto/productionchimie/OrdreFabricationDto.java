@@ -41,6 +41,8 @@ public class OrdreFabricationDto {
     @NotNull
     private UniteChimie uniteCible;
 
+    private Double quantiteReelle;
+
     @NotNull
     private LocalDateTime dateLancementPrevue;
     private LocalDateTime dateLancementEffective;
