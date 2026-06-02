@@ -1,0 +1,6 @@
+package com.example.Pointage_Cleanic.Enum.terrain;
+
+public enum TypeMateriel {
+    AUTOLAVEUSE, MONOBROSSE, ASPIRATEUR, NETTOYEUR_HAUTE_PRESSION, TONDEUSE,
+    DEBROUSSAILLEUSE, PULVERISATEUR, OUTILLAGE_MANUEL, EPI, AUTRE
+}

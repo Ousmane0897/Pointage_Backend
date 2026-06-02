@@ -98,6 +98,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/employes/**").authenticated()
                         .requestMatchers("/ws/info").authenticated()
                         .requestMatchers("/api/super-admin/**").authenticated()
+                        .requestMatchers("/api/terrain/**").authenticated()
 
                         // Toutes les autres requêtes nécessitent authentification
                         .anyRequest().authenticated()
