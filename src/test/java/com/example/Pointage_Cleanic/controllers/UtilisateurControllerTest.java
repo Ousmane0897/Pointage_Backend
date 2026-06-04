@@ -57,10 +57,10 @@ class UtilisateurControllerTest {
         u.setPassword("123456");
         u.setRole(RoleAdmin.SUPERVISEUR);
 
-        when(utilisateurRepository.findByEmail("admin@test.com"))
-                .thenReturn(Optional.empty());
-        when(loginRepository.findByEmail("admin@test.com"))
-                .thenReturn(Optional.empty());
+        when(utilisateurRepository.findAllByEmail("admin@test.com"))
+                .thenReturn(List.of());
+        when(loginRepository.findAllByEmail("admin@test.com"))
+                .thenReturn(List.of());
         when(passwordEncoder.encode(any()))
                 .thenReturn("ENCODED");
 
@@ -80,13 +80,16 @@ class UtilisateurControllerTest {
         Utilisateur u = new Utilisateur();
         u.setEmail("admin@test.com");
 
-        when(utilisateurRepository.findByEmail("admin@test.com"))
-                .thenReturn(Optional.of(new Utilisateur()));
+        when(utilisateurRepository.findAllByEmail("admin@test.com"))
+                .thenReturn(List.of(new Utilisateur()));
 
         mockMvc.perform(post("/api/superadmin")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(u)))
-                .andExpect(status().isConflict());
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.error").value("EMAIL_EXISTS"))
+                .andExpect(jsonPath("$.message").value(
+                        org.hamcrest.Matchers.containsString("existe déjà")));
     }
 
     // =========================
