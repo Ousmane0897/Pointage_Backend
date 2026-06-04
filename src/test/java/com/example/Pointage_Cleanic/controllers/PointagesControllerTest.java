@@ -63,8 +63,8 @@ class PointagesControllerTest {
 
         Pointage pointage = new Pointage();
 
-        Mockito.when(pointageServices.canPoint("DEV-1", 2)).thenReturn(true);
-        Mockito.when(pointageServices.enregistrerPointage("1234", "DEV-1", Mockito.anyDouble(), Mockito.anyDouble()))
+        Mockito.when(pointageServices.canPoint(eq("DEV-1"), Mockito.anyInt())).thenReturn(true);
+        Mockito.when(pointageServices.enregistrerPointage(eq("1234"), eq("DEV-1"), any(), any()))
                 .thenReturn(pointage);
 
         mockMvc.perform(post("/api/pointages")
@@ -131,6 +131,90 @@ class PointagesControllerTest {
                 .andExpect(jsonPath("$.totalElements").value(1))
                 .andExpect(jsonPath("$.size").value(20))
                 .andExpect(jsonPath("$.number").value(0));
+    }
+
+    @Test
+    void should_return_empty_page_today() throws Exception {
+
+        PageImpl<Pointage> empty = new PageImpl<>(
+                List.of(), PageRequest.of(0, 20), 0);
+
+        Mockito.when(pointageRepository.findByDate(eq(LocalDate.now()), any(Pageable.class)))
+                .thenReturn(empty);
+
+        mockMvc.perform(get("/api/pointages/today"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content").isArray())
+                .andExpect(jsonPath("$.content").isEmpty())
+                .andExpect(jsonPath("$.totalElements").value(0));
+    }
+
+    @Test
+    void should_expose_total_elements_greater_than_size() throws Exception {
+
+        // 1 élément sur la page mais 25 au total → pagination
+        PageImpl<Pointage> page = new PageImpl<>(
+                List.of(new Pointage()), PageRequest.of(0, 20), 25);
+
+        Mockito.when(pointageRepository.findByDate(eq(LocalDate.now()), any(Pageable.class)))
+                .thenReturn(page);
+
+        mockMvc.perform(get("/api/pointages/today").param("page", "0").param("size", "20"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(25))
+                .andExpect(jsonPath("$.size").value(20));
+    }
+
+    @Test
+    void should_return_en_cours_pointage_with_nullable_fields() throws Exception {
+
+        Pointage p = Pointage.builder()
+                .id("p1")
+                .codeSecret("1234")
+                .prenom("Mamadou")
+                .nom("Diop")
+                .site(new String[]{"yoff"})
+                .date(LocalDate.now())
+                .heureArrive("08:12")
+                .heureDepart(null)
+                .duree(null)
+                .status("EN COURS...")
+                .build();
+
+        Mockito.when(pointageRepository.findByDate(eq(LocalDate.now()), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(p), PageRequest.of(0, 20), 1));
+
+        mockMvc.perform(get("/api/pointages/today"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].codeSecret").value("1234"))
+                .andExpect(jsonPath("$.content[0].status").value("EN COURS..."))
+                .andExpect(jsonPath("$.content[0].site").isArray())
+                .andExpect(jsonPath("$.content[0].site[0]").value("yoff"))
+                .andExpect(jsonPath("$.content[0].heureArrive").value("08:12"))
+                .andExpect(jsonPath("$.content[0].heureDepart").isEmpty())
+                .andExpect(jsonPath("$.content[0].duree").isEmpty());
+    }
+
+    @Test
+    void should_return_termine_pointage() throws Exception {
+
+        Pointage p = Pointage.builder()
+                .id("p2")
+                .codeSecret("5678")
+                .status("TERMINÉ")
+                .heureArrive("08:00")
+                .heureDepart("17:30")
+                .duree("8h")
+                .build();
+
+        Mockito.when(pointageRepository.findByDate(eq(LocalDate.now()), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(p), PageRequest.of(0, 20), 1));
+
+        mockMvc.perform(get("/api/pointages/today"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].status").value("TERMINÉ"))
+                .andExpect(jsonPath("$.content[0].heureDepart").value("17:30"))
+                .andExpect(jsonPath("$.content[0].duree").value("8h"));
     }
 
     // ==========================================

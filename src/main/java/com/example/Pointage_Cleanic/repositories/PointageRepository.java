@@ -25,7 +25,13 @@ public interface PointageRepository extends MongoRepository<Pointage,String> {
 
     Page<Pointage> findByDate(LocalDate date, Pageable pageable);
 
-    Optional<Pointage> findByCodeSecretAndDate(String codeSecret, LocalDate date);
+    // Un agent peut avoir plusieurs pointages le même jour (un par site). On ne
+    // cherche donc plus « le » pointage du jour mais le pointage encore ouvert
+    // (heureDepart == null) le plus récent, à clôturer au prochain POST.
+    Optional<Pointage> findFirstByCodeSecretAndDateAndHeureDepartIsNullOrderByTimestampDesc(
+            String codeSecret, LocalDate date);
+
+    boolean existsByCodeSecretAndDate(String codeSecret, LocalDate date);
 
 
 

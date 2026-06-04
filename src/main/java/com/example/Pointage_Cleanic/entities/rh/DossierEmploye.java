@@ -29,7 +29,7 @@ public class DossierEmploye {
     // mobile correspond à cet agentId). Unique globalement, sparse car des
     // dossiers historiques peuvent ne pas encore le porter.
     @Indexed(unique = true, sparse = true)
-    private String agentId;
+    private String AgentId;
 
     // Identité
     private String nom;

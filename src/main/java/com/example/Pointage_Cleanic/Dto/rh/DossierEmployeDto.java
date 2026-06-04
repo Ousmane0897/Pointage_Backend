@@ -21,7 +21,7 @@ public class DossierEmployeDto {
     private String matricule;
 
     // Code agent à 4 chiffres = clé du pointage (^\d{4}$, unique)
-    private String agentId;
+    private String AgentId;
 
     // Identité
     private String nom;

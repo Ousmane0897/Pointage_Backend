@@ -1,9 +1,10 @@
 package com.example.Pointage_Cleanic.services;
 
 
-import com.example.Pointage_Cleanic.entities.Employe;
 import com.example.Pointage_Cleanic.entities.Pointage;
+import com.example.Pointage_Cleanic.entities.rh.DossierEmploye;
 import com.example.Pointage_Cleanic.repositories.PointageRepository;
+import com.example.Pointage_Cleanic.repositories.rh.DossierEmployeRepository;
 import com.lowagie.text.PageSize;
 import com.lowagie.text.Phrase;
 import com.lowagie.text.pdf.PdfPCell;
@@ -48,7 +49,10 @@ public class PointageServices {
     private final MongoTemplate mongoTemplate;
     private final PointageRepository pointageRepository;
     private final GeocodingService geocodingService;
-    private final EmployeServices employeServices;
+    // Référentiel autonome : le pointage résout l'agent par agentId (= codeSecret
+    // 4 chiffres envoyé par le mobile) dans dossiers_employes. Les modèles legacy
+    // Employe / EmployeComplet ne sont plus consultés par le flux de pointage.
+    private final DossierEmployeRepository dossierEmployeRepository;
 
     Pointage save(Pointage pointage) {
 
@@ -61,34 +65,12 @@ public class PointageServices {
     }
 
     public Pointage getPointageBycodeSecret(String codeSecret) {
+        // Un agent peut avoir plusieurs pointages (multi-site) : renvoyer le plus récent.
         Query query = new Query();
         query.addCriteria(Criteria.where("codeSecret").is(codeSecret));
+        query.with(Sort.by(Sort.Direction.DESC, "timestamp")).limit(1);
         return mongoTemplate.findOne(query, Pointage.class);
     }
-
-    public Employe getEmployeBycodeSecret(String codeSecret) {
-        Query query = new Query();
-
-        // 1. Essai en tant que String
-        query.addCriteria(Criteria.where("codeSecret").is(codeSecret));
-        Employe employe = mongoTemplate.findOne(query, Employe.class);
-        if (employe != null) {
-            return employe;
-        }
-
-        // 2. Si échec, essai en tant qu'entier
-        try {
-            int codeAsInt = Integer.parseInt(codeSecret);
-            query = new Query(); // Nouvelle instance
-            query.addCriteria(Criteria.where("codeSecret").is(codeAsInt));
-            employe = mongoTemplate.findOne(query, Employe.class);
-        } catch (NumberFormatException e) {
-            // codeSecret n'est pas un entier, on ignore
-        }
-
-        return employe;
-    }
-
 
     public Page<Pointage> searchHistorique(
             String search,
@@ -269,6 +251,21 @@ public class PointageServices {
 
 
 
+        /**
+         * Découpe le champ {@code siteAffecte} du dossier-employé (chaîne
+         * « / »-séparée) en tableau de sites pour {@code Pointage.site[]}.
+         * Ex. "Keur gorgui / yoff / bgfi tann" → ["Keur gorgui","yoff","bgfi tann"].
+         */
+        static String[] decouperSites(String siteAffecte) {
+            if (siteAffecte == null || siteAffecte.isBlank()) {
+                return new String[0];
+            }
+            return Arrays.stream(siteAffecte.split("/"))
+                    .map(String::trim)
+                    .filter(s -> !s.isEmpty())
+                    .toArray(String[]::new);
+        }
+
         public Pointage enregistrerPointage(
                 String codeSecret,
                 String deviceId,
@@ -276,11 +273,9 @@ public class PointageServices {
                 Double longitude
         ) {
 
-            // 1️⃣ Vérifier l’employé
-            Employe employe = employeServices.getBycodeSecret(codeSecret);
-            if (employe == null) {
-                throw new IllegalArgumentException("Employé introuvable");
-            }
+            // 1️⃣ Vérifier l’employé (référentiel dossier-employé, clé = agentId)
+            DossierEmploye agent = dossierEmployeRepository.findByAgentId(codeSecret)
+                    .orElseThrow(() -> new IllegalArgumentException("Employé introuvable"));
 
             LocalDate today = LocalDate.now();
             LocalTime now = LocalTime.now();
@@ -298,20 +293,22 @@ public class PointageServices {
                 log.warn("Reverse geocoding échoué", e);
             }
 
-            // 3️⃣ Chercher pointage du jour
+            // 3️⃣ Chercher le pointage encore ouvert du jour (heureDepart == null).
+            // Un agent peut enchaîner plusieurs pointages/jour (un par site) : tant
+            // qu'un pointage est ouvert, le POST le clôture ; sinon il en crée un nouveau.
             Optional<Pointage> optional = pointageRepository
-                    .findByCodeSecretAndDate(codeSecret, today);
+                    .findFirstByCodeSecretAndDateAndHeureDepartIsNullOrderByTimestampDesc(codeSecret, today);
 
             // =====================
-            // 🟢 ARRIVÉE
+            // 🟢 ARRIVÉE (aucun pointage ouvert → nouveau pointage)
             // =====================
             if (optional.isEmpty()) {
 
                 Pointage pointage = Pointage.builder()
-                        .codeSecret(employe.getCodeSecret())
-                        .prenom(employe.getPrenom())
-                        .nom(employe.getNom())
-                        .site(employe.getSite())
+                        .codeSecret(agent.getAgentId())
+                        .prenom(agent.getPrenom())
+                        .nom(agent.getNom())
+                        .site(decouperSites(agent.getSiteAffecte()))
                         .date(today)
                         .heureArrive(currentTime)
                         .status("EN COURS...")
@@ -323,14 +320,10 @@ public class PointageServices {
                 return pointageRepository.save(pointage);
             }
 
+            // =====================
+            // 🔵 DÉPART (clôture du pointage ouvert)
+            // =====================
             Pointage pointage = optional.get();
-
-            // =====================
-            // 🔵 DÉPART
-            // =====================
-            if (pointage.getHeureDepart() != null) {
-                throw new IllegalStateException("Départ déjà enregistré");
-            }
 
             LocalTime startTime = LocalTime.parse(pointage.getHeureArrive());
             Duration duration = Duration.between(startTime, now);

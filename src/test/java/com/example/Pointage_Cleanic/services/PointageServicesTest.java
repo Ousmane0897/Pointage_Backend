@@ -1,14 +1,15 @@
 package com.example.Pointage_Cleanic.services;
 
-import com.example.Pointage_Cleanic.entities.Employe;
 import com.example.Pointage_Cleanic.entities.Pointage;
+import com.example.Pointage_Cleanic.entities.rh.DossierEmploye;
 import com.example.Pointage_Cleanic.repositories.PointageRepository;
+import com.example.Pointage_Cleanic.repositories.rh.DossierEmployeRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.*;
 import org.springframework.data.mongodb.core.MongoTemplate;
 
-import java.time.Instant;
+import java.time.LocalDate;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -26,6 +27,18 @@ class PointageServicesTest {
     @Mock
     private PointageRepository pointageRepository;
 
+    @Mock
+    private DossierEmployeRepository dossierEmployeRepository;
+
+    private DossierEmploye agent(String agentId, String siteAffecte) {
+        DossierEmploye d = new DossierEmploye();
+        d.setAgentId(agentId);
+        d.setPrenom("Mamadou");
+        d.setNom("Diop");
+        d.setSiteAffecte(siteAffecte);
+        return d;
+    }
+
     // ======================================================
     // 🧪 canPoint()
     // ======================================================
@@ -42,80 +55,105 @@ class PointageServicesTest {
     }
 
     // ======================================================
-    // 🧪 enregistrerPointage() — NO EXISTING POINTAGE
+    // 🧪 decouperSites() — découpage multi-sites "/"
+    // ======================================================
+
+    @Test
+    void should_split_multi_sites_on_slash() {
+        assertArrayEquals(
+                new String[]{"Keur gorgui", "yoff", "bgfi tann"},
+                PointageServices.decouperSites("Keur gorgui / yoff / bgfi tann"));
+        assertArrayEquals(
+                new String[]{"Ouakam", "zone A"},
+                PointageServices.decouperSites("Ouakam / zone A"));
+        assertArrayEquals(new String[0], PointageServices.decouperSites(null));
+        assertArrayEquals(new String[0], PointageServices.decouperSites("   "));
+    }
+
+    // ======================================================
+    // 🧪 enregistrerPointage() — NO EXISTING POINTAGE (ARRIVÉE)
     // ======================================================
 
     @Test
     void should_create_new_pointage_when_none_exists() {
 
-        Employe employe = new Employe();
-        employe.setCodeSecret("1234");
-        employe.setPrenom("Mamadou");
-        employe.setNom("Diop");
-        employe.setSite(new String[]{"Dakar"});
-
-        Pointage savedPointage = new Pointage();
-
-        when(mongoTemplate.findOne(any(), eq(Employe.class))).thenReturn(employe);
-        when(mongoTemplate.findOne(any(), eq(Pointage.class))).thenReturn(null);
-        when(pointageRepository.save(any())).thenReturn(savedPointage);
+        when(dossierEmployeRepository.findByAgentId("1234"))
+                .thenReturn(Optional.of(agent("1234", "Ouakam / zone A")));
+        when(pointageRepository.findFirstByCodeSecretAndDateAndHeureDepartIsNullOrderByTimestampDesc(
+                eq("1234"), any(LocalDate.class)))
+                .thenReturn(Optional.empty());
+        when(pointageRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         Pointage result = service.enregistrerPointage("1234", "DEV-1", 14.717, -17.467);
 
         assertNotNull(result);
+        assertEquals("1234", result.getCodeSecret());
+        assertEquals("EN COURS...", result.getStatus());
+        assertArrayEquals(new String[]{"Ouakam", "zone A"}, result.getSite());
+        assertNotNull(result.getHeureArrive());
         verify(pointageRepository).save(any());
     }
 
     // ======================================================
-    // 🧪 enregistrerPointage() — EXISTING POINTAGE
+    // 🧪 enregistrerPointage() — POINTAGE OUVERT (DÉPART → clôture)
     // ======================================================
 
     @Test
     void should_update_existing_pointage() {
 
-        PointageServices spyService = spy(service);
-
-        Employe employe = new Employe();
-        employe.setCodeSecret("1234");
-        employe.setPrenom("Mamadou");
-        employe.setNom("Diop");
-        employe.setSite(new String[]{"Dakar"});
-
         Pointage existing = new Pointage();
         existing.setHeureArrive("08:00");
 
-        doReturn(employe).when(spyService).getEmployeBycodeSecret("1234");
-        doReturn(existing).when(spyService).getBycodeSecretAndDate("1234");
+        when(dossierEmployeRepository.findByAgentId("1234"))
+                .thenReturn(Optional.of(agent("1234", "Dakar")));
+        when(pointageRepository.findFirstByCodeSecretAndDateAndHeureDepartIsNullOrderByTimestampDesc(
+                eq("1234"), any(LocalDate.class)))
+                .thenReturn(Optional.of(existing));
+        when(pointageRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-
-        doNothing().when(spyService)
-                .updatePointage(any(), any(), any(), any(), any());
-
-        Pointage result = spyService.enregistrerPointage("1234", "DEV-1", 14.717, -17.467);
-
+        Pointage result = service.enregistrerPointage("1234", "DEV-1", 14.717, -17.467);
 
         assertNotNull(result);
-
-        verify(spyService)
-                .updatePointage(any(), any(), any(), any(), any());
+        assertEquals("TERMINÉ", result.getStatus());
+        assertNotNull(result.getHeureDepart());
+        assertNotNull(result.getDuree());
+        verify(pointageRepository).save(existing);
     }
 
-
-
-
-
-
-
     // ======================================================
-    // 🧪 enregistrerPointage() — EMPLOYE NOT FOUND
+    // 🧪 enregistrerPointage() — MULTI-SITE : nouveau pointage après clôture du précédent
     // ======================================================
 
     @Test
-    void should_throw_exception_when_employe_not_found() {
+    void should_create_second_pointage_after_previous_closed() {
 
-        when(mongoTemplate.findOne(any(), eq(Employe.class))).thenReturn(null);
+        when(dossierEmployeRepository.findByAgentId("1234"))
+                .thenReturn(Optional.of(agent("1234", "Site B")));
+        // Aucun pointage ouvert (le précédent est déjà clôturé) → nouvelle arrivée
+        when(pointageRepository.findFirstByCodeSecretAndDateAndHeureDepartIsNullOrderByTimestampDesc(
+                eq("1234"), any(LocalDate.class)))
+                .thenReturn(Optional.empty());
+        when(pointageRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        RuntimeException ex = assertThrows(RuntimeException.class,
+        Pointage result = service.enregistrerPointage("1234", "DEV-1", 14.717, -17.467);
+
+        assertNotNull(result);
+        assertEquals("EN COURS...", result.getStatus());
+        assertNull(result.getHeureDepart());
+        assertNotNull(result.getHeureArrive());
+        verify(pointageRepository).save(any());
+    }
+
+    // ======================================================
+    // 🧪 enregistrerPointage() — AGENT NOT FOUND → 404 (IllegalArgumentException)
+    // ======================================================
+
+    @Test
+    void should_throw_exception_when_agent_not_found() {
+
+        when(dossierEmployeRepository.findByAgentId("1234")).thenReturn(Optional.empty());
+
+        RuntimeException ex = assertThrows(IllegalArgumentException.class,
                 () -> service.enregistrerPointage("1234", "DEV-1", 14.717, -17.467));
 
         assertTrue(ex.getMessage().contains("Employé introuvable"));
