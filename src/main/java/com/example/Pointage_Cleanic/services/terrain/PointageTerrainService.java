@@ -5,7 +5,7 @@ import com.example.Pointage_Cleanic.Enum.terrain.StatutPointage;
 import com.example.Pointage_Cleanic.Enum.terrain.TypeAlerteTerrain;
 import com.example.Pointage_Cleanic.Enum.terrain.TypePointage;
 import com.example.Pointage_Cleanic.Mapper.terrain.PointageTerrainMapper;
-import com.example.Pointage_Cleanic.entities.DossierEmploye;
+import com.example.Pointage_Cleanic.entities.rh.DossierEmploye;
 import com.example.Pointage_Cleanic.entities.terrain.PointageTerrain;
 import com.example.Pointage_Cleanic.entities.terrain.PositionGps;
 import com.example.Pointage_Cleanic.entities.terrain.SiteClient;

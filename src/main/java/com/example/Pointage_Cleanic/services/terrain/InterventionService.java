@@ -5,7 +5,7 @@ import com.example.Pointage_Cleanic.Dto.terrain.PhotoMetaDto;
 import com.example.Pointage_Cleanic.Enum.terrain.MomentPhoto;
 import com.example.Pointage_Cleanic.Enum.terrain.StatutIntervention;
 import com.example.Pointage_Cleanic.Mapper.terrain.FicheInterventionMapper;
-import com.example.Pointage_Cleanic.entities.DossierEmploye;
+import com.example.Pointage_Cleanic.entities.rh.DossierEmploye;
 import com.example.Pointage_Cleanic.entities.terrain.FicheIntervention;
 import com.example.Pointage_Cleanic.entities.terrain.PhotoInterventionFichier;
 import com.example.Pointage_Cleanic.entities.terrain.SiteClient;

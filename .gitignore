@@ -36,3 +36,10 @@ out/
 
 ### VS Code ###
 .vscode/
+
+### JVM crash logs ###
+hs_err_pid*.log
+replay_pid*.log
+
+### Claude Code local ###
+.claude/settings.local.json

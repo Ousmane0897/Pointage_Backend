@@ -35,7 +35,7 @@ import java.util.List;
 
 import static com.example.Pointage_Cleanic.services.terrain.TerrainConstantes.NOTE_SEUIL_CONFORMITE_DEFAUT;
 
-@Service
+@Service("terrainControleQualiteService")
 @RequiredArgsConstructor
 public class ControleQualiteService {
 

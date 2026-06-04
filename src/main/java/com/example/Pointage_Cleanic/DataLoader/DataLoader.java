@@ -1,13 +1,13 @@
 package com.example.Pointage_Cleanic.DataLoader;
 
-import com.example.Pointage_Cleanic.Enum.CategorieCritere;
-import com.example.Pointage_Cleanic.Enum.TypeFormateur;
-import com.example.Pointage_Cleanic.entities.CritereEvaluation;
-import com.example.Pointage_Cleanic.entities.Formation;
-import com.example.Pointage_Cleanic.entities.GrilleEvaluation;
+import com.example.Pointage_Cleanic.Enum.rh.CategorieCritere;
+import com.example.Pointage_Cleanic.Enum.rh.TypeFormateur;
+import com.example.Pointage_Cleanic.entities.rh.CritereEvaluation;
+import com.example.Pointage_Cleanic.entities.rh.Formation;
+import com.example.Pointage_Cleanic.entities.rh.GrilleEvaluation;
 import com.example.Pointage_Cleanic.entities.User;
-import com.example.Pointage_Cleanic.repositories.FormationRepository;
-import com.example.Pointage_Cleanic.repositories.GrilleEvaluationRepository;
+import com.example.Pointage_Cleanic.repositories.rh.FormationRepository;
+import com.example.Pointage_Cleanic.repositories.rh.GrilleEvaluationRepository;
 import com.example.Pointage_Cleanic.repositories.LoginRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.CommandLineRunner;

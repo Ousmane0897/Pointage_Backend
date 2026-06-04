@@ -1,9 +1,9 @@
 package com.example.Pointage_Cleanic.DataLoader;
 
-import com.example.Pointage_Cleanic.Enum.StatutDossierEmploye;
-import com.example.Pointage_Cleanic.entities.DossierEmploye;
-import com.example.Pointage_Cleanic.repositories.DossierEmployeRepository;
-import com.example.Pointage_Cleanic.services.PeriodeEssaiService;
+import com.example.Pointage_Cleanic.Enum.rh.StatutDossierEmploye;
+import com.example.Pointage_Cleanic.entities.rh.DossierEmploye;
+import com.example.Pointage_Cleanic.repositories.rh.DossierEmployeRepository;
+import com.example.Pointage_Cleanic.services.rh.PeriodeEssaiService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.CommandLineRunner;

@@ -1,7 +1,7 @@
 package com.example.Pointage_Cleanic.services.terrain;
 
-import com.example.Pointage_Cleanic.entities.DossierEmploye;
-import com.example.Pointage_Cleanic.repositories.DossierEmployeRepository;
+import com.example.Pointage_Cleanic.entities.rh.DossierEmploye;
+import com.example.Pointage_Cleanic.repositories.rh.DossierEmployeRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 

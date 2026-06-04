@@ -38,7 +38,7 @@ import java.util.List;
 import java.util.Objects;
 
 @Slf4j
-@Service
+@Service("productionControleQualiteService")
 @RequiredArgsConstructor
 public class ControleQualiteService {
 

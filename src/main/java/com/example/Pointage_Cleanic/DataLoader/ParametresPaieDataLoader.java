@@ -1,8 +1,8 @@
 package com.example.Pointage_Cleanic.DataLoader;
 
-import com.example.Pointage_Cleanic.entities.ParametresPaie;
-import com.example.Pointage_Cleanic.entities.TrancheIr;
-import com.example.Pointage_Cleanic.repositories.ParametresPaieRepository;
+import com.example.Pointage_Cleanic.entities.rh.ParametresPaie;
+import com.example.Pointage_Cleanic.entities.rh.TrancheIr;
+import com.example.Pointage_Cleanic.repositories.rh.ParametresPaieRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.stereotype.Component;

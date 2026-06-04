@@ -4,7 +4,7 @@ import com.example.Pointage_Cleanic.Dto.terrain.AlerteDelaiPhyto;
 import com.example.Pointage_Cleanic.Enum.terrain.CategoriePhyto;
 import com.example.Pointage_Cleanic.Enum.terrain.StatutApplicationPhyto;
 import com.example.Pointage_Cleanic.Enum.terrain.TypeAlerteDelai;
-import com.example.Pointage_Cleanic.entities.DossierEmploye;
+import com.example.Pointage_Cleanic.entities.rh.DossierEmploye;
 import com.example.Pointage_Cleanic.entities.terrain.ApplicationPhyto;
 import com.example.Pointage_Cleanic.entities.terrain.ProduitPhytosanitaire;
 import com.example.Pointage_Cleanic.entities.terrain.SiteClient;
