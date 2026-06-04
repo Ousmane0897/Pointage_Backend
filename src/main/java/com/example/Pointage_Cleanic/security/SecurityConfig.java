@@ -72,8 +72,19 @@ public class SecurityConfig {
                         // OPTIONS préflight autorisé pour toutes les routes
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 
-                        // 🔹 Routes publiques
-                        .requestMatchers("/pointages/**", "/api/pointages/**").permitAll()
+                        // 🔹 Pointages — vues superviseur (JWT obligatoire).
+                        // Placées AVANT les règles publiques : first-match-wins, et
+                        // /api/pointages/{codeSecret} matcherait aussi /today.
+                        .requestMatchers(HttpMethod.GET, "/api/pointages/today").authenticated()
+                        .requestMatchers("/api/pointages/historique/**").authenticated() // search + exports excel/pdf
+                        .requestMatchers(HttpMethod.GET, "/api/pointages").authenticated() // getAll
+
+                        // 🔹 Pointages — mobile public (pointage sans token)
+                        .requestMatchers(HttpMethod.POST, "/api/pointages").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/pointages/{codeSecret}").permitAll() // statut consulté par le mobile
+                        .requestMatchers("/pointages/**").permitAll() // chemin legacy mobile inchangé
+
+                        // 🔹 Autres routes publiques
                         .requestMatchers(
                                 "/api/login/**",
                                 "/auth/forgot-password",
