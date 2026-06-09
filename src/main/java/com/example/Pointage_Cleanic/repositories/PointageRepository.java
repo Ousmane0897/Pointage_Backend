@@ -21,6 +21,9 @@ public interface PointageRepository extends MongoRepository<Pointage,String> {
 
     List<Pointage> findAllByDate(LocalDate date);
 
+    // Tous les pointages d'un intervalle (récapitulatif mensuel : retards + présences).
+    List<Pointage> findByDateBetween(LocalDate debut, LocalDate fin);
+
     List<Pointage> findByDateOrderByTimestampDesc(LocalDate date);
 
     Page<Pointage> findByDate(LocalDate date, Pageable pageable);

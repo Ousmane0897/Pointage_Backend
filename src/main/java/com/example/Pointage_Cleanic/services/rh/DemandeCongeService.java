@@ -8,11 +8,17 @@ import com.example.Pointage_Cleanic.entities.rh.DossierEmploye;
 import com.example.Pointage_Cleanic.exception.ResourceNotFoundException;
 import com.example.Pointage_Cleanic.repositories.rh.DemandeCongeRepository;
 import com.example.Pointage_Cleanic.repositories.rh.DossierEmployeRepository;
+import com.example.Pointage_Cleanic.Enum.rh.StatutDossierEmploye;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
+import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -100,13 +106,29 @@ public class DemandeCongeService {
         DossierEmploye employe = dossierEmployeRepository.findById(employeId)
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Dossier employé introuvable : " + employeId));
+        return buildSolde(employe);
+    }
 
+    /**
+     * Soldes de tous les employés non sortis (façade /conges/soldes sans employeId).
+     */
+    public List<SoldeCongeDto> getSoldes() {
+        return dossierEmployeRepository.findByStatutIn(List.of(
+                        StatutDossierEmploye.ACTIF,
+                        StatutDossierEmploye.EN_PERIODE_ESSAI,
+                        StatutDossierEmploye.SUSPENDU))
+                .stream()
+                .map(this::buildSolde)
+                .collect(Collectors.toList());
+    }
+
+    private SoldeCongeDto buildSolde(DossierEmploye employe) {
         int annee = LocalDate.now().getYear();
         LocalDate debut = LocalDate.of(annee, 1, 1);
         LocalDate fin = LocalDate.of(annee, 12, 31);
 
         List<DemandeConge> congesAnnee = demandeCongeRepository
-                .findByEmployeIdAndDateDebutBetween(employeId, debut, fin);
+                .findByEmployeIdAndDateDebutBetween(employe.getId(), debut, fin);
 
         int pris = congesAnnee.stream()
                 .filter(c -> c.getStatut() == StatutDemande.APPROUVE)
@@ -119,7 +141,7 @@ public class DemandeCongeService {
                 .sum();
 
         return SoldeCongeDto.builder()
-                .employeId(employeId)
+                .employeId(employe.getId())
                 .matricule(employe.getMatricule())
                 .nom(employe.getNom())
                 .prenom(employe.getPrenom())
@@ -130,6 +152,45 @@ public class DemandeCongeService {
                 .enCours(enCours)
                 .solde(JOURS_ACQUIS_PAR_AN - pris - enCours)
                 .build();
+    }
+
+    /**
+     * Liste filtrée + paginée des demandes pour la façade /api/temps-presences.
+     * Filtrage en mémoire ; intervalle [dateDebut, dateFin] = chevauchement.
+     */
+    public Page<DemandeCongeDto> searchDemandes(
+            String employeId, String departement, String statut, String type,
+            LocalDate dateDebut, LocalDate dateFin, String q, int page, int size) {
+
+        List<DemandeCongeDto> filtered = demandeCongeRepository.findAll().stream()
+                .map(this::toDto)
+                .filter(d -> employeId == null || employeId.isBlank() || employeId.equals(d.getEmployeId()))
+                .filter(d -> departement == null || departement.isBlank()
+                        || (d.getDepartement() != null && d.getDepartement().equalsIgnoreCase(departement)))
+                .filter(d -> statut == null || statut.isBlank()
+                        || (d.getStatut() != null && d.getStatut().name().equalsIgnoreCase(statut)))
+                .filter(d -> type == null || type.isBlank()
+                        || (d.getType() != null && d.getType().name().equalsIgnoreCase(type)))
+                .filter(d -> dateDebut == null || (d.getDateFin() != null && !d.getDateFin().isBefore(dateDebut)))
+                .filter(d -> dateFin == null || (d.getDateDebut() != null && !d.getDateDebut().isAfter(dateFin)))
+                .filter(d -> matchesQ(q, d.getNom(), d.getPrenom(), d.getMatricule()))
+                .sorted(Comparator.comparing(DemandeCongeDto::getDateDemande,
+                        Comparator.nullsLast(Comparator.reverseOrder())))
+                .collect(Collectors.toList());
+
+        Pageable pageable = PageRequest.of(page, size);
+        int start = (int) pageable.getOffset();
+        int end = Math.min(start + pageable.getPageSize(), filtered.size());
+        List<DemandeCongeDto> content = start >= filtered.size() ? List.of() : filtered.subList(start, end);
+        return new PageImpl<>(content, pageable, filtered.size());
+    }
+
+    private boolean matchesQ(String q, String nom, String prenom, String matricule) {
+        if (q == null || q.isBlank()) return true;
+        String s = q.toLowerCase();
+        return (nom != null && nom.toLowerCase().contains(s))
+                || (prenom != null && prenom.toLowerCase().contains(s))
+                || (matricule != null && matricule.toLowerCase().contains(s));
     }
 
     private int computeNombreJours(LocalDate debut, LocalDate fin) {

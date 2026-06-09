@@ -75,29 +75,31 @@ Things that only make sense after reading several files:
 | `/api/besoins` | CollecteBesoinController |
 | `/api/dashboard`, `/api/dashboard_par_agence` | DashboardController, DashboardParAgence |
 | `/ws` | STOMP endpoint |
-| **— RH 6.1 —** | |
+| **— RH 6.1 — gestion-personnel** (`controllers/rh/gestionpersonnel`) | |
 | `/api/gestion-personnel/employes` | DossierEmployeController (source de vérité RH depuis 2026-04) |
-| `/api/contrats` | ContratController (multipart, fichier PDF inline) |
+| `/api/gestion-personnel/contrats` | ContratController (multipart, fichier PDF inline) |
 | `/api/gestion-personnel/periodes-essai` | PeriodeEssaiController (sur PeriodeEssai, source de vérité depuis 2026-04-29) |
 | `/api/gestion-personnel/documents` | DocumentEmployeController (pièces administratives génériques + workflow validation) |
-| `/api/organigramme` | OrganigrammeController (legacy, sur EmployeComplet) |
+| `/api/gestion-personnel/organigramme` | OrganigrammeController (legacy, sur EmployeComplet) |
+| **— RH 6.2 — temps-presences** (`controllers/rh/tempspresences`, surface unique façade depuis 2026-06) | |
+| `/api/temps-presences/pointages` | TempsPresencesPointageController |
+| `/api/temps-presences/absences` | TempsPresencesAbsenceController (+ `/employe/{id}`, `/{id}/justificatif`) |
+| `/api/temps-presences/conges` | TempsPresencesCongeController (+ `/demandes/employe/{id}`) |
+| `/api/temps-presences/heures-supplementaires` | TempsPresencesHeureSupController (+ `/employe/{id}`) |
+| `/api/temps-presences/recapitulatif` | TempsPresencesRecapController (+ `/export/excel`, `/export/pdf`) |
+| **— RH 6.3 — paie** (`controllers/rh/paie`) | |
+| `/api/paie/grille-salariale` | GrilleSalarialeController |
+| `/api/paie/bulletins` | BulletinPaieController |
+| `/api/paie/declarations-sociales` | DeclarationSocialeController |
+| `/api/paie/parametres` | ParametresPaieController |
+| **— RH 6.4 — developpement-rh** (`controllers/rh/developpementrh`) | |
+| `/api/developpement-rh/formations` | FormationController |
+| `/api/developpement-rh/evaluations` | EvaluationPeriodiqueController |
+| `/api/developpement-rh/sanctions` | SanctionController |
+| `/api/developpement-rh/besoins-formation` | BesoinFormationController |
+| **— RH transverse** (`controllers/rh`, racine) | |
 | `/api/rh-employes`, `/api/employes` | RhEmployeController (legacy, sur EmployeComplet) |
-| **— RH 6.2 —** | |
-| `/api/pointage-centralise` | PointageCentraliseController |
-| `/api/rh-absences`, `/api/conges` | RhAbsenceController, DemandeCongeController |
-| `/api/heures-supplementaires` | HeureSupplementaireController |
-| `/api/recapitulatif-mensuel` | RecapitulatifMensuelController |
-| **— RH 6.3 —** | |
-| `/api/grille-salariale` | GrilleSalarialeController |
-| `/api/bulletins-paie` | BulletinPaieController |
-| `/api/declarations-sociales` | DeclarationSocialeController |
-| `/api/parametres-paie` | ParametresPaieController |
-| **— RH 6.4 —** | |
-| `/api/formations` | FormationController |
-| `/api/evaluations` | EvaluationPeriodiqueController |
-| `/api/sanctions` | SanctionController |
-| `/api/besoins-formation` | BesoinFormationController |
-| `/api/tableau-bord-rh` | TableauBordRhController |
+| `/api/tableau-bord-rh` | TableauBordRhController (dashboard transverse, agrège les 4 sous-modules) |
 | **— Production Chimie 5.1 —** | |
 | `/api/production-chimie/stock-chimie/matieres-premieres` | MatieresPremieresController (multipart fiche sécurité) |
 | `/api/production-chimie/stock-chimie/mouvements` | MouvementsStockChimieController (réception, ajustement) |

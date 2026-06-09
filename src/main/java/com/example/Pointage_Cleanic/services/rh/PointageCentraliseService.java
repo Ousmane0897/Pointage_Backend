@@ -36,50 +36,81 @@ public class PointageCentraliseService {
             String statut, String q, int page, int size) {
 
         LocalDate targetDate = date != null ? date : LocalDate.now();
-        Pageable pageable = PageRequest.of(page, size);
 
-        // Récupérer tous les pointages du jour indexés par codeSecret
-        List<Pointage> pointagesDuJour = pointageRepository.findAllByDate(targetDate);
-        Map<String, Pointage> pointageParCode = pointagesDuJour.stream()
-                .collect(Collectors.toMap(Pointage::getCodeSecret, p -> p, (a, b) -> a));
-
-        // Récupérer les congés approuvés couvrant la date
-        List<DemandeConge> congesActifs = demandeCongeRepository
-                .findByStatutAndDateDebutLessThanEqualAndDateFinGreaterThanEqual(
-                        StatutDemande.APPROUVE, targetDate, targetDate);
-        Map<String, DemandeConge> congeParEmploye = congesActifs.stream()
-                .collect(Collectors.toMap(DemandeConge::getEmployeId, c -> c, (a, b) -> a));
-
-        // Construire la vue pour chaque employé ACTIF
         List<EmployeComplet> employes = employeCompletRepository.findByStatut(EmployeComplet.StatutEmploye.ACTIF);
-
-        List<PointageCentraliseDto> result = employes.stream()
-                .filter(e -> {
-                    if (departement != null && !departement.isBlank()) {
-                        String dept = e.getAgence() != null && e.getAgence().length > 0 ? e.getAgence()[0] : "";
-                        if (!dept.equalsIgnoreCase(departement)) return false;
-                    }
-                    if (site != null && !site.isBlank()) {
-                        String empSite = e.getCodeSite() != null ? e.getCodeSite() : "";
-                        if (!empSite.equalsIgnoreCase(site)) return false;
-                    }
-                    if (q != null && !q.isBlank()) {
-                        String search = q.toLowerCase();
-                        boolean matchNom = e.getNom() != null && e.getNom().toLowerCase().contains(search);
-                        boolean matchMatricule = e.getMatricule() != null && e.getMatricule().toLowerCase().contains(search);
-                        if (!matchNom && !matchMatricule) return false;
-                    }
-                    return true;
-                })
-                .map(e -> buildDto(e, targetDate, pointageParCode.get(e.getAgentId()), congeParEmploye.get(e.getId())))
+        List<PointageCentraliseDto> result = buildForDate(targetDate, employes, departement, site, q).stream()
                 .filter(dto -> statut == null || statut.isBlank() || dto.getStatut().equals(statut))
                 .collect(Collectors.toList());
 
+        return paginate(result, page, size);
+    }
+
+    /**
+     * Variante plage de dates : agrège la vue jour par jour entre dateDebut et
+     * dateFin (incluses). Une ligne par (employé, jour). Utilisée par
+     * {@code /api/temps-presences/pointages} quand le front fournit un intervalle.
+     */
+    public Page<PointageCentraliseDto> getPointagesRange(
+            LocalDate dateDebut, LocalDate dateFin, String departement, String site,
+            String statut, String q, int page, int size) {
+
+        if (dateDebut == null || dateFin == null || dateFin.isBefore(dateDebut)) {
+            throw new IllegalArgumentException("dateDebut et dateFin sont requis et dateFin doit être >= dateDebut");
+        }
+
+        List<EmployeComplet> employes = employeCompletRepository.findByStatut(EmployeComplet.StatutEmploye.ACTIF);
+
+        List<PointageCentraliseDto> result = dateDebut.datesUntil(dateFin.plusDays(1))
+                .flatMap(jour -> buildForDate(jour, employes, departement, site, q).stream())
+                .filter(dto -> statut == null || statut.isBlank() || dto.getStatut().equals(statut))
+                .collect(Collectors.toList());
+
+        return paginate(result, page, size);
+    }
+
+    /** Construit la vue centralisée d'un jour donné (filtres dép./site/q, sans statut ni pagination). */
+    private List<PointageCentraliseDto> buildForDate(
+            LocalDate jour, List<EmployeComplet> employes, String departement, String site, String q) {
+
+        Map<String, Pointage> pointageParCode = pointageRepository.findAllByDate(jour).stream()
+                .collect(Collectors.toMap(Pointage::getCodeSecret, p -> p, (a, b) -> a));
+
+        Map<String, DemandeConge> congeParEmploye = demandeCongeRepository
+                .findByStatutAndDateDebutLessThanEqualAndDateFinGreaterThanEqual(
+                        StatutDemande.APPROUVE, jour, jour).stream()
+                .collect(Collectors.toMap(DemandeConge::getEmployeId, c -> c, (a, b) -> a));
+
+        return employes.stream()
+                .filter(e -> matchesFiltres(e, departement, site, q))
+                .map(e -> buildDto(e, jour, pointageParCode.get(e.getAgentId()), congeParEmploye.get(e.getId())))
+                .collect(Collectors.toList());
+    }
+
+    private boolean matchesFiltres(EmployeComplet e, String departement, String site, String q) {
+        if (departement != null && !departement.isBlank()) {
+            String dept = e.getAgence() != null && e.getAgence().length > 0 ? e.getAgence()[0] : "";
+            if (!dept.equalsIgnoreCase(departement)) return false;
+        }
+        if (site != null && !site.isBlank()) {
+            String empSite = e.getCodeSite() != null ? e.getCodeSite() : "";
+            String empVille = e.getVilleSite() != null ? e.getVilleSite() : "";
+            if (!empSite.equalsIgnoreCase(site) && !empVille.equalsIgnoreCase(site)) return false;
+        }
+        if (q != null && !q.isBlank()) {
+            String search = q.toLowerCase();
+            boolean matchNom = e.getNom() != null && e.getNom().toLowerCase().contains(search);
+            boolean matchMatricule = e.getMatricule() != null && e.getMatricule().toLowerCase().contains(search);
+            if (!matchNom && !matchMatricule) return false;
+        }
+        return true;
+    }
+
+    private Page<PointageCentraliseDto> paginate(List<PointageCentraliseDto> result, int page, int size) {
+        Pageable pageable = PageRequest.of(page, size);
         int start = (int) pageable.getOffset();
         int end = Math.min(start + pageable.getPageSize(), result.size());
         List<PointageCentraliseDto> pageContent = start >= result.size()
                 ? List.of() : result.subList(start, end);
-
         return new PageImpl<>(pageContent, pageable, result.size());
     }
 
