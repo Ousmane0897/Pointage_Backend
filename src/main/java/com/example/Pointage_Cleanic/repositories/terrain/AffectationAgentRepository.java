@@ -11,6 +11,8 @@ public interface AffectationAgentRepository extends MongoRepository<AffectationA
 
     List<AffectationAgent> findByEmployeId(String employeId);
 
+    List<AffectationAgent> findByStatutIn(List<StatutAffectation> statuts);
+
     List<AffectationAgent> findByStatutInAndDateFinGreaterThanEqualAndDateDebutLessThanEqual(
             List<StatutAffectation> statuts, LocalDateTime borneBasse, LocalDateTime borneHaute);
 }

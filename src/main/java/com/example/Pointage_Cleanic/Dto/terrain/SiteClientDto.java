@@ -39,7 +39,8 @@ public class SiteClientDto {
 
     private String pays;
 
-    @NotNull
+    // GPS optionnel : le frontend ne saisit plus les coordonnées ni le rayon.
+    // Les sites créés désormais ont coordonnees/rayonToleranceM null (pas de geofencing).
     private CoordonneesGps coordonnees;
 
     private Integer rayonToleranceM;
