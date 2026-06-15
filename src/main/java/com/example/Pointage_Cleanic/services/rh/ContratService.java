@@ -244,7 +244,7 @@ public class ContratService {
     private ContratDto toDto(Contrat contrat) {
         ContratDto dto = contratMapper.toDto(contrat);
         if (contrat.getFichierContrat() != null && contrat.getFichierContrat().length > 0) {
-            dto.setFichierContratUrl("/api/contrats/" + contrat.getId() + "/fichier");
+            dto.setFichierContratUrl("/api/gestion-personnel/contrats/" + contrat.getId() + "/fichier");
         }
         return dto;
     }

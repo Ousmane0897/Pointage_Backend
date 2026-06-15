@@ -11,12 +11,17 @@ import com.example.Pointage_Cleanic.exception.ResourceNotFoundException;
 import com.example.Pointage_Cleanic.repositories.rh.DossierEmployeRepository;
 import com.example.Pointage_Cleanic.repositories.rh.RhAbsenceRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
+import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -60,6 +65,52 @@ public class RhAbsenceService {
     public List<RhAbsenceDto> getByEmployeId(String employeId) {
         return rhAbsenceRepository.findByEmployeId(employeId).stream()
                 .map(this::toDto).collect(Collectors.toList());
+    }
+
+    /**
+     * Liste filtrée + paginée pour la façade /api/temps-presences. Filtrage en
+     * mémoire (volumes RH modestes) ; intervalle [dateDebut, dateFin] = chevauchement.
+     */
+    public Page<RhAbsenceDto> search(
+            String employeId, String type, String statut,
+            LocalDate dateDebut, LocalDate dateFin, String departement, String q,
+            int page, int size) {
+
+        List<RhAbsenceDto> filtered = rhAbsenceRepository.findAll().stream()
+                .map(this::toDto)
+                .filter(d -> employeId == null || employeId.isBlank() || employeId.equals(d.getEmployeId()))
+                .filter(d -> blankOrEnum(type, d.getType()))
+                .filter(d -> blankOrEnum(statut, d.getStatut()))
+                .filter(d -> departement == null || departement.isBlank()
+                        || (d.getDepartement() != null && d.getDepartement().equalsIgnoreCase(departement)))
+                .filter(d -> dateDebut == null || (d.getDateFin() != null && !d.getDateFin().isBefore(dateDebut)))
+                .filter(d -> dateFin == null || (d.getDateDebut() != null && !d.getDateDebut().isAfter(dateFin)))
+                .filter(d -> matchesQ(q, d.getNom(), d.getPrenom(), d.getMatricule()))
+                .sorted(Comparator.comparing(RhAbsenceDto::getDateDebut,
+                        Comparator.nullsLast(Comparator.reverseOrder())))
+                .collect(Collectors.toList());
+
+        return paginate(filtered, page, size);
+    }
+
+    private boolean blankOrEnum(String value, Enum<?> e) {
+        return value == null || value.isBlank() || (e != null && e.name().equalsIgnoreCase(value));
+    }
+
+    private boolean matchesQ(String q, String nom, String prenom, String matricule) {
+        if (q == null || q.isBlank()) return true;
+        String s = q.toLowerCase();
+        return (nom != null && nom.toLowerCase().contains(s))
+                || (prenom != null && prenom.toLowerCase().contains(s))
+                || (matricule != null && matricule.toLowerCase().contains(s));
+    }
+
+    private Page<RhAbsenceDto> paginate(List<RhAbsenceDto> list, int page, int size) {
+        Pageable pageable = PageRequest.of(page, size);
+        int start = (int) pageable.getOffset();
+        int end = Math.min(start + pageable.getPageSize(), list.size());
+        List<RhAbsenceDto> content = start >= list.size() ? List.of() : list.subList(start, end);
+        return new PageImpl<>(content, pageable, list.size());
     }
 
     public RhAbsenceDto update(String id, RhAbsenceDto dto) {
@@ -148,7 +199,7 @@ public class RhAbsenceService {
                     .mimeType(pj.getMimeType())
                     .taille(pj.getTaille())
                     .dateUpload(pj.getDateUpload())
-                    .url("/api/rh/absences/" + e.getId() + "/justificatif")
+                    .url("/api/temps-presences/absences/" + e.getId() + "/justificatif")
                     .build();
         }
         return RhAbsenceDto.builder()

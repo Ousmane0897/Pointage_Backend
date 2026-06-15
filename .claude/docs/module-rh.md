@@ -91,10 +91,10 @@ Endpoints livrés :
   Validation plus stricte qu'au CRUD unitaire sur un point : `situationMatrimoniale
   = MARIE` exige `nombreEnfants` non null dans le bulk (alors que `create()` se
   contente de nullifier `nombreEnfants` hors MARIE).
-- **Contrats** : CRUD multipart `/api/contrats` (part JSON `contrat` + `fichier` optionnel).
+- **Contrats** : CRUD multipart `/api/gestion-personnel/contrats` (part JSON `contrat` + `fichier` optionnel).
   `Contrat.fichierContrat` (byte[]) + `fichierContratNom` + `fichierContratMimeType`.
-  Nouveaux endpoints `GET /api/contrats/{id}/fichier` (télécharge le PDF),
-  `DELETE /api/contrats/{id}/fichier`. GET `/api/contrats/alertes`.
+  Nouveaux endpoints `GET /api/gestion-personnel/contrats/{id}/fichier` (télécharge le PDF),
+  `DELETE /api/gestion-personnel/contrats/{id}/fichier`. GET `/api/gestion-personnel/contrats/alertes`.
   `ContratService` valide désormais l'employé via `DossierEmployeRepository`.
   `TypeContratRh` : **ALTERNANCE remplacé par PRESTATION** ({CDI, CDD, STAGE, PRESTATION}).
   `ContratAlternanceMigrationRunner` (CommandLineRunner, `@Order(1000)`) migre
@@ -175,32 +175,49 @@ Endpoints livrés :
     (enum `CategorieDocument`).
 - **Legacy / coexistence** : CRUD `/api/employe-complet` (EmployeComplet, photo + contrat PDF),
   `/api/employes` et `/api/rh-employes` (RhEmployeController sur EmployeComplet),
-  `/api/organigramme` reste en fonction pour le pointage mobile et les flux
+  `/api/gestion-personnel/organigramme` reste en fonction pour le pointage mobile et les flux
   legacy. **`/api/periodes-essai` (ancien `PeriodeEssaiController` sur
   `EmployeComplet`) a été supprimé** au profit de
   `/api/gestion-personnel/periodes-essai`.
 
 ### 6.2 Temps & Présences — ✅ Terminé
 
-- Pointage centralisé : GET `/api/pointage-centralise?date=&departement=&site=&statut=&q=&page=&size=`, GET `/api/pointage-centralise/resume?date=`
-- **Absences** : CRUD `/api/rh-absences`, POST `/api/rh-absences/{id}/justificatif` (upload).
+> **Surface unique `/api/temps-presences/...` depuis 2026-06.** Les anciens contrôleurs
+> à plat (`PointageCentralise`, `RhAbsence`, `DemandeConge`, `HeureSupplementaire`,
+> `RecapitulatifMensuel`) ont été **supprimés** au profit des contrôleurs façade
+> `controllers/rh/tempspresences/TempsPresences*Controller`, qui réutilisent les mêmes
+> services (`PointageCentraliseService`, `RhAbsenceService`, `DemandeCongeService`,
+> `HeureSupplementaireService`, `RecapitulatifMensuelService`). Le décideur des workflows
+> est résolu depuis le JWT via `CurrentUserProvider` (les endpoints workflow sont en `POST`).
+
+- Pointage centralisé : GET `/api/temps-presences/pointages?date=&departement=&site=&statut=&q=&page=&size=`, GET `/api/temps-presences/pointages/resume?date=`
+- **Absences** : CRUD multipart `/api/temps-presences/absences` (part JSON `absence` + `fichier` optionnel),
+  GET `/api/temps-presences/absences/employe/{employeId}`,
+  POST `/api/temps-presences/absences/{id}/justificatif` (upload),
+  GET `/api/temps-presences/absences/{id}/justificatif` (download).
   Champ `typeAutrePrecision` obligatoire quand `type=AUTRE` (validation dans
-  `RhAbsenceService.validerCoherenceType` → 400 `VALIDATION_ERROR` via le nouveau
+  `RhAbsenceService.validerCoherenceType` → 400 `VALIDATION_ERROR` via le
   handler `IllegalArgumentException`). Nettoyage à null si `type != AUTRE` pour
   éviter les résidus incohérents. Validation employé via `DossierEmployeRepository`.
-- Congés : CRUD `/api/conges`, PUT `/api/conges/{id}/approuver`, PUT `/api/conges/{id}/refuser`, GET `/api/conges/solde/{employeId}`. Validation employé via `DossierEmployeRepository`.
-- Heures supplémentaires : CRUD `/api/heures-supplementaires`, PUT `/api/heures-supplementaires/{id}/valider`. Validation employé via `DossierEmployeRepository`.
-- Récapitulatif mensuel : GET `/api/recapitulatif-mensuel?mois=&annee=&departement=`, exports Excel/PDF. Reste sur `EmployeComplet` (jointure Pointage).
+- Congés : soldes GET `/api/temps-presences/conges/soldes[?employeId=]` et `/soldes/{employeId}` ;
+  demandes CRUD `/api/temps-presences/conges/demandes`, GET `/api/temps-presences/conges/demandes/employe/{employeId}`,
+  POST `/api/temps-presences/conges/demandes/{id}/approuver`, POST `/api/temps-presences/conges/demandes/{id}/refuser`.
+  Validation employé via `DossierEmployeRepository`.
+- Heures supplémentaires : CRUD `/api/temps-presences/heures-supplementaires`,
+  GET `/api/temps-presences/heures-supplementaires/employe/{employeId}`,
+  POST `/api/temps-presences/heures-supplementaires/{id}/valider`, POST `/{id}/refuser`. Validation employé via `DossierEmployeRepository`.
+- Récapitulatif mensuel : GET `/api/temps-presences/recapitulatif?mois=&annee=&departement=&site=&q=`,
+  exports GET `/api/temps-presences/recapitulatif/export/excel` et `/export/pdf`. Reste sur `EmployeComplet` (jointure Pointage).
 
 ### 6.3 Paie — ✅ Terminé
 
-- **Grille salariale** (catégories professionnelles) : CRUD `/api/grille-salariale`.
+- **Grille salariale** (catégories professionnelles) : CRUD `/api/paie/grille-salariale`.
   `CategorieProfessionnelle` porte désormais 3 listes embedded supplémentaires
   (spec frontend 2026-04) : `prets` (`{libelle, montant, dureeMois}`),
   `avancesSurSalaire` (idem), `retenues` (`{libelle, montant}` sans durée).
   Ces rubriques sont des retenues personnelles qui **diminuent le net POST-cotisations**
   — elles n'impactent **pas** les assiettes IPRES/CSS/IR (restent sur le brut).
-- **Bulletin de paie** : POST `/api/bulletins-paie/calculer`, CRUD `/api/bulletins-paie`,
+- **Bulletin de paie** : POST `/api/paie/bulletins/calculer`, CRUD `/api/paie/bulletins`,
   workflow `/valider` `/payer` `/annuler`, GET `/{id}/pdf`, GET `/historique?employeId=&annee=`.
   `CalculPaieService` expose 3 méthodes publiques testables :
   `calculerTotalPrets(List<PretCategorie>)`, `calculerTotalAvances(...)`,
@@ -211,21 +228,21 @@ Endpoints livrés :
   traçabilité — une modification ultérieure de la grille n'affecte pas les bulletins
   déjà générés. Le PDF (OpenPDF) affiche une **section conditionnelle « Retenues
   personnelles »** uniquement si au moins une rubrique est présente.
-- Déclarations sociales : GET `/api/declarations-sociales/ipres?periode=`, GET `/api/declarations-sociales/css?periode=`, exports PDF/Excel, PUT `/{id}/transmettre`. **Aucun impact** des nouvelles retenues (agrégation somme `totalCotisationsSalariales` et `totalCotisationsPatronales` des bulletins, tous deux calculés sur le brut).
-- Paramètres de paie : GET/PUT `/api/parametres-paie` (taux IPRES/CSS/AT-MP/TRIMF et barème IR — stockés en Mongo, pas en dur).
+- Déclarations sociales : GET `/api/paie/declarations-sociales/ipres?periode=`, GET `/api/paie/declarations-sociales/css?periode=`, exports PDF/Excel, PUT `/{id}/transmettre`. **Aucun impact** des nouvelles retenues (agrégation somme `totalCotisationsSalariales` et `totalCotisationsPatronales` des bulletins, tous deux calculés sur le brut).
+- Paramètres de paie : GET/PUT `/api/paie/parametres` (taux IPRES/CSS/AT-MP/TRIMF et barème IR — stockés en Mongo, pas en dur).
 
 ### 6.4 Développement RH — ✅ Terminé
 
 Endpoints livrés :
 
-- **Formations** : CRUD `/api/formations`, CRUD `/api/formations/{id}/sessions` et `/api/formations/sessions/{sessionId}`, GET/POST `/api/formations/sessions/{sessionId}/participants`, PUT `/api/formations/participations/{id}/presence` et `/completion`, GET/POST `/api/formations/sessions/{sessionId}/evaluations` (évaluations à chaud).
-- **Évaluations périodiques** : CRUD `/api/evaluations`, workflow `PUT /{id}/auto-evaluer` `PUT /{id}/evaluer-manager` `PUT /{id}/valider`.
-- **Sanctions** : CRUD `/api/sanctions`, GET `/api/sanctions/historique/{employeId}`, GET `/api/sanctions/alertes-recidive`, PUT `/api/sanctions/{id}/statut`.
-- **Besoins de formation** : CRUD `/api/besoins-formation`, GET `/api/besoins-formation/employe/{employeId}`, PUT `/api/besoins-formation/{id}/statut`.
+- **Formations** : CRUD `/api/developpement-rh/formations`, CRUD `/api/developpement-rh/formations/{id}/sessions` et `/api/developpement-rh/formations/sessions/{sessionId}`, GET/POST `/api/developpement-rh/formations/sessions/{sessionId}/participants`, PUT `/api/developpement-rh/formations/participations/{id}/presence` et `/completion`, GET/POST `/api/developpement-rh/formations/sessions/{sessionId}/evaluations` (évaluations à chaud).
+- **Évaluations périodiques** : CRUD `/api/developpement-rh/evaluations`, workflow `PUT /{id}/auto-evaluer` `PUT /{id}/evaluer-manager` `PUT /{id}/valider`.
+- **Sanctions** : CRUD `/api/developpement-rh/sanctions`, GET `/api/developpement-rh/sanctions/historique/{employeId}`, GET `/api/developpement-rh/sanctions/alertes-recidive`, PUT `/api/developpement-rh/sanctions/{id}/statut`.
+- **Besoins de formation** : CRUD `/api/developpement-rh/besoins-formation`, GET `/api/developpement-rh/besoins-formation/employe/{employeId}`, PUT `/api/developpement-rh/besoins-formation/{id}/statut`.
 - **Tableau de bord RH** : GET `/api/tableau-bord-rh?dateDebut=&dateFin=&departement=&site=` (agrège effectif + turnover + absentéisme + retards moyens + solde congés + masse salariale + formations + sanctions).
 
 Déviations par rapport à la spec initiale du frontend :
 
-- `/api/formations/{id}/evaluations` → `/api/formations/sessions/{sessionId}/evaluations` (sessionId required dans le TS).
+- `/api/developpement-rh/formations/{id}/evaluations` → `/api/developpement-rh/formations/sessions/{sessionId}/evaluations` (sessionId required dans le TS).
 - `/api/tableau-bord-rh?periode=&departement=` → `?dateDebut=&dateFin=&departement=&site=` (conforme à `FiltreTableauBord` du frontend).
-- Ajout de `/api/besoins-formation` (non listé dans la spec initiale, nécessaire pour l'écran besoins).
+- Ajout de `/api/developpement-rh/besoins-formation` (non listé dans la spec initiale, nécessaire pour l'écran besoins).

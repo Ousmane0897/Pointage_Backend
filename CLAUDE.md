@@ -75,29 +75,30 @@ Things that only make sense after reading several files:
 | `/api/besoins` | CollecteBesoinController |
 | `/api/dashboard`, `/api/dashboard_par_agence` | DashboardController, DashboardParAgence |
 | `/ws` | STOMP endpoint |
-| **— RH 6.1 —** | |
+| **— RH 6.1 — gestion-personnel** (`controllers/rh/gestionpersonnel`) | |
 | `/api/gestion-personnel/employes` | DossierEmployeController (source de vérité RH depuis 2026-04) |
-| `/api/contrats` | ContratController (multipart, fichier PDF inline) |
+| `/api/gestion-personnel/contrats` | ContratController (multipart, fichier PDF inline) |
 | `/api/gestion-personnel/periodes-essai` | PeriodeEssaiController (sur PeriodeEssai, source de vérité depuis 2026-04-29) |
 | `/api/gestion-personnel/documents` | DocumentEmployeController (pièces administratives génériques + workflow validation) |
-| `/api/organigramme` | OrganigrammeController (legacy, sur EmployeComplet) |
-| `/api/rh-employes`, `/api/employes` | RhEmployeController (legacy, sur EmployeComplet) |
-| **— RH 6.2 —** | |
-| `/api/pointage-centralise` | PointageCentraliseController |
-| `/api/rh-absences`, `/api/conges` | RhAbsenceController, DemandeCongeController |
-| `/api/heures-supplementaires` | HeureSupplementaireController |
-| `/api/recapitulatif-mensuel` | RecapitulatifMensuelController |
-| **— RH 6.3 —** | |
-| `/api/grille-salariale` | GrilleSalarialeController |
-| `/api/bulletins-paie` | BulletinPaieController |
-| `/api/declarations-sociales` | DeclarationSocialeController |
-| `/api/parametres-paie` | ParametresPaieController |
-| **— RH 6.4 —** | |
-| `/api/formations` | FormationController |
-| `/api/evaluations` | EvaluationPeriodiqueController |
-| `/api/sanctions` | SanctionController |
-| `/api/besoins-formation` | BesoinFormationController |
-| `/api/tableau-bord-rh` | TableauBordRhController |
+| `/api/gestion-personnel/organigramme` | OrganigrammeController (sur DossierEmploye, hiérarchie par superieurHierarchiqueId) |
+| **— RH 6.2 — temps-presences** (`controllers/rh/tempspresences`, surface unique façade depuis 2026-06) | |
+| `/api/temps-presences/pointages` | TempsPresencesPointageController |
+| `/api/temps-presences/absences` | TempsPresencesAbsenceController (+ `/employe/{id}`, `/{id}/justificatif`) |
+| `/api/temps-presences/conges` | TempsPresencesCongeController (+ `/demandes/employe/{id}`) |
+| `/api/temps-presences/heures-supplementaires` | TempsPresencesHeureSupController (+ `/employe/{id}`) |
+| `/api/temps-presences/recapitulatif` | TempsPresencesRecapController (+ `/export/excel`, `/export/pdf`) |
+| **— RH 6.3 — paie** (`controllers/rh/paie`) | |
+| `/api/paie/grille-salariale` | GrilleSalarialeController |
+| `/api/paie/bulletins` | BulletinPaieController |
+| `/api/paie/declarations-sociales` | DeclarationSocialeController |
+| `/api/paie/parametres` | ParametresPaieController |
+| **— RH 6.4 — developpement-rh** (`controllers/rh/developpementrh`) | |
+| `/api/developpement-rh/formations` | FormationController |
+| `/api/developpement-rh/evaluations` | EvaluationPeriodiqueController |
+| `/api/developpement-rh/sanctions` | SanctionController |
+| `/api/developpement-rh/besoins-formation` | BesoinFormationController |
+| **— RH transverse** (`controllers/rh`, racine) | |
+| `/api/tableau-bord-rh` | TableauBordRhController (dashboard transverse, agrège les 4 sous-modules) |
 | **— Production Chimie 5.1 —** | |
 | `/api/production-chimie/stock-chimie/matieres-premieres` | MatieresPremieresController (multipart fiche sécurité) |
 | `/api/production-chimie/stock-chimie/mouvements` | MouvementsStockChimieController (réception, ajustement) |
@@ -131,9 +132,11 @@ Things that only make sense after reading several files:
 
 4 sous-modules livrés : **6.1 Personnel**, **6.2 Temps & Présences**, **6.3 Paie**, **6.4 Développement RH**. Frontend Angular consomme les API REST directement (JWT, fallback `.anyRequest().authenticated()`).
 
-- **Organisation du code** : depuis 2026-06, tout le code RH est rangé sous des sous-packages `rh` (comme `terrain` / `productionchimie`) : `controllers/rh`, `services/rh`, `repositories/rh`, `entities/rh`, `Dto/rh`, `Mapper/rh`, `Enum/rh`. Les classes **partagées** restent à la racine de leur couche car consommées hors RH : entités `EmployeComplet`, `Employe`, `Pointage`, `Absent` ; services `EmployeCompletService`, `AbsentService` ; mappers `DateMapper`, `EmployeCompletMapper`, `EmployeMapper` ; enum `DecisionControle` (production chimie). Les services RH legacy (`OrganigrammeService`, `RhEmployeService`, `PointageCentraliseService`, `RecapitulatifMensuelService`, `CalculPaieService`) sont dans `services/rh` mais importent ces classes partagées restées à la racine.
+- **Organisation du code** : depuis 2026-06, tout le code RH est rangé sous des sous-packages `rh` (comme `terrain` / `productionchimie`) : `controllers/rh`, `services/rh`, `repositories/rh`, `entities/rh`, `Dto/rh`, `Mapper/rh`, `Enum/rh`. Les classes **partagées** restent à la racine de leur couche car consommées hors RH : entités `EmployeComplet`, `Employe`, `Pointage`, `Absent` ; services `EmployeCompletService`, `AbsentService` ; mappers `DateMapper`, `EmployeCompletMapper`, `EmployeMapper` ; enum `DecisionControle` (production chimie).
 - **Source de vérité** : `DossierEmploye` (collection `dossiers_employes`) depuis 2026-04 — tous les services RH valident et dénormalisent depuis `DossierEmployeRepository`.
-- **Exceptions legacy maintenues** : `PointageCentraliseService`, `RecapitulatifMensuelService`, `CalculPaieService` utilisent encore `EmployeComplet` car ils joignent avec `Pointage` via `agentId`/`codeSecret` et lisent `heureDebut` pour le calcul des retards.
+- **Migration EmployeComplet → DossierEmploye (2026-06-11)** : `PointageCentraliseService`, `RecapitulatifMensuelService`, `CalculPaieService` et `OrganigrammeService` ont été migrés sur `DossierEmploye` (la jointure pointage = `Pointage.codeSecret == DossierEmploye.agentId` ; les champs paie `categorieCode`/`numeroIpres`/`numeroCss`/`rib`/`banque` existent sur `DossierEmploye` ; l'organigramme résout la hiérarchie par `superieurHierarchiqueId`). Le **retard n'est plus dérivé** (pas de `heureDebut` sur `DossierEmploye`, horaires hétérogènes) : `retardMinutes`/`nombreRetards` restent au contrat mais valent 0. Le contrôleur legacy `RhEmployeController` (`/api/employes`, CRUD sur EmployeComplet, doublon de `DossierEmployeController`) a été **supprimé**. **Plus aucun service RH (`services/rh`) ne dépend de `EmployeComplet`.** Reste l'entité partagée `EmployeComplet` et son module propre (entité/service/controller/import, consommé hors RH — ex. stock).
+- **Rattachement grille manuel (2026-06-12)** : le rattachement employé → grille salariale n'est plus automatique. Le code de grille (`categorieCode`) est passé dans `CalculBulletinRequest` (champ ajouté) ; `BulletinPaieService.calculerEtSauvegarder(employeId, categorieCode, mois, annee)` → `CalculPaieService.orchestrer(employeId, categorieCode, mois, annee)` charge la grille par ce code (validation `IllegalArgumentException` si vide → 400). Les champs perso du bulletin (`numeroIpres`/`numeroCss`/`rib`/`banque`) sont désormais portés par la **grille** `CategorieProfessionnelle` (4 champs ajoutés à l'entité + DTO) et lus depuis elle. `DossierEmploye.categorieCode` n'est plus utilisé par la paie.
+- **Suppression EmployeComplet — feuille de route** : aucun service `services/rh` ne dépend plus d'`EmployeComplet`. Bloqueurs restants avant suppression du module (`entities/EmployeComplet`, `EmployeCompletRepository/Service/Controller` `/api/employe-complet`, `EmployeCompletMapper`, DTOs `EmployeCompletDto`/`ImportEmploye*`, + 3 tests) : (1) sync `Employe` legacy maintenue par `EmployeCompletService` via `EmployeMapper` et servie par `EmployesController` `/api/employe` ; (2) endpoint image public `GET /api/employe-complet/image/{agentId}` (front/mobile) → à reporter sur un endpoint photo `DossierEmploye` ; (3) import Excel `/api/employe-complet/import-excel` → à porter sur le flux `DossierEmploye`. `Dto/MouvementStock` (module stock) ne référence plus `EmployeComplet` (import mort retiré).
 - **Tableau de bord RH** : `TableauBordRhService` agrège en parallèle via `CompletableFuture.supplyAsync` (pas de `$lookup` — pas de clé de jointure commune entre collections).
 
 Détails endpoints, workflows (PeriodeEssai, DocumentEmploye, BulletinPaie, EvaluationPeriodique, Sanction), validations métier, formules de calcul de paie : **voir `.claude/docs/module-rh.md`**.

@@ -31,10 +31,9 @@ import java.util.stream.Collectors;
  * Stratégie : agrégations parallèles via CompletableFuture plutôt qu'un
  * $lookup unique. Chaque KPI reste testable isolément.
  *
- * Département : côté EmployeComplet on utilise `agence[0]` (même convention
- * que PointageCentraliseService). Les collections RH (Sanction, BulletinPaie,
+ * Département : les collections RH (DossierEmploye, Sanction, BulletinPaie,
  * EvaluationPeriodique…) exposent un vrai `departement` et sont filtrées
- * tel quel. Site : codeSite / villeSite (2 postes possibles).
+ * tel quel.
  *
  * Le calcul des présences / retards réutilise PointageCentraliseService
  * (source de vérité 6.2) — itération jour par jour sur la fenêtre. Adapté
@@ -48,9 +47,8 @@ public class TableauBordRhService {
     private static final DateTimeFormatter MOIS_FMT = DateTimeFormatter.ofPattern("yyyy-MM");
     private static final int TAILLE_PAGE_POINTAGES = 10_000;
 
-    // KPIs effectif / turnover / répartitions : DossierEmploye (indépendance RH).
-    // Les KPIs de présence (retards, absentéisme) passent par
-    // PointageCentraliseService qui reste sur EmployeComplet (exception).
+    // Tous les KPIs s'appuient sur DossierEmploye (indépendance RH) ; les KPIs
+    // de présence passent par PointageCentraliseService, lui-même sur DossierEmploye.
     private final DossierEmployeRepository dossierEmployeRepository;
     private final BulletinPaieRepository bulletinPaieRepository;
     private final SessionFormationRepository sessionFormationRepository;

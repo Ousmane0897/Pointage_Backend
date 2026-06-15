@@ -8,7 +8,7 @@ import com.example.Pointage_Cleanic.entities.*;
 import com.example.Pointage_Cleanic.entities.rh.*;
 import com.example.Pointage_Cleanic.exception.ResourceNotFoundException;
 import com.example.Pointage_Cleanic.repositories.rh.CategorieProfessionnelleRepository;
-import com.example.Pointage_Cleanic.repositories.EmployeCompletRepository;
+import com.example.Pointage_Cleanic.repositories.rh.DossierEmployeRepository;
 import com.example.Pointage_Cleanic.repositories.rh.HeureSupplementaireRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -45,10 +45,9 @@ public class CalculPaieService {
 
     private static final double HEURES_PAR_JOUR_STANDARD = 8.0;
 
-    // Exception : CalculPaieService fait la jointure avec le pointage mobile
-    // via RecapitulatifMensuelService et a besoin de EmployeComplet.agentId.
-    // Reste sur EmployeCompletRepository (même exception que PointageCentraliseService).
-    private final EmployeCompletRepository employeCompletRepository;
+    // Source de vérité RH : l'employé est résolu depuis DossierEmploye, qui porte
+    // les champs paie nécessaires (categorieCode, numeroIpres, numeroCss, rib, banque).
+    private final DossierEmployeRepository dossierEmployeRepository;
     private final CategorieProfessionnelleRepository categorieProfessionnelleRepository;
     private final ParametresPaieService parametresPaieService;
     private final HeureSupplementaireRepository heureSupplementaireRepository;
@@ -178,19 +177,20 @@ public class CalculPaieService {
 
     // ─── Orchestration : compose un BulletinPaie complet ─────────────────
 
-    public BulletinPaie orchestrer(String employeId, int mois, int annee) {
-        EmployeComplet emp = employeCompletRepository.findById(employeId)
+    public BulletinPaie orchestrer(String employeId, String categorieCode, int mois, int annee) {
+        DossierEmploye emp = dossierEmployeRepository.findById(employeId)
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Employé introuvable : " + employeId));
 
-        if (emp.getCategorieCode() == null || emp.getCategorieCode().isBlank()) {
-            throw new IllegalStateException(
-                    "L'employé " + emp.getMatricule() + " n'est rattaché à aucune catégorie professionnelle.");
+        // Rattachement à la grille fait manuellement à la génération (double
+        // sélection employé + grille) : le code provient de la requête, pas de l'employé.
+        if (categorieCode == null || categorieCode.isBlank()) {
+            throw new IllegalArgumentException("Aucune grille salariale sélectionnée.");
         }
 
-        CategorieProfessionnelle cat = categorieProfessionnelleRepository.findByCode(emp.getCategorieCode())
+        CategorieProfessionnelle cat = categorieProfessionnelleRepository.findByCode(categorieCode)
                 .orElseThrow(() -> new ResourceNotFoundException(
-                        "Catégorie introuvable : " + emp.getCategorieCode()));
+                        "Catégorie introuvable : " + categorieCode));
 
         ParametresPaie params = parametresPaieService.loadEntity();
 
@@ -361,13 +361,12 @@ public class CalculPaieService {
                 .nom(emp.getNom())
                 .prenom(emp.getPrenom())
                 .poste(emp.getPoste())
-                .departement(emp.getAgence() != null && emp.getAgence().length > 0
-                        ? emp.getAgence()[0] : null)
+                .departement(emp.getDepartement())
                 .categorieCode(cat.getCode())
-                .numeroIpres(emp.getCnssOuIpres())
-                .numeroCss(emp.getNumeroCss())
-                .rib(emp.getRibCompteBancaire())
-                .banque(emp.getBanque())
+                .numeroIpres(cat.getNumeroIpres())
+                .numeroCss(cat.getNumeroCss())
+                .rib(cat.getRib())
+                .banque(cat.getBanque())
                 .periode(PeriodePaie.builder().mois(mois).annee(annee).build())
                 .joursTravailles(recap.getJoursPresents())
                 .joursAbsence(recap.getJoursAbsents())

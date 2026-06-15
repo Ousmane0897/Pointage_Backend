@@ -1,13 +1,16 @@
 package com.example.Pointage_Cleanic.services.rh;
 
+import com.example.Pointage_Cleanic.Dto.rh.RecapitulatifMensuelDto;
 import com.example.Pointage_Cleanic.Enum.rh.StatutDemande;
 import com.example.Pointage_Cleanic.Enum.rh.StatutValidationHS;
+import com.example.Pointage_Cleanic.Enum.rh.TypeMajoration;
+import com.example.Pointage_Cleanic.Enum.rh.StatutDossierEmploye;
 import com.example.Pointage_Cleanic.entities.rh.DemandeConge;
-import com.example.Pointage_Cleanic.entities.EmployeComplet;
+import com.example.Pointage_Cleanic.entities.rh.DossierEmploye;
 import com.example.Pointage_Cleanic.entities.rh.HeureSupplementaire;
 import com.example.Pointage_Cleanic.entities.Pointage;
 import com.example.Pointage_Cleanic.repositories.rh.DemandeCongeRepository;
-import com.example.Pointage_Cleanic.repositories.EmployeCompletRepository;
+import com.example.Pointage_Cleanic.repositories.rh.DossierEmployeRepository;
 import com.example.Pointage_Cleanic.repositories.rh.HeureSupplementaireRepository;
 import com.example.Pointage_Cleanic.repositories.PointageRepository;
 import lombok.*;
@@ -28,22 +31,31 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class RecapitulatifMensuelService {
 
-    private final EmployeCompletRepository employeCompletRepository;
+    // Source de vérité RH : périmètre = employés ACTIF + EN_PERIODE_ESSAI.
+    private static final List<StatutDossierEmploye> STATUTS_ACTIFS =
+            List.of(StatutDossierEmploye.ACTIF, StatutDossierEmploye.EN_PERIODE_ESSAI);
+
+    private final DossierEmployeRepository dossierEmployeRepository;
     private final PointageRepository pointageRepository;
     private final DemandeCongeRepository demandeCongeRepository;
     private final HeureSupplementaireRepository heureSupplementaireRepository;
+
+    private static String nomComplet(DossierEmploye e) {
+        String prenom = e.getPrenom() == null ? "" : e.getPrenom().trim();
+        String nom = e.getNom() == null ? "" : e.getNom().trim();
+        return (prenom + " " + nom).trim();
+    }
 
     public List<LigneRecapDto> getRecapitulatif(int mois, int annee, String departement) {
         YearMonth yearMonth = YearMonth.of(annee, mois);
         LocalDate debut = yearMonth.atDay(1);
         LocalDate fin = yearMonth.atEndOfMonth();
 
-        List<EmployeComplet> employes = employeCompletRepository.findByStatut(EmployeComplet.StatutEmploye.ACTIF);
+        List<DossierEmploye> employes = dossierEmployeRepository.findByStatutIn(STATUTS_ACTIFS);
 
         if (departement != null && !departement.isBlank()) {
             employes = employes.stream()
-                    .filter(e -> e.getAgence() != null && e.getAgence().length > 0
-                            && departement.equalsIgnoreCase(e.getAgence()[0]))
+                    .filter(e -> departement.equalsIgnoreCase(e.getDepartement()))
                     .collect(Collectors.toList());
         }
 
@@ -85,9 +97,9 @@ public class RecapitulatifMensuelService {
             return LigneRecapDto.builder()
                     .employeId(e.getId())
                     .matricule(e.getMatricule())
-                    .nomComplet(e.getNomComplet())
+                    .nomComplet(nomComplet(e))
                     .poste(e.getPoste())
-                    .departement(e.getAgence() != null && e.getAgence().length > 0 ? e.getAgence()[0] : null)
+                    .departement(e.getDepartement())
                     .joursOuvrables(joursOuvrables.size())
                     .joursPresents((int) presences)
                     .joursAbsents((int) absences)
@@ -95,6 +107,123 @@ public class RecapitulatifMensuelService {
                     .totalHeuresSup(totalHS)
                     .build();
         }).collect(Collectors.toList());
+    }
+
+    /**
+     * Récapitulatif détaillé consommé par la façade /api/temps-presences/recapitulatif.
+     * Étend {@link #getRecapitulatif} avec retards (depuis les pointages), nom/prénom
+     * séparés, et la ventilation des heures supplémentaires par type de majoration.
+     */
+    public List<RecapitulatifMensuelDto> getRecapitulatifDetaille(
+            int mois, int annee, String departement, String site, String q) {
+
+        YearMonth yearMonth = YearMonth.of(annee, mois);
+        LocalDate debut = yearMonth.atDay(1);
+        LocalDate fin = yearMonth.atEndOfMonth();
+
+        List<DossierEmploye> employes = dossierEmployeRepository.findByStatutIn(STATUTS_ACTIFS).stream()
+                .filter(e -> departement == null || departement.isBlank()
+                        || departement.equalsIgnoreCase(e.getDepartement()))
+                .filter(e -> site == null || site.isBlank()
+                        || (e.getSiteAffecte() != null
+                            && e.getSiteAffecte().toLowerCase().contains(site.toLowerCase())))
+                .filter(e -> matchesQ(q, e.getNom(), e.getPrenom(), e.getMatricule()))
+                .collect(Collectors.toList());
+
+        List<LocalDate> joursOuvrables = debut.datesUntil(fin.plusDays(1))
+                .filter(d -> d.getDayOfWeek().getValue() < 6)
+                .collect(Collectors.toList());
+        Set<LocalDate> joursOuvrablesSet = new HashSet<>(joursOuvrables);
+
+        // Pointages du mois groupés par codeSecret -> (jour -> liste)
+        Map<String, Map<LocalDate, List<Pointage>>> pointagesParAgent = pointageRepository
+                .findByDateBetween(debut, fin).stream()
+                .filter(p -> p.getCodeSecret() != null && joursOuvrablesSet.contains(p.getDate()))
+                .collect(Collectors.groupingBy(Pointage::getCodeSecret,
+                        Collectors.groupingBy(Pointage::getDate)));
+
+        List<HeureSupplementaire> hsDuMois = heureSupplementaireRepository
+                .findByStatutAndDateBetween(StatutValidationHS.VALIDEE, debut, fin);
+
+        List<DemandeConge> congesDuMois = demandeCongeRepository
+                .findByStatutAndDateDebutLessThanEqualAndDateFinGreaterThanEqual(
+                        StatutDemande.APPROUVE, fin, debut);
+
+        return employes.stream().map(e -> {
+            Map<LocalDate, List<Pointage>> pointagesEmploye =
+                    pointagesParAgent.getOrDefault(e.getAgentId(), Map.of());
+
+            int joursTravailles = 0;
+            // Retard non dérivé : DossierEmploye ne porte pas d'heure de début et les
+            // horaires sont hétérogènes (même décision que la vue pointage centralisé).
+            // Le contrat conserve nombreRetards / minutesRetardTotal, figés à 0.
+            int nombreRetards = 0;
+            int minutesRetardTotal = 0;
+            for (LocalDate jour : joursOuvrables) {
+                List<Pointage> duJour = pointagesEmploye.get(jour);
+                if (duJour == null || duJour.isEmpty()) continue;
+                joursTravailles++;
+            }
+
+            int joursConge = congesDuMois.stream()
+                    .filter(c -> c.getEmployeId().equals(e.getId()))
+                    .mapToInt(c -> c.getNombreJours() != null ? c.getNombreJours() : 0)
+                    .sum();
+
+            int joursAbsence = joursOuvrables.size() - joursTravailles - joursConge;
+            if (joursAbsence < 0) joursAbsence = 0;
+
+            List<HeureSupplementaire> hsEmploye = hsDuMois.stream()
+                    .filter(h -> h.getEmployeId().equals(e.getId()))
+                    .collect(Collectors.toList());
+            double heuresSupTotal = hsEmploye.stream()
+                    .mapToDouble(h -> h.getNombreHeures() != null ? h.getNombreHeures() : 0).sum();
+            double heuresSupMajorees = hsEmploye.stream()
+                    .mapToDouble(h -> h.getHeuresMajoreesEquivalent() != null ? h.getHeuresMajoreesEquivalent() : 0).sum();
+
+            RecapitulatifMensuelDto.HeuresSupParTypeDto parType =
+                    RecapitulatifMensuelDto.HeuresSupParTypeDto.builder()
+                            .t15(sommeHeuresParType(hsEmploye, TypeMajoration.T_15))
+                            .t40(sommeHeuresParType(hsEmploye, TypeMajoration.T_40))
+                            .t60(sommeHeuresParType(hsEmploye, TypeMajoration.T_60))
+                            .t100(sommeHeuresParType(hsEmploye, TypeMajoration.T_100))
+                            .build();
+
+            return RecapitulatifMensuelDto.builder()
+                    .employeId(e.getId())
+                    .matricule(e.getMatricule())
+                    .nom(e.getNom())
+                    .prenom(e.getPrenom())
+                    .departement(e.getDepartement())
+                    .poste(e.getPoste())
+                    .mois(mois)
+                    .annee(annee)
+                    .joursOuvrables(joursOuvrables.size())
+                    .joursTravailles(joursTravailles)
+                    .joursAbsence(joursAbsence)
+                    .joursConge(joursConge)
+                    .nombreRetards(nombreRetards)
+                    .minutesRetardTotal(minutesRetardTotal)
+                    .heuresSupTotal(heuresSupTotal)
+                    .heuresSupMajoreesEquivalent(heuresSupMajorees)
+                    .heuresSupParType(parType)
+                    .build();
+        }).collect(Collectors.toList());
+    }
+
+    private double sommeHeuresParType(List<HeureSupplementaire> hs, TypeMajoration type) {
+        return hs.stream()
+                .filter(h -> h.getTypeMajoration() == type)
+                .mapToDouble(h -> h.getNombreHeures() != null ? h.getNombreHeures() : 0)
+                .sum();
+    }
+
+    private boolean matchesQ(String q, String nom, String prenom, String matricule) {
+        if (q == null || q.isBlank()) return true;
+        String s = q.toLowerCase();
+        return (nom != null && nom.toLowerCase().contains(s))
+                || (prenom != null && prenom.toLowerCase().contains(s))
+                || (matricule != null && matricule.toLowerCase().contains(s));
     }
 
     public byte[] exportExcel(int mois, int annee, String departement) throws IOException {

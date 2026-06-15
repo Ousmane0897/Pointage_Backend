@@ -35,7 +35,7 @@ public class BulletinPaieService {
     private final BulletinPaieMapper bulletinPaieMapper;
     private final CalculPaieService calculPaieService;
 
-    public BulletinPaieDto calculerEtSauvegarder(String employeId, int mois, int annee) {
+    public BulletinPaieDto calculerEtSauvegarder(String employeId, String categorieCode, int mois, int annee) {
         bulletinPaieRepository.findByEmployeIdAndPeriodeMoisAndPeriodeAnnee(employeId, mois, annee)
                 .ifPresent(existing -> {
                     if (existing.getStatut() != StatutBulletin.ANNULE) {
@@ -45,7 +45,7 @@ public class BulletinPaieService {
                     }
                 });
 
-        BulletinPaie bulletin = calculPaieService.orchestrer(employeId, mois, annee);
+        BulletinPaie bulletin = calculPaieService.orchestrer(employeId, categorieCode, mois, annee);
         return bulletinPaieMapper.toDto(bulletinPaieRepository.save(bulletin));
     }
 

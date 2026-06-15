@@ -2,28 +2,36 @@ package com.example.Pointage_Cleanic.services.rh;
 
 import com.example.Pointage_Cleanic.Dto.rh.OrganigrammeArbreDto;
 import com.example.Pointage_Cleanic.Dto.rh.OrganigrammeNodeDto;
-import com.example.Pointage_Cleanic.entities.EmployeComplet;
-import com.example.Pointage_Cleanic.repositories.EmployeCompletRepository;
+import com.example.Pointage_Cleanic.Enum.rh.StatutDossierEmploye;
+import com.example.Pointage_Cleanic.entities.rh.DossierEmploye;
+import com.example.Pointage_Cleanic.repositories.rh.DossierEmployeRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.util.*;
 import java.util.stream.Collectors;
 
+/**
+ * Organigramme bâti sur {@link DossierEmploye} (source de vérité RH).
+ * La hiérarchie est résolue par {@code superieurHierarchiqueId} (lien par id,
+ * fiable) et non plus par nom de manager. Périmètre = ACTIF + EN_PERIODE_ESSAI.
+ */
 @Service
 @RequiredArgsConstructor
 public class OrganigrammeService {
 
-    private final EmployeCompletRepository employeCompletRepository;
+    private static final List<StatutDossierEmploye> STATUTS_ACTIFS =
+            List.of(StatutDossierEmploye.ACTIF, StatutDossierEmploye.EN_PERIODE_ESSAI);
+
+    private final DossierEmployeRepository dossierEmployeRepository;
 
     public List<OrganigrammeNodeDto> getOrganigramme(String departement) {
-        List<EmployeComplet> employes;
+        List<DossierEmploye> employes = dossierEmployeRepository.findByStatutIn(STATUTS_ACTIFS);
 
         if (departement != null && !departement.isBlank()) {
-            employes = employeCompletRepository.findByStatutAndAgenceContaining(
-                    EmployeComplet.StatutEmploye.ACTIF, departement);
-        } else {
-            employes = employeCompletRepository.findByStatut(EmployeComplet.StatutEmploye.ACTIF);
+            employes = employes.stream()
+                    .filter(e -> departement.equalsIgnoreCase(e.getDepartement()))
+                    .collect(Collectors.toList());
         }
 
         return employes.stream()
@@ -34,15 +42,16 @@ public class OrganigrammeService {
     }
 
     public List<OrganigrammeArbreDto> getArbre() {
-        List<EmployeComplet> employes = employeCompletRepository.findByStatut(EmployeComplet.StatutEmploye.ACTIF);
+        List<DossierEmploye> employes = dossierEmployeRepository.findByStatutIn(STATUTS_ACTIFS);
 
-        Map<String, List<EmployeComplet>> parManager = employes.stream()
+        // Regroupe les employés par id de leur supérieur hiérarchique ("" = racine).
+        Map<String, List<DossierEmploye>> parManager = employes.stream()
                 .collect(Collectors.groupingBy(e ->
-                        e.getManagerOps() != null && !e.getManagerOps().isBlank()
-                                ? e.getManagerOps()
+                        e.getSuperieurHierarchiqueId() != null && !e.getSuperieurHierarchiqueId().isBlank()
+                                ? e.getSuperieurHierarchiqueId()
                                 : ""));
 
-        List<EmployeComplet> racines = parManager.getOrDefault("", Collections.emptyList());
+        List<DossierEmploye> racines = parManager.getOrDefault("", Collections.emptyList());
 
         Set<String> visited = new HashSet<>();
         return racines.stream()
@@ -50,14 +59,14 @@ public class OrganigrammeService {
                 .collect(Collectors.toList());
     }
 
-    private OrganigrammeArbreDto buildNode(EmployeComplet emp,
-                                           Map<String, List<EmployeComplet>> parManager,
+    private OrganigrammeArbreDto buildNode(DossierEmploye emp,
+                                           Map<String, List<DossierEmploye>> parManager,
                                            Set<String> visited) {
         if (!visited.add(emp.getId())) {
             return toArbreDto(emp, Collections.emptyList());
         }
 
-        List<EmployeComplet> enfants = parManager.getOrDefault(emp.getNomComplet(), Collections.emptyList());
+        List<DossierEmploye> enfants = parManager.getOrDefault(emp.getId(), Collections.emptyList());
         List<OrganigrammeArbreDto> sousOrdres = enfants.stream()
                 .map(e -> buildNode(e, parManager, visited))
                 .collect(Collectors.toList());
@@ -65,27 +74,32 @@ public class OrganigrammeService {
         return toArbreDto(emp, sousOrdres);
     }
 
-    private OrganigrammeNodeDto toNodeDto(EmployeComplet emp) {
+    private OrganigrammeNodeDto toNodeDto(DossierEmploye emp) {
         return OrganigrammeNodeDto.builder()
                 .id(emp.getId())
                 .agentId(emp.getAgentId())
-                .nomComplet(emp.getNomComplet())
+                .nomComplet(nomComplet(emp))
                 .poste(emp.getPoste())
-                .agence(emp.getAgence() != null && emp.getAgence().length > 0 ? emp.getAgence()[0] : null)
-                .managerOps(emp.getManagerOps())
-                .chefEquipe(emp.getChefEquipe())
+                .agence(emp.getDepartement())
+                .managerOps(emp.getSuperieurHierarchiqueNom())
                 .statut(emp.getStatut() != null ? emp.getStatut().name() : null)
                 .photo(emp.getPhoto())
                 .build();
     }
 
-    private OrganigrammeArbreDto toArbreDto(EmployeComplet emp, List<OrganigrammeArbreDto> sousOrdres) {
+    private OrganigrammeArbreDto toArbreDto(DossierEmploye emp, List<OrganigrammeArbreDto> sousOrdres) {
         return OrganigrammeArbreDto.builder()
                 .id(emp.getId())
-                .nomComplet(emp.getNomComplet())
+                .nomComplet(nomComplet(emp))
                 .poste(emp.getPoste())
-                .agence(emp.getAgence() != null && emp.getAgence().length > 0 ? emp.getAgence()[0] : null)
+                .agence(emp.getDepartement())
                 .sousOrdres(sousOrdres)
                 .build();
+    }
+
+    private static String nomComplet(DossierEmploye e) {
+        String prenom = e.getPrenom() == null ? "" : e.getPrenom().trim();
+        String nom = e.getNom() == null ? "" : e.getNom().trim();
+        return (prenom + " " + nom).trim();
     }
 }

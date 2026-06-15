@@ -72,6 +72,41 @@ public class DeclarationSocialeService {
         return construireEtSauvegarder(type, mois, annee, bulletins, totaux, libellePrefix);
     }
 
+    public DeclarationSocialeDto enregistrer(DeclarationSocialeDto dto) {
+        DeclarationSociale decl = DeclarationSociale.builder()
+                .id(dto.getId())                         // null à la création → Mongo génère l'_id
+                .type(dto.getType())
+                .libelle(dto.getLibelle())
+                .mois(dto.getMois())
+                .annee(dto.getAnnee())
+                .lignes(dto.getLignes() != null ? new ArrayList<>(dto.getLignes()) : new ArrayList<>())
+                .totalBrut(dto.getTotalBrut())
+                .totalIpresSalarie(dto.getTotalIpresSalarie())
+                .totalIpresEmployeur(dto.getTotalIpresEmployeur())
+                .totalCssSalarie(dto.getTotalCssSalarie())
+                .totalCssEmployeur(dto.getTotalCssEmployeur())
+                .totalIr(dto.getTotalIr())
+                .totalTrimf(dto.getTotalTrimf())
+                .totalPayable(dto.getTotalPayable())
+                .effectif(dto.getEffectif())
+                .statut(dto.getStatut() != null ? dto.getStatut() : StatutDeclaration.GENEREE)
+                .dateGeneration(dto.getDateGeneration() != null ? dto.getDateGeneration() : LocalDate.now())
+                .dateTransmission(dto.getDateTransmission())
+                .referenceExterne(dto.getReferenceExterne())
+                .commentaire(dto.getCommentaire())
+                .build();
+
+        return declarationSocialeMapper.toDto(declarationSocialeRepository.save(decl));
+    }
+
+    public void supprimer(String id) {
+        if (!declarationSocialeRepository.existsById(id)) {
+            throw new ResourceNotFoundException("Déclaration introuvable : " + id);
+        }
+        declarationSocialeRepository.deleteById(id);
+    }
+
+
     private DeclarationSocialeDto genererAnnuelle(TypeDeclaration type, int annee, String libellePrefix) {
         List<BulletinPaie> bulletins = bulletinPaieRepository
                 .findByPeriodeAnneeAndStatutIn(annee, STATUTS_ELIGIBLES);

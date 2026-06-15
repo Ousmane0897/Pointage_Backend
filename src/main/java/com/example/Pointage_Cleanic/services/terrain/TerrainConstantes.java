@@ -9,7 +9,7 @@ public final class TerrainConstantes {
     }
 
     /** Département RH dont les agents sont pilotables par le module Terrain. */
-    public static final String DEPARTEMENT_EXPLOITATION = "Exploitation";
+    public static final String DEPARTEMENT_EXPLOITATION = "Opération";
 
     /** Rayon de la Terre en mètres (formule de Haversine). */
     public static final double RAYON_TERRE_M = 6_371_000d;

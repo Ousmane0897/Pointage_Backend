@@ -48,6 +48,13 @@ public class CategorieProfessionnelle {
 
     private Double tauxAtMp;
 
+    // Données reportées sur le bulletin de paie. Saisies au niveau de la grille
+    // (rattachement employé → grille fait manuellement à la génération du bulletin).
+    private String numeroIpres;
+    private String numeroCss;
+    private String rib;
+    private String banque;
+
     private boolean actif;
 
     private Instant dateCreation;
