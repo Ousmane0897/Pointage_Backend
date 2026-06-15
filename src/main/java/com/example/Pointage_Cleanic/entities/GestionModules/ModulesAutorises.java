@@ -1,10 +1,8 @@
 package com.example.Pointage_Cleanic.entities.GestionModules;
 
-import com.example.Pointage_Cleanic.entities.GestionModules.SousModules.Absences;
-import com.example.Pointage_Cleanic.entities.GestionModules.SousModules.CollecteLivraison;
-import com.example.Pointage_Cleanic.entities.GestionModules.SousModules.Pointages;
 import com.example.Pointage_Cleanic.entities.GestionModules.SousModules.ProductionChimie;
-import com.example.Pointage_Cleanic.entities.GestionModules.SousModules.Stock;
+import com.example.Pointage_Cleanic.entities.GestionModules.SousModules.Terrain;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -12,21 +10,13 @@ import lombok.NoArgsConstructor;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
+@JsonInclude(JsonInclude.Include.NON_NULL)
 public class ModulesAutorises {
 
-    private boolean Dashboard;
-    private boolean Admin;
-    private boolean StatistiquesAgences;
-    private boolean Planifications;
-    private boolean Calendrier;
-    private boolean JourFeries;
-    private boolean Employes;
-    private boolean Agences;
-    private boolean RH;
+    private boolean dashboard;
+    private boolean admin;
+    private boolean rh;
 
-    private CollecteLivraison CollecteLivraison;
-    private Absences Absences;
-    private Pointages Pointages;
-    private Stock Stock;
     private ProductionChimie productionChimie;
+    private Terrain terrain;
 }

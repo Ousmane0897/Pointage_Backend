@@ -112,6 +112,7 @@ public class UtilisateurController {
         utilisateur.setPassword(utilisateurDetails.getPassword());
         utilisateur.setPoste(utilisateurDetails.getPoste());
         utilisateur.setRole(utilisateur.getRole());
+        utilisateur.setModulesAutorises(utilisateurDetails.getModulesAutorises());
         utilisateur.setMotifDesactivation(utilisateurDetails.getMotifDesactivation());
         utilisateur.setActive(utilisateurDetails.isActive());
 

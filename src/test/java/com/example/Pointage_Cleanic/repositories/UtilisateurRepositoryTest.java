@@ -37,7 +37,7 @@ class UtilisateurRepositoryTest extends MongoTestContainer {
     void shouldFindUtilisateurByEmail() {
         // GIVEN
         ModulesAutorises modules = new ModulesAutorises();
-        modules.setEmployes(true);
+        modules.setDashboard(true);
 
         Utilisateur utilisateur = new Utilisateur();
         utilisateur.setPrenom("Ousmane");
