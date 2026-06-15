@@ -4,12 +4,13 @@ import com.example.Pointage_Cleanic.Dto.rh.RecapitulatifMensuelDto;
 import com.example.Pointage_Cleanic.Enum.rh.StatutDemande;
 import com.example.Pointage_Cleanic.Enum.rh.StatutValidationHS;
 import com.example.Pointage_Cleanic.Enum.rh.TypeMajoration;
+import com.example.Pointage_Cleanic.Enum.rh.StatutDossierEmploye;
 import com.example.Pointage_Cleanic.entities.rh.DemandeConge;
-import com.example.Pointage_Cleanic.entities.EmployeComplet;
+import com.example.Pointage_Cleanic.entities.rh.DossierEmploye;
 import com.example.Pointage_Cleanic.entities.rh.HeureSupplementaire;
 import com.example.Pointage_Cleanic.entities.Pointage;
 import com.example.Pointage_Cleanic.repositories.rh.DemandeCongeRepository;
-import com.example.Pointage_Cleanic.repositories.EmployeCompletRepository;
+import com.example.Pointage_Cleanic.repositories.rh.DossierEmployeRepository;
 import com.example.Pointage_Cleanic.repositories.rh.HeureSupplementaireRepository;
 import com.example.Pointage_Cleanic.repositories.PointageRepository;
 import lombok.*;
@@ -20,11 +21,8 @@ import org.springframework.stereotype.Service;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.time.Duration;
 import java.time.LocalDate;
-import java.time.LocalTime;
 import java.time.YearMonth;
-import java.time.format.DateTimeParseException;
 import java.time.format.TextStyle;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -33,22 +31,31 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class RecapitulatifMensuelService {
 
-    private final EmployeCompletRepository employeCompletRepository;
+    // Source de vérité RH : périmètre = employés ACTIF + EN_PERIODE_ESSAI.
+    private static final List<StatutDossierEmploye> STATUTS_ACTIFS =
+            List.of(StatutDossierEmploye.ACTIF, StatutDossierEmploye.EN_PERIODE_ESSAI);
+
+    private final DossierEmployeRepository dossierEmployeRepository;
     private final PointageRepository pointageRepository;
     private final DemandeCongeRepository demandeCongeRepository;
     private final HeureSupplementaireRepository heureSupplementaireRepository;
+
+    private static String nomComplet(DossierEmploye e) {
+        String prenom = e.getPrenom() == null ? "" : e.getPrenom().trim();
+        String nom = e.getNom() == null ? "" : e.getNom().trim();
+        return (prenom + " " + nom).trim();
+    }
 
     public List<LigneRecapDto> getRecapitulatif(int mois, int annee, String departement) {
         YearMonth yearMonth = YearMonth.of(annee, mois);
         LocalDate debut = yearMonth.atDay(1);
         LocalDate fin = yearMonth.atEndOfMonth();
 
-        List<EmployeComplet> employes = employeCompletRepository.findByStatut(EmployeComplet.StatutEmploye.ACTIF);
+        List<DossierEmploye> employes = dossierEmployeRepository.findByStatutIn(STATUTS_ACTIFS);
 
         if (departement != null && !departement.isBlank()) {
             employes = employes.stream()
-                    .filter(e -> e.getAgence() != null && e.getAgence().length > 0
-                            && departement.equalsIgnoreCase(e.getAgence()[0]))
+                    .filter(e -> departement.equalsIgnoreCase(e.getDepartement()))
                     .collect(Collectors.toList());
         }
 
@@ -90,9 +97,9 @@ public class RecapitulatifMensuelService {
             return LigneRecapDto.builder()
                     .employeId(e.getId())
                     .matricule(e.getMatricule())
-                    .nomComplet(e.getNomComplet())
+                    .nomComplet(nomComplet(e))
                     .poste(e.getPoste())
-                    .departement(e.getAgence() != null && e.getAgence().length > 0 ? e.getAgence()[0] : null)
+                    .departement(e.getDepartement())
                     .joursOuvrables(joursOuvrables.size())
                     .joursPresents((int) presences)
                     .joursAbsents((int) absences)
@@ -114,13 +121,12 @@ public class RecapitulatifMensuelService {
         LocalDate debut = yearMonth.atDay(1);
         LocalDate fin = yearMonth.atEndOfMonth();
 
-        List<EmployeComplet> employes = employeCompletRepository.findByStatut(EmployeComplet.StatutEmploye.ACTIF).stream()
+        List<DossierEmploye> employes = dossierEmployeRepository.findByStatutIn(STATUTS_ACTIFS).stream()
                 .filter(e -> departement == null || departement.isBlank()
-                        || (e.getAgence() != null && e.getAgence().length > 0
-                            && departement.equalsIgnoreCase(e.getAgence()[0])))
+                        || departement.equalsIgnoreCase(e.getDepartement()))
                 .filter(e -> site == null || site.isBlank()
-                        || (e.getCodeSite() != null && site.equalsIgnoreCase(e.getCodeSite()))
-                        || (e.getVilleSite() != null && site.equalsIgnoreCase(e.getVilleSite())))
+                        || (e.getSiteAffecte() != null
+                            && e.getSiteAffecte().toLowerCase().contains(site.toLowerCase())))
                 .filter(e -> matchesQ(q, e.getNom(), e.getPrenom(), e.getMatricule()))
                 .collect(Collectors.toList());
 
@@ -148,23 +154,15 @@ public class RecapitulatifMensuelService {
                     pointagesParAgent.getOrDefault(e.getAgentId(), Map.of());
 
             int joursTravailles = 0;
+            // Retard non dérivé : DossierEmploye ne porte pas d'heure de début et les
+            // horaires sont hétérogènes (même décision que la vue pointage centralisé).
+            // Le contrat conserve nombreRetards / minutesRetardTotal, figés à 0.
             int nombreRetards = 0;
             int minutesRetardTotal = 0;
             for (LocalDate jour : joursOuvrables) {
                 List<Pointage> duJour = pointagesEmploye.get(jour);
                 if (duJour == null || duJour.isEmpty()) continue;
                 joursTravailles++;
-                // Plusieurs pointages possibles (multi-site) : on retient la première arrivée.
-                String premiereArrivee = duJour.stream()
-                        .map(Pointage::getHeureArrive)
-                        .filter(Objects::nonNull)
-                        .min(Comparator.naturalOrder())
-                        .orElse(null);
-                Integer retard = computeRetardMinutes(e.getHeureDebut(), premiereArrivee);
-                if (retard != null && retard > 0) {
-                    nombreRetards++;
-                    minutesRetardTotal += retard;
-                }
             }
 
             int joursConge = congesDuMois.stream()
@@ -196,7 +194,7 @@ public class RecapitulatifMensuelService {
                     .matricule(e.getMatricule())
                     .nom(e.getNom())
                     .prenom(e.getPrenom())
-                    .departement(e.getAgence() != null && e.getAgence().length > 0 ? e.getAgence()[0] : null)
+                    .departement(e.getDepartement())
                     .poste(e.getPoste())
                     .mois(mois)
                     .annee(annee)
@@ -226,18 +224,6 @@ public class RecapitulatifMensuelService {
         return (nom != null && nom.toLowerCase().contains(s))
                 || (prenom != null && prenom.toLowerCase().contains(s))
                 || (matricule != null && matricule.toLowerCase().contains(s));
-    }
-
-    private Integer computeRetardMinutes(String heureDebutPrevue, String heureArriveeReelle) {
-        if (heureDebutPrevue == null || heureArriveeReelle == null) return null;
-        try {
-            LocalTime prevue = LocalTime.parse(heureDebutPrevue);
-            LocalTime reelle = LocalTime.parse(heureArriveeReelle);
-            int diff = (int) Duration.between(prevue, reelle).toMinutes();
-            return diff > 0 ? diff : 0;
-        } catch (DateTimeParseException ignored) {
-            return null;
-        }
     }
 
     public byte[] exportExcel(int mois, int annee, String departement) throws IOException {

@@ -13,7 +13,7 @@ import java.util.List;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/api/developpement-rh/besoins-formation")
+@RequestMapping("/api/developpement-rh/tableau-bord")
 @RequiredArgsConstructor
 public class BesoinFormationController {
 

@@ -51,8 +51,8 @@ class BulletinPaieControllerTest {
 
     @Test
     void calculer_ok() throws Exception {
-        CalculBulletinRequest req = new CalculBulletinRequest("emp-1", 4, 2026, null);
-        when(bulletinPaieService.calculerEtSauvegarder("emp-1", 4, 2026))
+        CalculBulletinRequest req = new CalculBulletinRequest("emp-1", "CADRE", 4, 2026, null);
+        when(bulletinPaieService.calculerEtSauvegarder("emp-1", "CADRE", 4, 2026))
                 .thenReturn(buildDto("bp-new"));
 
         mockMvc.perform(post("/api/paie/bulletins/calculer")

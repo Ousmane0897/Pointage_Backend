@@ -34,6 +34,18 @@ public class DeclarationSocialeController {
         return ResponseEntity.ok(dto);
     }
 
+    @PostMapping
+    public ResponseEntity<DeclarationSocialeDto> enregistrer(@RequestBody DeclarationSocialeDto dto) {
+        return ResponseEntity.ok(declarationSocialeService.enregistrer(dto));
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> supprimer(@PathVariable String id) {
+        declarationSocialeService.supprimer(id);
+        return ResponseEntity.noContent().build();
+    }
+
+
     @GetMapping("/css")
     public ResponseEntity<DeclarationSocialeDto> genererCss(
             @RequestParam(required = false) String periode,
@@ -108,4 +120,6 @@ public class DeclarationSocialeController {
         }
         return new int[]{mois != null ? mois : 0, annee};
     }
+
+
 }

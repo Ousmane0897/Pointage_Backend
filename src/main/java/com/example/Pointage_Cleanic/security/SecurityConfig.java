@@ -106,7 +106,6 @@ public class SecurityConfig {
                         .requestMatchers("/api/dashboard_par_agence").authenticated()
                         .requestMatchers("/api/planification/**").authenticated()
                         .requestMatchers(HttpMethod.DELETE, "/api/ferie/**").authenticated()
-                        .requestMatchers("/api/employes/**").authenticated()
                         .requestMatchers("/ws/info").authenticated()
                         .requestMatchers("/api/super-admin/**").authenticated()
                         .requestMatchers("/api/terrain/**").authenticated()

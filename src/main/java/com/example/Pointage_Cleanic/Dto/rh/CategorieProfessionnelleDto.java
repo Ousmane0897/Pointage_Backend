@@ -36,6 +36,12 @@ public class CategorieProfessionnelleDto {
     private RegimeIpres regimeIpres;
     private Double tauxAtMp;
 
+    // Reportés sur le bulletin (saisis au niveau de la grille).
+    private String numeroIpres;
+    private String numeroCss;
+    private String rib;
+    private String banque;
+
     private boolean actif;
 
     private Instant dateCreation;

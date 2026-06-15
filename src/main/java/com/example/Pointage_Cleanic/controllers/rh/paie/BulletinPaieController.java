@@ -24,7 +24,8 @@ public class BulletinPaieController {
     @PostMapping("/calculer")
     public ResponseEntity<BulletinPaieDto> calculer(@RequestBody CalculBulletinRequest request) {
         BulletinPaieDto dto = bulletinPaieService.calculerEtSauvegarder(
-                request.getEmployeId(), request.getMois(), request.getAnnee());
+                request.getEmployeId(), request.getCategorieCode(),
+                request.getMois(), request.getAnnee());
         return ResponseEntity.status(HttpStatus.CREATED).body(dto);
     }
 
