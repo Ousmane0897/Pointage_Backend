@@ -106,19 +106,49 @@ public class UtilisateurController {
             return ResponseEntity.notFound().build(); // 404
         }
 
+        // Email de référence AVANT modification : sert à retrouver la ligne 'login' à resynchroniser.
+        String ancienEmail = utilisateur.getEmail();
+        String nouvelEmail = utilisateurDetails.getEmail() != null
+                ? utilisateurDetails.getEmail().trim().toLowerCase()
+                : ancienEmail;
+
+        // Mot de passe : ne réencoder que si un NOUVEAU mot de passe est fourni.
+        // Le formulaire peut renvoyer un champ vide (pas de changement) ou réécho le hash existant
+        // (à ne surtout pas réencoder, sinon le compte devient inconnectable).
+        String motDePasseRecu = utilisateurDetails.getPassword();
+        boolean motDePasseChange = motDePasseRecu != null
+                && !motDePasseRecu.isBlank()
+                && !motDePasseRecu.equals(utilisateur.getPassword());
+        String hashAEnregistrer = motDePasseChange
+                ? passwordEncoder.encode(motDePasseRecu)
+                : utilisateur.getPassword();
+
         utilisateur.setPrenom(utilisateurDetails.getPrenom());
         utilisateur.setNom(utilisateurDetails.getNom());
-        utilisateur.setEmail(utilisateurDetails.getEmail());
-        utilisateur.setPassword(utilisateurDetails.getPassword());
+        utilisateur.setEmail(nouvelEmail);
+        utilisateur.setPassword(hashAEnregistrer);
         utilisateur.setPoste(utilisateurDetails.getPoste());
-        utilisateur.setRole(utilisateur.getRole());
+        utilisateur.setRole(utilisateurDetails.getRole());
         utilisateur.setModulesAutorises(utilisateurDetails.getModulesAutorises());
         utilisateur.setMotifDesactivation(utilisateurDetails.getMotifDesactivation());
         utilisateur.setActive(utilisateurDetails.isActive());
 
         Utilisateur utilisateur1 = utilisateursService.save(utilisateur);
+
+        // 🔄 Resynchroniser la collection 'login' (source de vérité du mot de passe à la connexion).
+        // Sans ça, le mot de passe / rôle / email réellement utilisés à l'auth restent les anciens
+        // et l'utilisateur reçoit un 401 malgré des identifiants "corrects".
+        User login = ancienEmail != null ? loginRepository.findByEmail(ancienEmail).orElse(null) : null;
+        if (login == null && nouvelEmail != null && !nouvelEmail.equals(ancienEmail)) {
+            login = loginRepository.findByEmail(nouvelEmail).orElse(null);
+        }
+        if (login != null) {
+            login.setEmail(nouvelEmail);
+            login.setRole(utilisateurDetails.getRole() != null ? utilisateurDetails.getRole().toString() : login.getRole());
+            login.setPassword(hashAEnregistrer);
+            loginRepository.save(login);
+        }
+
         return ResponseEntity.status(HttpStatus.CREATED).body(utilisateur1);
-
-
     }
 }

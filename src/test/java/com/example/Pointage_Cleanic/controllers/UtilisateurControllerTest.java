@@ -176,4 +176,79 @@ class UtilisateurControllerTest {
                         .content(objectMapper.writeValueAsString(existing)))
                 .andExpect(status().isCreated());
     }
+
+    // =========================
+    // PUT /api/superadmin/{id} — resynchronise 'login' avec un hash encodé (pas de texte brut)
+    // =========================
+    @Test
+    void update_utilisateur_resynchronise_login_avec_hash_encode() throws Exception {
+
+        Utilisateur existing = new Utilisateur();
+        existing.setId("123");
+        existing.setEmail("admin@test.com");
+        existing.setPassword("ANCIEN_HASH");
+
+        com.example.Pointage_Cleanic.entities.User login =
+                new com.example.Pointage_Cleanic.entities.User();
+        login.setEmail("admin@test.com");
+        login.setPassword("ANCIEN_HASH");
+        login.setRole("SUPERVISEUR");
+
+        when(utilisateursService.getByid("123")).thenReturn(existing);
+        when(utilisateursService.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(loginRepository.findByEmail("admin@test.com")).thenReturn(Optional.of(login));
+        when(passwordEncoder.encode("nouveauMotDePasse")).thenReturn("NOUVEAU_HASH");
+
+        Utilisateur payload = new Utilisateur();
+        payload.setEmail("admin@test.com");
+        payload.setPassword("nouveauMotDePasse");
+        payload.setRole(RoleAdmin.SUPERVISEUR);
+
+        mockMvc.perform(put("/api/superadmin/123")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(payload)))
+                .andExpect(status().isCreated());
+
+        org.mockito.ArgumentCaptor<com.example.Pointage_Cleanic.entities.User> captor =
+                org.mockito.ArgumentCaptor.forClass(com.example.Pointage_Cleanic.entities.User.class);
+        verify(loginRepository).save(captor.capture());
+        org.junit.jupiter.api.Assertions.assertEquals("NOUVEAU_HASH", captor.getValue().getPassword());
+    }
+
+    // =========================
+    // PUT /api/superadmin/{id} — mot de passe inchangé (hash réécho) : ne pas réencoder
+    // =========================
+    @Test
+    void update_utilisateur_sans_changement_password_ne_reencode_pas() throws Exception {
+
+        Utilisateur existing = new Utilisateur();
+        existing.setId("123");
+        existing.setEmail("admin@test.com");
+        existing.setPassword("ANCIEN_HASH");
+
+        com.example.Pointage_Cleanic.entities.User login =
+                new com.example.Pointage_Cleanic.entities.User();
+        login.setEmail("admin@test.com");
+        login.setPassword("ANCIEN_HASH");
+
+        when(utilisateursService.getByid("123")).thenReturn(existing);
+        when(utilisateursService.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(loginRepository.findByEmail("admin@test.com")).thenReturn(Optional.of(login));
+
+        // Le formulaire réécho le hash existant : ne doit PAS être réencodé.
+        Utilisateur payload = new Utilisateur();
+        payload.setEmail("admin@test.com");
+        payload.setPassword("ANCIEN_HASH");
+
+        mockMvc.perform(put("/api/superadmin/123")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(payload)))
+                .andExpect(status().isCreated());
+
+        verify(passwordEncoder, never()).encode(any());
+        org.mockito.ArgumentCaptor<com.example.Pointage_Cleanic.entities.User> captor =
+                org.mockito.ArgumentCaptor.forClass(com.example.Pointage_Cleanic.entities.User.class);
+        verify(loginRepository).save(captor.capture());
+        org.junit.jupiter.api.Assertions.assertEquals("ANCIEN_HASH", captor.getValue().getPassword());
+    }
 }
