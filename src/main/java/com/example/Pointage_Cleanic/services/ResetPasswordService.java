@@ -47,6 +47,10 @@ public class ResetPasswordService {
     // 📩 Envoi du code OTP
     public void sendResetPasswordEmail(String email) throws MessagingException {
 
+        // Normaliser dès l'entrée pour rester cohérent avec resetPassword (lookup en minuscules)
+        // et avec la création de compte qui stocke l'email en minuscules.
+        email = email.trim().toLowerCase(Locale.ROOT);
+
         Object account = findAccountByEmail(email);
 
         // Génération d’un OTP
