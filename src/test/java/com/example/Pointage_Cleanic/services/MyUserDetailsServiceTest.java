@@ -118,6 +118,34 @@ class MyUserDetailsServiceTest {
 
 
     // ---------------------------------------------------------
+    // 4 bis. Rôle RESPONSABLE_CHIMIE → autorité ROLE_RESPONSABLE_CHIMIE
+    // ---------------------------------------------------------
+    @Test
+    void testLoadUserByUsername_responsableChimieRole() {
+
+        User loginUser = new User();
+        loginUser.setEmail("chimie@test.com");
+        loginUser.setPassword("pass123");
+
+        Utilisateur profil = new Utilisateur();
+        profil.setEmail("chimie@test.com");
+        profil.setActive(true);
+        profil.setRole(RoleAdmin.RESPONSABLE_CHIMIE);
+
+        when(loginRepository.findByEmail("chimie@test.com"))
+                .thenReturn(Optional.of(loginUser));
+        when(utilisateurRepository.findByEmail("chimie@test.com"))
+                .thenReturn(Optional.of(profil));
+
+        UserDetails result =
+                myUserDetailsService.loadUserByUsername("chimie@test.com");
+
+        assertTrue(result.getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equals("ROLE_RESPONSABLE_CHIMIE")));
+    }
+
+
+    // ---------------------------------------------------------
     // 5. Profil absent → rôle de loginUser utilisé
     // ---------------------------------------------------------
     @Test

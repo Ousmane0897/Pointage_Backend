@@ -8,6 +8,7 @@ public enum RoleAdmin {
         RESPONSABLE_IT,
         Responsable_QHSE,
         CONTROLEUR_STOCK,
+        RESPONSABLE_CHIMIE,
         RH
 
 }
