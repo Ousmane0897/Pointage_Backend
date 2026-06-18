@@ -31,6 +31,7 @@ public final class StockLibelles {
             case DISTRIBUTION_CHANTIER -> "Distribution chantier";
             case VENTE_PRODUIT -> "Vente produit";
             case CONSOMMATION_INTERNE -> "Consommation interne";
+            case DON -> "Don";
         };
     }
 
@@ -48,7 +49,7 @@ public final class StockLibelles {
     public static MotifMouvement motif(TypeSortie type) {
         return switch (type) {
             case VENTE_PRODUIT -> MotifMouvement.VENTE;
-            case DISTRIBUTION_AGENCE_SITE_CLIENT, DISTRIBUTION_CHANTIER, CONSOMMATION_INTERNE ->
+            case DISTRIBUTION_AGENCE_SITE_CLIENT, DISTRIBUTION_CHANTIER, CONSOMMATION_INTERNE, DON ->
                     MotifMouvement.CONSOMMATION;
         };
     }

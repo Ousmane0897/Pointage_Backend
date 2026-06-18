@@ -29,4 +29,11 @@ public class Stock {
     private boolean plafonds;
     private boolean dotation;
     private boolean rapportsConso;
+
+    // --- 7.5 Analyse des consommations (gating UI frontend) ---
+    private boolean analyseMensuelle;
+    private boolean chantiers;
+    private boolean dons;
+    private boolean comparatif;
+    private boolean filtresCroises;
 }

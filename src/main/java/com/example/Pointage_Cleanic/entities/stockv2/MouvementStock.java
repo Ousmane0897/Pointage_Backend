@@ -1,6 +1,7 @@
 package com.example.Pointage_Cleanic.entities.stockv2;
 
 import com.example.Pointage_Cleanic.Enum.stockv2.MotifMouvement;
+import com.example.Pointage_Cleanic.Enum.stockv2.NatureDon;
 import com.example.Pointage_Cleanic.Enum.stockv2.TypeEntree;
 import com.example.Pointage_Cleanic.Enum.stockv2.TypeMouvement;
 import com.example.Pointage_Cleanic.Enum.stockv2.TypeSortie;
@@ -68,4 +69,14 @@ public class MouvementStock {
     private TypeEntree categorieEntree;
     /** Catégorie typée du bon de sortie à l'origine du mouvement. */
     private TypeSortie categorieSortie;
+
+    // --- 7.5 : traçabilité analytique (recopiée depuis le bon de sortie) ---
+    /** Nature du don, recopiée si le bon source est de type DON (sinon null). */
+    private NatureDon natureDon;
+    /** Bénéficiaire du don, recopié si le bon source est de type DON (sinon null). */
+    private String beneficiaireDon;
+    /** Chantier rattaché, recopié si le bon source est de type DISTRIBUTION_CHANTIER (sinon null). */
+    @Indexed
+    private String chantierId;
+    private String chantierReference;
 }

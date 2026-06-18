@@ -65,6 +65,11 @@ public class MouvementBonGenerator {
             mvt.setCategorieSortie(bon.getType());
             mvt.setSiteSourceId(bon.getSiteSourceId());
             mvt.setSiteSourceNom(bon.getSiteSourceNom());
+            // 7.5 : traçabilité analytique recopiée depuis le bon (don / chantier).
+            mvt.setNatureDon(bon.getNatureDon());
+            mvt.setBeneficiaireDon(bon.getBeneficiaireDon());
+            mvt.setChantierId(bon.getChantierId());
+            mvt.setChantierReference(bon.getChantierReference());
             return mvt;
         }, (ligne) -> balanceService.appliquerDelta(ligne.getProduitId(), bon.getSiteSourceId(), ligne.getQuantite()));
     }

@@ -1,5 +1,6 @@
 package com.example.Pointage_Cleanic.entities.stockv2;
 
+import com.example.Pointage_Cleanic.Enum.stockv2.NatureDon;
 import com.example.Pointage_Cleanic.Enum.stockv2.StatutBon;
 import com.example.Pointage_Cleanic.Enum.stockv2.TypeSortie;
 import lombok.AllArgsConstructor;
@@ -37,6 +38,14 @@ public class BonSortie {
 
     private DestinataireBon destinataire;
     private String motif;
+
+    // --- 7.5 : don (requis si type = DON) ---
+    private NatureDon natureDon;
+    private String beneficiaireDon;
+
+    // --- 7.5 : rattachement chantier (requis si type = DISTRIBUTION_CHANTIER) ---
+    private String chantierId;
+    private String chantierReference;
 
     @Builder.Default
     private List<LigneBon> lignes = new ArrayList<>();

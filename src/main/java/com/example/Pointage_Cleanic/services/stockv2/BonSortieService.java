@@ -7,14 +7,17 @@ import com.example.Pointage_Cleanic.Dto.stockv2.DestinatairePayload;
 import com.example.Pointage_Cleanic.Dto.stockv2.NotificationStockDto;
 import com.example.Pointage_Cleanic.Enum.stockv2.ActionWorkflow;
 import com.example.Pointage_Cleanic.Enum.stockv2.StatutBon;
+import com.example.Pointage_Cleanic.Enum.stockv2.StatutChantier;
 import com.example.Pointage_Cleanic.Enum.stockv2.TypeSortie;
 import com.example.Pointage_Cleanic.Mapper.stockv2.BonSortieMapper;
 import com.example.Pointage_Cleanic.entities.stockv2.BonSortie;
+import com.example.Pointage_Cleanic.entities.stockv2.Chantier;
 import com.example.Pointage_Cleanic.entities.stockv2.DestinataireBon;
 import com.example.Pointage_Cleanic.entities.stockv2.LigneBon;
 import com.example.Pointage_Cleanic.exception.ResourceNotFoundException;
 import com.example.Pointage_Cleanic.exception.StockConflitException;
 import com.example.Pointage_Cleanic.repositories.stockv2.BonSortieRepository;
+import com.example.Pointage_Cleanic.repositories.stockv2.ChantierRepository;
 import com.example.Pointage_Cleanic.services.stockv2.BonSupportService.DemandeurRef;
 import com.example.Pointage_Cleanic.util.PageResponse;
 import lombok.RequiredArgsConstructor;
@@ -43,6 +46,7 @@ public class BonSortieService {
     private final MouvementBonGenerator mouvementGenerator;
     private final StockNotificationService notificationService;
     private final CompteurStockService compteurService;
+    private final ChantierRepository chantierRepository;
     private final MongoTemplate mongoTemplate;
 
     public PageResponse<BonSortieDto> list(int page, int size, String q, StatutBon statut, TypeSortie type,
@@ -85,6 +89,7 @@ public class BonSortieService {
         DestinataireBon destinataire = resoudreDestinataire(payload.getDestinataire());
         List<LigneBon> lignes = support.denormaliserLignes(payload.getLignes());
         DemandeurRef demandeur = support.resoudreDemandeur(payload.getDemandeurId());
+        SpecificiteSortie spec = resoudreSpecificite(payload);
 
         LocalDateTime now = LocalDateTime.now();
         BonSortie bon = BonSortie.builder()
@@ -95,6 +100,10 @@ public class BonSortieService {
                 .siteSourceNom(siteNom)
                 .destinataire(destinataire)
                 .motif(payload.getMotif())
+                .natureDon(spec.natureDon())
+                .beneficiaireDon(spec.beneficiaireDon())
+                .chantierId(spec.chantierId())
+                .chantierReference(spec.chantierReference())
                 .lignes(lignes)
                 .statut(StatutBon.BROUILLON)
                 .demandeurId(demandeur.id())
@@ -118,6 +127,7 @@ public class BonSortieService {
         DestinataireBon destinataire = resoudreDestinataire(payload.getDestinataire());
         List<LigneBon> lignes = support.denormaliserLignes(payload.getLignes());
         DemandeurRef demandeur = support.resoudreDemandeur(payload.getDemandeurId());
+        SpecificiteSortie spec = resoudreSpecificite(payload);
 
         bon.setType(payload.getType());
         bon.setDate(payload.getDate() != null ? payload.getDate() : bon.getDate());
@@ -125,6 +135,10 @@ public class BonSortieService {
         bon.setSiteSourceNom(siteNom);
         bon.setDestinataire(destinataire);
         bon.setMotif(payload.getMotif());
+        bon.setNatureDon(spec.natureDon());
+        bon.setBeneficiaireDon(spec.beneficiaireDon());
+        bon.setChantierId(spec.chantierId());
+        bon.setChantierReference(spec.chantierReference());
         bon.setLignes(lignes);
         bon.setDemandeurId(demandeur.id());
         bon.setDemandeurNom(demandeur.nom());
@@ -161,6 +175,16 @@ public class BonSortieService {
             throw new StockConflitException("Seul un bon SOUMIS peut être validé (statut actuel : " + bon.getStatut() + ")");
         }
         String commentaire = decision == null ? null : decision.getCommentaire();
+
+        // 7.5 : un bon DISTRIBUTION_CHANTIER ne peut être validé vers un chantier clôturé.
+        if (bon.getType() == TypeSortie.DISTRIBUTION_CHANTIER && bon.getChantierId() != null) {
+            Chantier chantier = chantierRepository.findById(bon.getChantierId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Chantier introuvable : " + bon.getChantierId()));
+            if (chantier.getStatut() == StatutChantier.CLOTURE) {
+                throw new StockConflitException(
+                        "Impossible de valider : le chantier " + chantier.getReference() + " est clôturé");
+            }
+        }
 
         // Génère les mouvements SORTIE AVANT mutation : lève 422 (stock insuffisant) sans rien valider.
         mouvementGenerator.genererPourSortie(bon);
@@ -199,6 +223,39 @@ public class BonSortieService {
         notificationService.diffuser(notification("BON_REFUSE", saved, "Bon de sortie refusé",
                 "Le bon " + saved.getReference() + " a été refusé : " + motif));
         return mapper.toDto(saved);
+    }
+
+    /** Valide et résout les champs propres au type de sortie (don / chantier). */
+    private SpecificiteSortie resoudreSpecificite(BonSortiePayload payload) {
+        TypeSortie type = payload.getType();
+        if (type == TypeSortie.DON) {
+            if (payload.getChantierId() != null && !payload.getChantierId().isBlank()) {
+                throw new IllegalArgumentException("Un bon DON ne peut pas être rattaché à un chantier");
+            }
+            if (payload.getNatureDon() == null) {
+                throw new IllegalArgumentException("Bon DON : la nature du don est obligatoire");
+            }
+            if (payload.getBeneficiaireDon() == null || payload.getBeneficiaireDon().isBlank()) {
+                throw new IllegalArgumentException("Bon DON : le bénéficiaire du don est obligatoire");
+            }
+            return new SpecificiteSortie(payload.getNatureDon(), payload.getBeneficiaireDon().trim(), null, null);
+        }
+        if (type == TypeSortie.DISTRIBUTION_CHANTIER) {
+            if (payload.getNatureDon() != null) {
+                throw new IllegalArgumentException("Un bon DISTRIBUTION_CHANTIER ne peut pas porter de nature de don");
+            }
+            if (payload.getChantierId() == null || payload.getChantierId().isBlank()) {
+                throw new IllegalArgumentException("Bon DISTRIBUTION_CHANTIER : le chantier est obligatoire");
+            }
+            Chantier chantier = chantierRepository.findById(payload.getChantierId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Chantier introuvable : " + payload.getChantierId()));
+            return new SpecificiteSortie(null, null, chantier.getId(), chantier.getReference());
+        }
+        return new SpecificiteSortie(null, null, null, null);
+    }
+
+    private record SpecificiteSortie(com.example.Pointage_Cleanic.Enum.stockv2.NatureDon natureDon,
+                                     String beneficiaireDon, String chantierId, String chantierReference) {
     }
 
     private DestinataireBon resoudreDestinataire(DestinatairePayload payload) {

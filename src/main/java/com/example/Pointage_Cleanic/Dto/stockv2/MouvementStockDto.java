@@ -1,6 +1,7 @@
 package com.example.Pointage_Cleanic.Dto.stockv2;
 
 import com.example.Pointage_Cleanic.Enum.stockv2.MotifMouvement;
+import com.example.Pointage_Cleanic.Enum.stockv2.NatureDon;
 import com.example.Pointage_Cleanic.Enum.stockv2.TypeEntree;
 import com.example.Pointage_Cleanic.Enum.stockv2.TypeMouvement;
 import com.example.Pointage_Cleanic.Enum.stockv2.TypeSortie;
@@ -51,4 +52,10 @@ public class MouvementStockDto {
     private String bonReference;
     private TypeEntree categorieEntree;
     private TypeSortie categorieSortie;
+
+    // --- 7.5 : traçabilité analytique (null pour les mouvements hors don/chantier) ---
+    private NatureDon natureDon;
+    private String beneficiaireDon;
+    private String chantierId;
+    private String chantierReference;
 }

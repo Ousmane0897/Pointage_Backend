@@ -1,5 +1,6 @@
 package com.example.Pointage_Cleanic.Dto.stockv2;
 
+import com.example.Pointage_Cleanic.Enum.stockv2.NatureDon;
 import com.example.Pointage_Cleanic.Enum.stockv2.StatutBon;
 import com.example.Pointage_Cleanic.Enum.stockv2.TypeSortie;
 import com.fasterxml.jackson.annotation.JsonFormat;
@@ -29,6 +30,12 @@ public class BonSortieDto {
     private String siteSourceId;
     private String siteSourceNom;
     private String motif;
+
+    private NatureDon natureDon;
+    private String beneficiaireDon;
+    private String chantierId;
+    private String chantierReference;
+
     private DestinataireDto destinataire;
     private List<LigneBonDto> lignes;
     private StatutBon statut;

@@ -7,4 +7,6 @@ import java.util.List;
 
 public interface MouvementStockRepository extends MongoRepository<MouvementStock, String> {
     List<MouvementStock> findByProduitIdOrderByDateDesc(String produitId);
+
+    List<MouvementStock> findByChantierId(String chantierId);
 }

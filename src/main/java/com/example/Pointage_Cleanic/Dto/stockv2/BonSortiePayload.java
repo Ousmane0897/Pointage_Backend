@@ -1,5 +1,6 @@
 package com.example.Pointage_Cleanic.Dto.stockv2;
 
+import com.example.Pointage_Cleanic.Enum.stockv2.NatureDon;
 import com.example.Pointage_Cleanic.Enum.stockv2.TypeSortie;
 import com.fasterxml.jackson.annotation.JsonFormat;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
@@ -29,4 +30,11 @@ public class BonSortiePayload {
     private String demandeurId;
     private String commentaire;
     private List<LignePayload> lignes;
+
+    // --- 7.5 : don (requis si type = DON) ---
+    private NatureDon natureDon;
+    private String beneficiaireDon;
+
+    // --- 7.5 : rattachement chantier (requis si type = DISTRIBUTION_CHANTIER) ---
+    private String chantierId;
 }
