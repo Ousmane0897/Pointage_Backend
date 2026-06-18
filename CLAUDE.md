@@ -45,13 +45,13 @@ Standard layered Spring MVC: `controllers → services → repositories (Spring 
 
 Things that only make sense after reading several files:
 
-- **Auth is stateless JWT.** `security/SecurityConfig.java` disables CSRF, sets `SessionCreationPolicy.STATELESS`, and installs `JwtRequestFilter` before `UsernamePasswordAuthenticationFilter`. The filter skips `OPTIONS` (preflight) and rejects expired/invalid tokens with 401. Public routes are whitelisted there: `/api/login/**`, `/auth/forgot-password`, `/auth/reset-password/**`, Swagger, `/ws/**`, image endpoints (`/api/produits/image/**`, `/api/employe-complet/image/**`), and the mobile clock-in surface: `POST /api/pointages`, `GET /api/pointages/{codeSecret}` (statut), and the legacy `/pointages/**` tree (mobile clocks in without a token). **Les vues superviseur sont protégées** depuis 2026-06 : `GET /api/pointages/today`, `/api/pointages/historique/**` (recherche + exports) et `GET /api/pointages` (getAll) exigent un JWT (ordre des matchers : règles `.authenticated()` placées avant le `permitAll` car `/{codeSecret}` recouvre `/today`). Everything else is `.authenticated()`. When adding a controller, decide explicitly whether to permit it here.
+- **Auth is stateless JWT.** `security/SecurityConfig.java` disables CSRF, sets `SessionCreationPolicy.STATELESS`, and installs `JwtRequestFilter` before `UsernamePasswordAuthenticationFilter`. The filter skips `OPTIONS` (preflight) and rejects expired/invalid tokens with 401. Public routes are whitelisted there: `/api/login/**`, `/auth/forgot-password`, `/auth/reset-password/**`, Swagger, `/ws/**`, image endpoints (`/api/produits/image/**`, `/api/employe-complet/image/**`), and the mobile clock-in surface: `POST /api/pointages`, `GET /api/pointages/{codeSecret}` (statut), and the legacy `/pointages/**` tree (mobile clocks in without a token). **Les vues superviseur sont protégées** depuis 2026-06 : `GET /api/pointages/today`, `/api/pointages/historique/**` (recherche + exports) et `GET /api/pointages` (getAll) exigent un JWT (ordre des matchers : règles `.authenticated()` placées avant le `permitAll` car `/{codeSecret}` recouvre `/today`). Everything else is `.authenticated()` — y compris `/api/terrain/**` et `/api/stock/**` (module Stock v2, ajouté 2026-06), explicitement listés avant le `anyRequest`. When adding a controller, decide explicitly whether to permit it here.
 
 - **CORS allowlist is in `SecurityConfig`, not a properties file.** Frontend origins (`pointic-cleanic.com`, `app.pointic-cleanic.com`, ngrok subdomains, localhost) are hardcoded. Add new origins there.
 
 - **Two parallel user models coexist.** `User` (collection used by `LoginRepository` + `DataLoader` bootstrap superadmin `diarra.niang@cleanicsenegal.com`) and `Utilisateur` (richer admin entity with `RoleAdmin`, `ModulesAutorises`, activation flags). `MyUserDetailsService` bridges them for Spring Security. Don't collapse them without understanding which flows use which.
 
-- **Module-based authorization.** `Utilisateur.modulesAutorises: ModulesAutorises` is a per-user feature-flag object (booleans for top-level modules + nested sub-module objects under `entities/GestionModules/SousModules/`). Route-level authorization in `SecurityConfig` is coarse (`.authenticated()`); fine-grained gating is **delegated to the Angular frontend** which reads `ModulesAutorises` from the JWT/`AuthResponse2` to show/hide screens — there are **no `@PreAuthorize`/`@Secured` annotations** on the backend. Top-level flags include `Dashboard, Admin, StatistiquesAgences, Planifications, Calendrier, JourFeries, Employes, Agences, RH`; sub-modules `CollecteLivraison, Absences, Pointages, Stock` carry nested booleans. The `RH` flag (added 2026-04-30) gates the entire RH module 6.1–6.4. `RoleAdmin.RH` exists in the enum but is just a profile tag — without `ModulesAutorises.RH=true`, the RH screens stay hidden.
+- **Module-based authorization.** `Utilisateur.modulesAutorises: ModulesAutorises` is a per-user feature-flag object (booleans for top-level modules + nested sub-module objects under `entities/GestionModules/SousModules/`). Route-level authorization in `SecurityConfig` is coarse (`.authenticated()`); fine-grained gating is **delegated to the Angular frontend** which reads `ModulesAutorises` from the JWT/`AuthResponse2` to show/hide screens — there are **no `@PreAuthorize`/`@Secured` annotations** on the backend. Top-level flags include `Dashboard, Admin, StatistiquesAgences, Planifications, Calendrier, JourFeries, Employes, Agences, RH`; sub-modules `CollecteLivraison, Absences, Pointages, Stock` carry nested booleans. The `RH` flag (added 2026-04-30) gates the entire RH module 6.1–6.4. Le module **Stock v2 (7.3)** a son propre objet `ModulesAutorises.stock` (`SousModules/Stock`, ajouté 2026-06) avec 7 sous-flags `{catalogue, mouvements, etatStock, inventaires, synthese, approvisionnement, tableauBord}` ; sérialisé tel quel dans le claim JWT `modules` (`@JsonInclude(NON_NULL)` → les utilisateurs existants restent inchangés). `RoleAdmin.RH` exists in the enum but is just a profile tag — without `ModulesAutorises.RH=true`, the RH screens stay hidden.
 
 - **WebSockets (STOMP over SockJS) are a first-class channel**, not an afterthought. `WebSocketConfig` exposes `/ws`, broadcast prefixes `/topic` + `/queue`, client-to-server prefix `/app`. Used for the admin ↔ superadmin cancel/validate workflow (see `Dto/AnnulationRequestMessage.java`, `Dto/AnnulationDecisionMessage.java`, `Dto/CancelRequestDto.java`, `Dto/ValidationRequestDto.java`). `/ws/**` is permitAll but `/ws/info` requires auth — mirror that pattern for new endpoints.
 
@@ -71,7 +71,7 @@ Things that only make sense after reading several files:
 | `/api/agences`, `/api/site` | AgencesController, SitesController |
 | `/api/planification`, `/api/ferie` | PlanificationController, FerieController |
 | `/api/pointages`, `/api/absences` | PointagesController (public), AbsencesControllers |
-| `/api/produits`, `/api/stock` | ProduitController, StockController |
+| `/api/produits` | ProduitController (**stock historique** — entité `Produit`, collection `produits`. ⚠️ Ne mappe PAS `/api/stock`, qui appartient au module Stock v2 7.3 ci-dessous) |
 | `/api/besoins` | CollecteBesoinController |
 | `/api/dashboard`, `/api/dashboard_par_agence` | DashboardController, DashboardParAgence |
 | `/ws` | STOMP endpoint |
@@ -109,6 +109,15 @@ Things that only make sense after reading several files:
 | `/api/production-chimie/controle-qualite/controles` | ControlesQualiteController (multipart photos, + /tendances) |
 | `/api/production-chimie/formats-conditionnement` | FormatsConditionnementController |
 | `/api/production-chimie/tableau-bord` | TableauBordProductionController (+ /rapport agrégé, /comparaison-periodes) |
+| **— Stock v2 7.3 — stocks & approvisionnement** (`controllers/stockv2`, collections `stockv2_*`) | |
+| `/api/stock/produits` | ProduitStockController (multipart photo + fiche technique, `/actifs`, `/{id}/photo`, `/{id}/fiche-technique`, `/bulk` transactionnel) |
+| `/api/stock/categories` | CategorieStockController (arborescence : `/racines`, `/enfants`, plat ; DELETE 409 si non vide) |
+| `/api/stock/mouvements` | MouvementStockController (ENTREE/SORTIE/TRANSFERT, impact sur `StockParSite`, 422 si insuffisant) |
+| `/api/stock/etat-stock` | EtatStockController (consolidé / `parSite`, statut + valeur ; PUT `/seuils`) |
+| `/api/stock/inventaires` | InventaireController (workflow `/comptage`, `/validation`, `/cloture`) |
+| `/api/stock/synthese-mensuelle` | SyntheseMensuelleController |
+| `/api/stock/approvisionnement` | ApprovisionnementController (`/suggestions`) |
+| `/api/stock/tableau-bord` | TableauBordStockController |
 
 ## Testing conventions
 
@@ -169,3 +178,20 @@ Spécificités vs Production Chimie :
 - **TODO** : sous-permissions `ModulesAutorises.terrain.*` à ajouter dans `entities/GestionModules/SousModules/` (gating frontend) ; tests d'intégration.
 
 Détails endpoints, payloads WebSocket, hypothèses (seuils escalade/maintenance, identité utilisateur courant), codes d'erreur : **voir `.claude/docs/module-terrain.md`**.
+
+## Module Stock v2 (7.3) — ✅ Backend terminé
+
+Sous-module **« Stocks & Approvisionnement »**, **autonome** (collections préfixées `stockv2_`, ne partage rien avec le stock historique `produits` ni stock-chimie `production_chimie_*`). 8 contrôleurs REST sous `/api/stock/`. Code sous les sous-packages `stockv2` : `controllers/stockv2`, `services/stockv2`, `repositories/stockv2`, `entities/stockv2`, `Dto/stockv2`, `Mapper/stockv2`, `Enum/stockv2`. **Frontend Angular figé** → contrats (chemins, champs JSON, enums, codes HTTP) respectés à la lettre. Créé sur la branche `feature/stock` (2026-06).
+
+Spécificités / patterns :
+- **`StockParSite` = source de vérité des quantités** (collection `stockv2_etats_stock`, index composé unique `(produitId, siteId)`). `ProduitStock.quantiteTotale` n'est **pas** stocké : dénormalisé en lecture (somme des soldes). Logique de solde mutualisée dans `StockBalanceService`. Bucket `siteId=null` pour le stock initial d'import (sans site).
+- **Sites en lecture seule** depuis le module Terrain : `ReferentielSiteService` lit `sites_clients` (via `SiteClientRepository`) pour valider `siteId` et dénormaliser `siteNom`. Aucun référentiel de sites côté stock.
+- **Utilisateur créateur** déduit du JWT via `CurrentUserProvider` (réutilisé depuis `services/terrain`), jamais envoyé par le client.
+- **Dates ISO** : `LocalDate` avec `@JsonFormat("yyyy-MM-dd")`, `LocalDateTime` ISO, `mois` en `yyyy-MM` (pas le `dd/MM/yyyy` global).
+- **Erreurs** : `GlobalExceptionHandler` global. Nouvelles exceptions — `StockOperationException` → **422** (stock insuffisant, écart d'inventaire non justifié, transition de workflow invalide), `StockConflitException` → **409** (code produit dupliqué). Le `/bulk` renvoie le **même corps** `{total, inserted, failed, insertedIds, errors[]}` en 200 (succès total) et 422 (échec → rollback total, 0 créé).
+- **Transactionnalité** sans transaction Mongo : compensation manuelle (pattern `OrdreFabricationService`) pour le `/bulk` all-or-nothing et la clôture d'inventaire (écarts appliqués via mouvements `AJUSTEMENT`).
+- **Références** générées par `CompteurStockService` (même `findAndModify` que `CompteurLotService`) : `MVT-yyyyMMdd-NNN`, `INV-yyyyMMdd-NNN`.
+- **Binaire inline** (`byte[] @JsonIgnore` photo + fiche technique sur `ProduitStock`), URL calculée par le mapper, endpoints de streaming protégés JWT.
+- **Tests** : 5 IT Testcontainers (`services/stockv2/*IT`) + 2 slices `@WebMvcTest` (`controllers/stockv2`).
+
+Détails endpoints (query params, payloads), entités/collections/index, formules serveur (synthèse, suggestions appro, KPIs dashboard), workflow inventaire, codes d'erreur : **voir `.claude/docs/module-stockv2.md`**.

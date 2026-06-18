@@ -109,6 +109,7 @@ public class SecurityConfig {
                         .requestMatchers("/ws/info").authenticated()
                         .requestMatchers("/api/super-admin/**").authenticated()
                         .requestMatchers("/api/terrain/**").authenticated()
+                        .requestMatchers("/api/stock/**").authenticated()
 
                         // Toutes les autres requêtes nécessitent authentification
                         .anyRequest().authenticated()

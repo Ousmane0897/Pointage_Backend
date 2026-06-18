@@ -154,6 +154,22 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(body);
     }
 
+    @ExceptionHandler(StockConflitException.class)
+    public ResponseEntity<Map<String, Object>> handleStockConflit(StockConflitException ex) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("error", "STOCK_CONFLICT");
+        body.put("message", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(body);
+    }
+
+    @ExceptionHandler(StockOperationException.class)
+    public ResponseEntity<Map<String, Object>> handleStockOperation(StockOperationException ex) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("error", "STOCK_OPERATION_ERROR");
+        body.put("message", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY).body(body);
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<Map<String, Object>> handleValidation(MethodArgumentNotValidException ex) {
         List<Map<String, String>> fieldErrors = ex.getBindingResult().getFieldErrors().stream()
