@@ -145,6 +145,7 @@ public class MouvementStockService {
                 .date(payload.getDate() != null ? payload.getDate() : LocalDate.now())
                 .utilisateur(currentUser.currentUserNom())
                 .commentaire(payload.getCommentaire())
+                .origine("DIRECT")
                 .createdAt(LocalDateTime.now())
                 .build();
         return mapper.toDto(repository.save(mvt));

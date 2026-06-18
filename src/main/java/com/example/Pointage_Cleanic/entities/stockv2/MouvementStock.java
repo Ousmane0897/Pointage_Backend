@@ -1,7 +1,9 @@
 package com.example.Pointage_Cleanic.entities.stockv2;
 
 import com.example.Pointage_Cleanic.Enum.stockv2.MotifMouvement;
+import com.example.Pointage_Cleanic.Enum.stockv2.TypeEntree;
 import com.example.Pointage_Cleanic.Enum.stockv2.TypeMouvement;
+import com.example.Pointage_Cleanic.Enum.stockv2.TypeSortie;
 import com.example.Pointage_Cleanic.Enum.stockv2.UniteStock;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -53,4 +55,17 @@ public class MouvementStock {
     private String commentaire;
 
     private LocalDateTime createdAt;
+
+    // --- 7.4 Contrôle des mouvements (champs optionnels, rétro-compatibles) ---
+    /** "DIRECT" = saisie directe 7.3 ; "BON" = généré par la validation d'un bon 7.4. */
+    private String origine;
+    /** Id du bon source (si origine = BON). */
+    @Indexed
+    private String bonId;
+    /** Référence du bon source : BE-/BS-AAAAMMJJ-XXX (si origine = BON). */
+    private String bonReference;
+    /** Catégorie typée du bon d'entrée à l'origine du mouvement. */
+    private TypeEntree categorieEntree;
+    /** Catégorie typée du bon de sortie à l'origine du mouvement. */
+    private TypeSortie categorieSortie;
 }

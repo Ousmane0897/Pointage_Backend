@@ -1,6 +1,6 @@
-# Module Stock v2 (7.3) — « Stocks & Approvisionnement »
+# Module Stock v2 (7.3 + 7.4) — « Stocks & Approvisionnement » / « Contrôle des mouvements »
 
-Backend complet du sous-module 7.3. Module **autonome**, collections `stockv2_*`, 8 contrôleurs sous `/api/stock/`. Frontend Angular **figé** : tout écart de contrat (chemin, méthode, query param, nom de champ JSON, enum, code HTTP) casse l'app. Voir CLAUDE.md § « Module Stock v2 (7.3) » pour la vue d'ensemble.
+Backend complet des sous-modules 7.3 (catalogue/mouvements/inventaires/synthèse/appro/dashboard) et 7.4 (bons à workflow + catégorisation + plafonds + dotation + consommation). Module **autonome**, collections `stockv2_*`, 16 contrôleurs sous `/api/stock/`. Frontend Angular **figé** : tout écart de contrat (chemin, méthode, query param, nom de champ JSON, enum, code HTTP) casse l'app. Voir CLAUDE.md § « Module Stock v2 » pour la vue d'ensemble. La section 7.4 est documentée en bas de ce fichier.
 
 ## Conventions transverses du module
 
@@ -108,3 +108,107 @@ Workflow `BROUILLON → COMPTAGE → VALIDATION → CLOTURE` :
 - Activation des sous-flags `modules.stock.*` par l'admin via le flux existant `/api/superadmin` (gating frontend).
 - L'`evolutionValeur` du dashboard recalcule le cumul produit×mois en mémoire (O(mois × mouvements)) — acceptable au volume actuel, à surveiller si l'historique grossit.
 - Smoke tests manuels Swagger/curl avec JWT (cycle mouvement → état → inventaire → clôture).
+
+---
+
+# Sous-module 7.4 — « Contrôle des mouvements »
+
+Ajoute, **par-dessus 7.3**, un document **`Bon` multi-lignes porteur d'un workflow de validation**. Créé sur `feature/stock` (2026-06-18). Code dans les mêmes sous-packages `stockv2`.
+
+## Principe central (ne pas dupliquer la notion de mouvement)
+
+Le `MouvementStock` 7.3 reste l'**effet instantané** en stock. Un `Bon` (entrée ou sortie) porte le workflow. **Aucun mouvement n'affecte le stock tant que le bon n'est pas validé.** Le passage en **EFFECTIF** génère un `MouvementStock` 7.3 **par ligne** (`MouvementBonGenerator`), qui met à jour `StockParSite` via le mécanisme 7.3 existant (`StockBalanceService`).
+
+`MouvementStock` a reçu 5 champs **optionnels** (rétro-compatibles, nuls pour l'historique) : `origine` (`"DIRECT"` = saisie 7.3 / `"BON"` = généré par un bon), `bonId`, `bonReference` (`BE-`/`BS-…`), `categorieEntree` (`TypeEntree`), `categorieSortie` (`TypeSortie`).
+
+## Enums 7.4 (`Enum/stockv2`, valeurs EXACTES)
+
+| Enum | Valeurs |
+| --- | --- |
+| `TypeEntree` | `ACHAT_FOURNISSEUR, RETOUR_PRODUCTION, TRANSFERT_INTER_SITES, REINTEGRATION` |
+| `TypeSortie` | `DISTRIBUTION_AGENCE_SITE_CLIENT, DISTRIBUTION_CHANTIER, VENTE_PRODUIT, CONSOMMATION_INTERNE` |
+| `TypeDestinataire` | `SITE, AGENT, CLIENT` |
+| `StatutBon` | `BROUILLON, SOUMIS, VALIDE, EFFECTIF, REFUSE` |
+| `ActionWorkflow` | `CREATION, MODIFICATION, SOUMISSION, VALIDATION, REFUS, EFFECTIF` |
+| `SensBon` | `ENTREE, SORTIE` |
+| `GranularitePlafond` | `PRODUIT, CATEGORIE` |
+| `SensEcartDotation` | `SUR_CONSOMMATION, SOUS_CONSOMMATION, CONFORME` |
+| `TypeRapportConsommation` | `PAR_SITE, PAR_PRODUIT, PAR_PERIODE` |
+
+## Entités / collections 7.4
+
+| Entité (`entities/stockv2`) | Collection | Notes |
+| --- | --- | --- |
+| `BonEntree` (+ `LigneBon`, `EntreeHistorique` inline) | `stockv2_bons_entree` | `reference` `BE-AAAAMMJJ-NNN` (unique sparse) ; `siteDestinationId`/`Nom` ; `historique[]` ; `montantTotal` |
+| `BonSortie` (+ `LigneBon`, `DestinataireBon`, `EntreeHistorique` inline) | `stockv2_bons_sortie` | `reference` `BS-…` ; `siteSourceId`/`Nom` ; `destinataire` ; `motif` |
+| `Plafond` | `stockv2_plafonds` | `siteId` (indexé), `granularite`, `cibleId` (produitId si PRODUIT / categorieId si CATEGORIE), `plafondMensuel` (`long`), `actif` |
+
+`LigneBon` : le client n'envoie que `produitId` + `quantite` ; `produitCode`/`produitLibelle`/`unite`/`prixUnitaire`/`montant` sont **figés à la création/modification** (prix courant du produit, `montant = round(quantite × prixUnitaire)`). Compteurs réutilisent `CompteurStockService.genererReference("BE"|"BS")`.
+
+## Dénormalisations & règles communes
+
+- Demandeur/validateur : lus en **lecture seule** depuis `DossierEmploye` (`ReferentielEmployeStockService`). `demandeurId` optionnel → si absent, `demandeurNom` = utilisateur JWT. Validateur = utilisateur courant à la décision. « Responsable Achats » repéré par `poste`/`departement` (best-effort, cible WebSocket).
+- Destinataire (sortie) : `SITE` → `siteId` requis (site lu depuis Terrain) ; `AGENT` → `agentId` requis (DossierEmploye) ; `CLIENT` → `clientNom` requis. Nom dénormalisé.
+- `montant ligne = quantite × prixUnitaire` ; `montantTotal = Σ montants` ; FCFA en `long`.
+
+## Endpoints 7.4
+
+### Bons d'entrée — `/api/stock/bons-entree` (`BonEntreeController`)
+- `GET ?page&size&q&statut&type&siteId&dateDebut&dateFin` → `PageResponse<BonEntreeDto>` (`q` = référence/fournisseur ; `siteId` = site destination ; tri date desc).
+- `GET /{id}`.
+- `POST` (`BonEntreePayload`) → **201**, statut `BROUILLON`, `reference` attribuée, `historique[CREATION]`.
+- `PUT /{id}` → **409** si statut ≠ BROUILLON ; sinon re-dénormalise + `historique[MODIFICATION]`.
+- `DELETE /{id}` → **204** ; **409** si ≠ BROUILLON.
+- `POST /{id}/soumettre` → `BROUILLON→SOUMIS` (sinon **409**), `historique[SOUMISSION]`, WS `BON_SOUMIS`.
+- `POST /{id}/valider` (body `{}` ou `{commentaire?}`) → `SOUMIS→VALIDE→EFFECTIF` (sinon **409**) : **génère les mouvements ENTREE** créditant le site destination, `historique[VALIDATION]`+`[EFFECTIF]`, WS `BON_VALIDE` puis `BON_EFFECTIF`.
+- `POST /{id}/refuser` (body `{commentaire}` **requis** sinon **400**) → `SOUMIS→REFUSE`, `motifRefus`, `historique[REFUS]`, WS `BON_REFUSE`.
+
+### Bons de sortie — `/api/stock/bons-sortie` (`BonSortieController`)
+Mêmes routes/transitions ; `siteId` du GET = site source. `BonSortiePayload` porte `siteSourceId`, `destinataire`, `motif`. **La validation génère des mouvements SORTIE** débitant le site source et renvoie **422** si le stock est insuffisant (pré-vérification cumulée par produit AVANT toute écriture → rien n'est validé).
+
+### Workflow (Kanban unifié) — `/api/stock/workflow/bons` (`WorkflowStockController`)
+- `GET ?statut&sens&q` → `BonWorkflowDto[]` **non paginé** (entrées + sorties agrégées, tri date desc). `libelleType` = libellé du type ; `siteNom` = destination (entrée)/source (sortie) ; `destinataireNom` (sorties).
+
+### Catégorisation — `/api/stock/categorisation/stats` (`CategorisationStockController`)
+- `GET ?sens=ENTREE|SORTIE&dateDebut?&dateFin?` → `StatistiqueCategorieDto[]`. Agrège les **mouvements `origine=BON`** du sens donné, groupés par catégorie : `nombre`, `volume` (Σ quantités), `montant` (Σ valorisation au prix courant), `pourcentage` (volume/total×100). **Une entrée par code figé** (4 par sens, 0 si absent).
+
+### Plafonds de dotation — `/api/stock/plafonds` (`PlafondController`)
+- `GET ?page&size&q&siteId&granularite&actif` → `PageResponse<PlafondDto>` ; `GET /{id}` ; `POST`/`PUT /{id}` (`PlafondPayload`) ; `DELETE /{id}` → 204.
+- `GET /consommation?mois=YYYY-MM (requis)&siteId?` → `ConsommationPlafondDto[]` (jauges) : `consomme` = Σ sorties effectives du mois pour la cible (produit, ou produits de la catégorie) sur le site, `pourcentage = consomme/plafond×100`, `depassement` booléen. **Au dépassement → notification WS** (`/topic/stock-validations`).
+
+### Dotation prévue vs réelle — `/api/stock/dotation/comparatif` (`DotationController`)
+- `GET ?mois=YYYY-MM (requis)&siteId?&produitId?` → `ComparatifDotationDto`. Lignes par (site, produit) : `prevu` = plafond mensuel **PRODUIT**, `reel` = sorties effectives, `ecart = reel−prevu`, `pourcentageEcart` (0 si prevu=0), `sens` (`reel>prevu`→SUR_CONSOMMATION, `<`→SOUS_CONSOMMATION, `=`→CONFORME). Union plafonds PRODUIT + produits consommés.
+
+### Consommation — `/api/stock/consommation` (`ConsommationController`)
+- `GET /par-destinataire?siteId?&produitId?&dateDebut?&dateFin?` → `ConsommationDestinataire[]`. **Agrège les `BonSortie` EFFECTIFS** (le destinataire n'existe que sur le bon, pas sur `MouvementStock`) : totaux, `nbSorties`, `evolution[]` mensuelle, `lignes[]` par produit.
+- `GET /rapport?type=PAR_SITE|PAR_PRODUIT|PAR_PERIODE (requis)&dateDebut (requis)&dateFin (requis)&siteId?&produitId?&categorieId?` → `RapportConsommation`. Sur les **mouvements SORTIE effectifs** (directs + bons). `cle`/`libelle` selon l'axe ; `coutMoyenParMouvement = montantTotal/nbMouvementsTotal`.
+
+## WebSocket (`StockNotificationService`)
+
+`NotificationStockDto { type: BON_SOUMIS|BON_VALIDE|BON_REFUSE|BON_EFFECTIF|INFO, sens: ENTREE|SORTIE, bonId, reference, titre, message, dateEmission: ISO }` publié sur :
+- `/topic/stock-validations` (broadcast : chaque soumission + chaque décision + dépassement plafond) ;
+- `/user/queue/notifications-stock` (ciblé sur l'email du « Responsable Achats » à la soumission). Tout échec WS est loggé sans casser la transaction métier.
+
+## RBAC 7.4
+
+8 sous-flags ajoutés à `SousModules/Stock` : `categorisation, bonsEntree, bonsSortie, workflowValidation, historiqueDestinataire, plafonds, dotation, rapportsConso`. Sérialisés dans le claim JWT `modules.stock`. **Gating UI frontend uniquement — aucun enforcement backend** (cohérent avec l'archi : pas de `@PreAuthorize`, routes en `.authenticated()`).
+
+## Codes d'erreur 7.4
+
+| Situation | Exception | HTTP |
+| --- | --- | --- |
+| Stock insuffisant à la validation d'un bon de sortie | `StockOperationException` | **422** `STOCK_OPERATION_ERROR` |
+| **Transition de workflow invalide** (PUT/DELETE/soumettre/valider/refuser hors état autorisé) | `StockConflitException` | **409** `STOCK_CONFLICT` ⚠️ |
+| Commentaire de refus manquant ; payload/destinataire/site/mois invalide | `IllegalArgumentException` | 400 `VALIDATION_ERROR` |
+| Bon / produit / catégorie / employé introuvable | `ResourceNotFoundException` (produit/bon) / `IllegalArgumentException` (site/employé) | 404 / 400 |
+
+> ⚠️ **Spécificité 7.4** : une transition de bon invalide renvoie **409** (contrat frontend figé), alors que 7.3 mappe les « transitions » d'inventaire en 422. Ne pas uniformiser.
+
+## Transactionnalité 7.4 (Mongo standalone)
+
+Génération des mouvements à EFFECTIF (`MouvementBonGenerator`) : pour une sortie, **pré-vérification de toutes les lignes** (cumulées par produit) avant toute écriture. Application ligne par ligne avec **compensation manuelle** — sur échec à mi-parcours, suppression des `MouvementStock` créés puis annulation des deltas de solde, et rethrow. Les mutations du bon (statut, historique) ne sont persistées qu'**après** succès de la génération.
+
+## Tests 7.4
+
+- IT (`services/stockv2/BonWorkflowServiceIT`, Testcontainers) : cycle complet bon d'entrée (→ mouvement `origine=BON` + crédit `StockParSite`), bon de sortie (→ débit), **422** stock insuffisant sans effet, **409** transitions, **400** refus sans commentaire.
+- Slices (`controllers/stockv2`) : `BonEntreeControllerTest` (201/422/409/400), `PlafondControllerTest` (201 + consommation).

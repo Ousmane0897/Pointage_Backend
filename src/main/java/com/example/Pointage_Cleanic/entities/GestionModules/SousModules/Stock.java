@@ -19,4 +19,14 @@ public class Stock {
     private boolean synthese;
     private boolean approvisionnement;
     private boolean tableauBord;
+
+    // --- 7.4 Contrôle des mouvements (gating UI frontend) ---
+    private boolean categorisation;
+    private boolean bonsEntree;
+    private boolean bonsSortie;
+    private boolean workflowValidation;
+    private boolean historiqueDestinataire;
+    private boolean plafonds;
+    private boolean dotation;
+    private boolean rapportsConso;
 }

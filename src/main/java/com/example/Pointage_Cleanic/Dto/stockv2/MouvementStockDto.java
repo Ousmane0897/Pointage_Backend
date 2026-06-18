@@ -1,7 +1,9 @@
 package com.example.Pointage_Cleanic.Dto.stockv2;
 
 import com.example.Pointage_Cleanic.Enum.stockv2.MotifMouvement;
+import com.example.Pointage_Cleanic.Enum.stockv2.TypeEntree;
 import com.example.Pointage_Cleanic.Enum.stockv2.TypeMouvement;
+import com.example.Pointage_Cleanic.Enum.stockv2.TypeSortie;
 import com.example.Pointage_Cleanic.Enum.stockv2.UniteStock;
 import com.fasterxml.jackson.annotation.JsonFormat;
 import com.fasterxml.jackson.annotation.JsonInclude;
@@ -42,4 +44,11 @@ public class MouvementStockDto {
     private String utilisateur;
     private String commentaire;
     private LocalDateTime createdAt;
+
+    // --- 7.4 : traçabilité du bon source (null pour les mouvements directs) ---
+    private String origine;
+    private String bonId;
+    private String bonReference;
+    private TypeEntree categorieEntree;
+    private TypeSortie categorieSortie;
 }
