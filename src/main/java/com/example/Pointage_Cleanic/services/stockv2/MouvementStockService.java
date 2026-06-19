@@ -146,6 +146,9 @@ public class MouvementStockService {
                 .utilisateur(currentUser.currentUserNom())
                 .commentaire(payload.getCommentaire())
                 .origine("DIRECT")
+                // 7.6 : snapshot au coût courant ; une entrée directe (sans prix d'achat) ne recalcule pas le coût.
+                .coutUnitaireSnapshot(produit.getPrixUnitaire())
+                .valeurMouvement(Math.round(payload.getQuantite() * produit.getPrixUnitaire()))
                 .createdAt(LocalDateTime.now())
                 .build();
         return mapper.toDto(repository.save(mvt));

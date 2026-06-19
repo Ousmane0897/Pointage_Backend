@@ -43,14 +43,16 @@ public class BonSupportService {
             }
             ProduitStock produit = produitRepository.findById(p.getProduitId())
                     .orElseThrow(() -> new ResourceNotFoundException("Produit introuvable : " + p.getProduitId()));
-            long montant = Math.round(p.getQuantite() * produit.getPrixUnitaire());
+            // 7.6 : prix d'achat fourni (entrée) prioritaire, sinon coût courant du produit (7.4/7.5).
+            long prixUnitaire = p.getPrixUnitaire() != null ? p.getPrixUnitaire() : produit.getPrixUnitaire();
+            long montant = Math.round(p.getQuantite() * prixUnitaire);
             lignes.add(LigneBon.builder()
                     .produitId(produit.getId())
                     .quantite(p.getQuantite())
                     .produitCode(produit.getCode())
                     .produitLibelle(produit.getLibelle())
                     .unite(produit.getUnite())
-                    .prixUnitaire(produit.getPrixUnitaire())
+                    .prixUnitaire(prixUnitaire)
                     .montant(montant)
                     .build());
         }

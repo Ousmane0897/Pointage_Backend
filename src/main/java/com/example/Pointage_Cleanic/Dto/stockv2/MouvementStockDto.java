@@ -58,4 +58,8 @@ public class MouvementStockDto {
     private String beneficiaireDon;
     private String chantierId;
     private String chantierReference;
+
+    // --- 7.6 : traçabilité financière (null pour les mouvements antérieurs à 7.6) ---
+    private Long coutUnitaireSnapshot;
+    private Long valeurMouvement;
 }

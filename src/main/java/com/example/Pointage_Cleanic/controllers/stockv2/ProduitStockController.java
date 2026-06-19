@@ -1,5 +1,7 @@
 package com.example.Pointage_Cleanic.controllers.stockv2;
 
+import com.example.Pointage_Cleanic.Dto.stockv2.MethodeValorisationPayload;
+import com.example.Pointage_Cleanic.Dto.stockv2.PrixVentePayload;
 import com.example.Pointage_Cleanic.Dto.stockv2.ProduitBulkRequest;
 import com.example.Pointage_Cleanic.Dto.stockv2.ProduitBulkResponse;
 import com.example.Pointage_Cleanic.Dto.stockv2.ProduitDto;
@@ -16,6 +18,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -87,6 +90,20 @@ public class ProduitStockController {
     public ResponseEntity<Void> delete(@PathVariable String id) {
         service.delete(id);
         return ResponseEntity.noContent().build();
+    }
+
+    // --- 7.6 Valorisation : écriture des champs financiers (hors formulaire multipart 7.3) ---
+
+    @PatchMapping("/{id}/valorisation")
+    public ResponseEntity<ProduitDto> definirMethodeValorisation(
+            @PathVariable String id, @RequestBody MethodeValorisationPayload payload) {
+        return ResponseEntity.ok(service.definirMethodeValorisation(id, payload.getMethodeValorisation()));
+    }
+
+    @PatchMapping("/{id}/prix-vente")
+    public ResponseEntity<ProduitDto> definirPrixVente(
+            @PathVariable String id, @RequestBody PrixVentePayload payload) {
+        return ResponseEntity.ok(service.definirPrixVente(id, payload.getPrixVente()));
     }
 
     @GetMapping("/{id}/photo")

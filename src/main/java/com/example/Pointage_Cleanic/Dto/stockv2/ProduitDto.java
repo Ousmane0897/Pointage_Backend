@@ -31,6 +31,10 @@ public class ProduitDto {
     private double seuilAlerte;
     private long prixUnitaire;
 
+    // --- 7.6 Valorisation (lecture seule via ce DTO ; écriture par les PATCH dédiés) ---
+    private com.example.Pointage_Cleanic.Enum.stockv2.MethodeValorisation methodeValorisation;
+    private Long prixVente;
+
     private String photoUrl;
     private String photoNom;
     private String ficheTechniqueUrl;

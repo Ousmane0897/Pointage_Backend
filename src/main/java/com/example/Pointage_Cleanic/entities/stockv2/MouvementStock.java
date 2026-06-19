@@ -79,4 +79,13 @@ public class MouvementStock {
     @Indexed
     private String chantierId;
     private String chantierReference;
+
+    // --- 7.6 : traçabilité financière (champs optionnels, rétro-compatibles) ---
+    /**
+     * Coût unitaire en FCFA gelé au moment du mouvement. Null pour les mouvements antérieurs à 7.6
+     * (les vues financières reconstituent alors le coût courant et marquent la ligne estimée).
+     */
+    private Long coutUnitaireSnapshot;
+    /** Valeur du mouvement en FCFA = quantité × coutUnitaireSnapshot. Null pour les mouvements pré-7.6. */
+    private Long valeurMouvement;
 }

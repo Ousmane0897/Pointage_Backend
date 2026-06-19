@@ -44,8 +44,25 @@ public class ProduitStock {
     /** Seuil d'alerte global du produit (peut être surchargé par site dans StockParSite). */
     private double seuilAlerte;
 
-    /** Prix unitaire en FCFA (entier). */
+    /**
+     * Prix unitaire en FCFA (entier). Sémantique 7.6 : « coût unitaire courant » du produit.
+     * Statique si {@code methodeValorisation = FIXE} (saisi manuellement), recalculé automatiquement
+     * par le serveur à chaque entrée si CUMP / DERNIER_PRIX.
+     */
     private long prixUnitaire;
+
+    // --- 7.6 Valorisation financière (champs optionnels, rétro-compatibles) ---
+    /**
+     * Override de la méthode de valorisation pour ce produit. {@code null} = hérite de la méthode
+     * globale ({@code ParametrageValorisation.methodeDefaut}), à défaut {@code FIXE}.
+     * Non éditable via le formulaire produit 7.3 : seul l'endpoint PATCH dédié l'écrit.
+     */
+    private com.example.Pointage_Cleanic.Enum.stockv2.MethodeValorisation methodeValorisation;
+    /**
+     * Prix de vente unitaire en FCFA (entier), pour le calcul des marges. {@code null} si non défini.
+     * Non éditable via le formulaire produit 7.3 : seul l'endpoint PATCH dédié l'écrit.
+     */
+    private Long prixVente;
 
     @JsonIgnore
     private byte[] photo;

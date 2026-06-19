@@ -162,6 +162,30 @@ public class ProduitStockService {
         repository.delete(entity);
     }
 
+    // ---------------------------------------------------------------- 7.6 Valorisation (PATCH dédiés)
+
+    /** Écrit l'override de méthode de valorisation du produit (hors formulaire 7.3). */
+    public ProduitDto definirMethodeValorisation(String id,
+            com.example.Pointage_Cleanic.Enum.stockv2.MethodeValorisation methode) {
+        ProduitStock entity = loadOrThrow(id);
+        entity.setMethodeValorisation(methode);
+        entity.setUpdatedAt(LocalDateTime.now());
+        repository.save(entity);
+        return getById(id);
+    }
+
+    /** Écrit le prix de vente unitaire du produit (FCFA, hors formulaire 7.3). */
+    public ProduitDto definirPrixVente(String id, Long prixVente) {
+        if (prixVente != null && prixVente < 0) {
+            throw new IllegalArgumentException("Le prix de vente ne peut pas être négatif");
+        }
+        ProduitStock entity = loadOrThrow(id);
+        entity.setPrixVente(prixVente);
+        entity.setUpdatedAt(LocalDateTime.now());
+        repository.save(entity);
+        return getById(id);
+    }
+
     public ProduitStock getPhoto(String id) {
         ProduitStock p = loadOrThrow(id);
         if (p.getPhoto() == null) {

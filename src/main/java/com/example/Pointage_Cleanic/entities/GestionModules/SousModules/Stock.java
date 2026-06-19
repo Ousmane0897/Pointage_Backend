@@ -36,4 +36,13 @@ public class Stock {
     private boolean dons;
     private boolean comparatif;
     private boolean filtresCroises;
+
+    // --- 7.6 Valorisation financière (gating UI frontend) ---
+    private boolean coutUnitaire;
+    private boolean coutMouvements;
+    private boolean valeurStock;
+    private boolean coutSite;
+    private boolean coutChantier;
+    private boolean marges;
+    private boolean tableauBordFinancier;
 }
