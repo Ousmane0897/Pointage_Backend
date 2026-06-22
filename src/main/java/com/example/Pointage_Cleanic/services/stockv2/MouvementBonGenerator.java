@@ -8,6 +8,7 @@ import com.example.Pointage_Cleanic.entities.stockv2.MouvementStock;
 import com.example.Pointage_Cleanic.entities.stockv2.ProduitStock;
 import com.example.Pointage_Cleanic.repositories.stockv2.MouvementStockRepository;
 import com.example.Pointage_Cleanic.repositories.stockv2.ProduitStockRepository;
+import com.example.Pointage_Cleanic.services.stockv2.StockBalanceService.RepartitionDebit;
 import com.example.Pointage_Cleanic.services.stockv2.ValorisationSupport.RecalcResult;
 import com.example.Pointage_Cleanic.services.terrain.CurrentUserProvider;
 import lombok.RequiredArgsConstructor;
@@ -93,49 +94,41 @@ public class MouvementBonGenerator {
             cumulParProduit.merge(ligne.getProduitId(), ligne.getQuantite(), Double::sum);
         }
         cumulParProduit.forEach((produitId, total) ->
-                balanceService.verifierDisponibilite(produitId, bon.getSiteSourceId(), total, bon.getSiteSourceNom()));
+                balanceService.verifierDisponibiliteAvecConsolide(produitId, bon.getSiteSourceId(), total, bon.getSiteSourceNom()));
 
-        appliquer(bon.getLignes(), (ligne) -> {
-            balanceService.appliquerDelta(ligne.getProduitId(), bon.getSiteSourceId(), -ligne.getQuantite());
-            MouvementStock mvt = baseMouvement(bon.getReference(), bon.getId(), bon.getDate(), ligne);
-            mvt.setType(TypeMouvement.SORTIE);
-            mvt.setMotif(StockLibelles.motif(bon.getType()));
-            mvt.setCategorieSortie(bon.getType());
-            mvt.setSiteSourceId(bon.getSiteSourceId());
-            mvt.setSiteSourceNom(bon.getSiteSourceNom());
-            // 7.5 : traçabilité analytique recopiée depuis le bon (don / chantier).
-            mvt.setNatureDon(bon.getNatureDon());
-            mvt.setBeneficiaireDon(bon.getBeneficiaireDon());
-            mvt.setChantierId(bon.getChantierId());
-            mvt.setChantierReference(bon.getChantierReference());
-            // 7.6 : snapshot = prix figé de la ligne (prix courant à la saisie).
-            appliquerSnapshot(mvt, ligne.getPrixUnitaire());
-            return mvt;
-        }, (ligne) -> balanceService.appliquerDelta(ligne.getProduitId(), bon.getSiteSourceId(), ligne.getQuantite()));
-    }
-
-    private interface LigneToMouvement {
-        MouvementStock apply(LigneBon ligne);
-    }
-
-    private interface LigneCompensation {
-        void apply(LigneBon ligne);
-    }
-
-    private void appliquer(List<LigneBon> lignes, LigneToMouvement builder, LigneCompensation inverse) {
+        // Débit en repli (site source d'abord, puis consolidé null) avec compensation manuelle all-or-nothing.
         List<MouvementStock> sauvegardes = new ArrayList<>();
-        List<LigneBon> deltasAppliques = new ArrayList<>();
+        List<LigneBon> lignesDebitees = new ArrayList<>();
+        List<RepartitionDebit> repartitions = new ArrayList<>();
         try {
-            for (LigneBon ligne : lignes) {
-                MouvementStock mvt = builder.apply(ligne);
-                deltasAppliques.add(ligne);
+            for (LigneBon ligne : bon.getLignes()) {
+                RepartitionDebit repartition =
+                        balanceService.debiterAvecRepli(ligne.getProduitId(), bon.getSiteSourceId(), ligne.getQuantite());
+                lignesDebitees.add(ligne);
+                repartitions.add(repartition);
+
+                MouvementStock mvt = baseMouvement(bon.getReference(), bon.getId(), bon.getDate(), ligne);
+                mvt.setType(TypeMouvement.SORTIE);
+                mvt.setMotif(StockLibelles.motif(bon.getType()));
+                mvt.setCategorieSortie(bon.getType());
+                mvt.setSiteSourceId(bon.getSiteSourceId());
+                mvt.setSiteSourceNom(bon.getSiteSourceNom());
+                // 7.5 : traçabilité analytique recopiée depuis le bon (don / chantier).
+                mvt.setNatureDon(bon.getNatureDon());
+                mvt.setBeneficiaireDon(bon.getBeneficiaireDon());
+                mvt.setChantierId(bon.getChantierId());
+                mvt.setChantierReference(bon.getChantierReference());
+                // 7.6 : snapshot = prix figé de la ligne (prix courant à la saisie).
+                appliquerSnapshot(mvt, ligne.getPrixUnitaire());
+
                 sauvegardes.add(mouvementRepository.save(mvt));
             }
         } catch (RuntimeException ex) {
-            // Compensation : supprimer les mouvements créés puis annuler les deltas de solde.
+            // Compensation : supprimer les mouvements créés puis annuler chaque débit en repli (ordre inverse).
             sauvegardes.forEach(m -> mouvementRepository.deleteById(m.getId()));
-            Collections.reverse(deltasAppliques);
-            deltasAppliques.forEach(inverse::apply);
+            for (int i = lignesDebitees.size() - 1; i >= 0; i--) {
+                balanceService.recrediterRepli(lignesDebitees.get(i).getProduitId(), bon.getSiteSourceId(), repartitions.get(i));
+            }
             throw ex;
         }
     }

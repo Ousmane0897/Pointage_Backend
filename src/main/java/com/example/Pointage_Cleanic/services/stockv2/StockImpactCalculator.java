@@ -13,24 +13,12 @@ public final class StockImpactCalculator {
 
     /**
      * Delta signé (positif = entrée, négatif = sortie) du mouvement vu d'un site.
-     * Si {@code siteId} est null, on raisonne en consolidé : un TRANSFERT (interne) est neutre.
+     * Si {@code siteId} est null, on raisonne en consolidé (« tous sites »).
      */
     public static double signedDelta(MouvementStock m, String siteId) {
         return switch (m.getType()) {
             case ENTREE -> (siteId == null || siteId.equals(m.getSiteDestinationId())) ? m.getQuantite() : 0.0;
             case SORTIE -> (siteId == null || siteId.equals(m.getSiteSourceId())) ? -m.getQuantite() : 0.0;
-            case TRANSFERT -> {
-                if (siteId == null) {
-                    yield 0.0;
-                }
-                if (siteId.equals(m.getSiteDestinationId())) {
-                    yield m.getQuantite();
-                }
-                if (siteId.equals(m.getSiteSourceId())) {
-                    yield -m.getQuantite();
-                }
-                yield 0.0;
-            }
         };
     }
 

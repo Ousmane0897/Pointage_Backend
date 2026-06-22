@@ -39,7 +39,7 @@ class MouvementStockControllerTest {
                 .build());
 
         String body = """
-                { "produitId": "p1", "type": "ENTREE", "motif": "ACHAT", "quantite": 10, "siteDestinationId": "siteA" }
+                { "produitId": "p1", "type": "ENTREE", "motif": "ACHAT", "quantite": 10 }
                 """;
 
         mockMvc.perform(post("/api/stock/mouvements")

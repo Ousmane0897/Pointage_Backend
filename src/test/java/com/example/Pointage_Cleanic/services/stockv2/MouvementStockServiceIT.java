@@ -10,7 +10,6 @@ import com.example.Pointage_Cleanic.config.MongoTestContainer;
 import com.example.Pointage_Cleanic.entities.stockv2.MouvementStock;
 import com.example.Pointage_Cleanic.entities.stockv2.ProduitStock;
 import com.example.Pointage_Cleanic.entities.stockv2.StockParSite;
-import com.example.Pointage_Cleanic.entities.terrain.SiteClient;
 import com.example.Pointage_Cleanic.exception.StockOperationException;
 import com.example.Pointage_Cleanic.repositories.stockv2.ProduitStockRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -36,74 +35,68 @@ class MouvementStockServiceIT extends MongoTestContainer {
     @Autowired private MongoTemplate mongoTemplate;
 
     private String produitId;
-    private static final String SITE_A = "siteA";
-    private static final String SITE_B = "siteB";
 
     @BeforeEach
     void setup() {
         mongoTemplate.remove(new Query(), MouvementStock.class);
         mongoTemplate.remove(new Query(), StockParSite.class);
         mongoTemplate.remove(new Query(), ProduitStock.class);
-        mongoTemplate.remove(new Query(), SiteClient.class);
-
-        mongoTemplate.save(SiteClient.builder().id(SITE_A).code("A").nom("Dakar Plateau").ville("Dakar").actif(true).build());
-        mongoTemplate.save(SiteClient.builder().id(SITE_B).code("B").nom("Thiès Centre").ville("Thiès").actif(true).build());
 
         produitId = produitRepository.save(ProduitStock.builder()
                 .code("P1").libelle("Savon").typeProduit(TypeProduit.CONSOMMABLE)
                 .unite(UniteStock.PIECE).seuilAlerte(5).prixUnitaire(1000L).actif(true).build()).getId();
     }
 
-    private MouvementPayload payload(TypeMouvement type, MotifMouvement motif, double qte, String source, String dest) {
+    // Les saisies directes sont consolidées (aucun site dans le payload) : impact sur le bucket siteId=null.
+    private MouvementPayload payload(TypeMouvement type, MotifMouvement motif, double qte) {
         return MouvementPayload.builder()
-                .produitId(produitId).type(type).motif(motif).quantite(qte)
-                .siteSourceId(source).siteDestinationId(dest).build();
+                .produitId(produitId).type(type).motif(motif).quantite(qte).build();
     }
 
     @Test
-    void entree_credite_le_site_destination_et_denormalise() {
-        MouvementStockDto dto = service.create(payload(TypeMouvement.ENTREE, MotifMouvement.ACHAT, 20, null, SITE_A));
+    void entree_credite_le_stock_consolide_et_denormalise() {
+        MouvementStockDto dto = service.create(payload(TypeMouvement.ENTREE, MotifMouvement.ACHAT, 20));
 
         assertThat(dto.getReference()).startsWith("MVT-");
-        assertThat(dto.getSiteDestinationNom()).isEqualTo("Dakar Plateau");
         assertThat(dto.getProduitCode()).isEqualTo("P1");
-        assertThat(balanceService.quantite(produitId, SITE_A)).isEqualTo(20.0);
-    }
-
-    @Test
-    void sortie_stock_insuffisant_rejetee_422() {
-        assertThatThrownBy(() -> service.create(payload(TypeMouvement.SORTIE, MotifMouvement.CONSOMMATION, 5, SITE_A, null)))
-                .isInstanceOf(StockOperationException.class);
-        // aucun mouvement ni solde négatif
-        assertThat(balanceService.quantite(produitId, SITE_A)).isZero();
-    }
-
-    @Test
-    void sortie_valide_debite_le_site_source() {
-        service.create(payload(TypeMouvement.ENTREE, MotifMouvement.ACHAT, 20, null, SITE_A));
-        service.create(payload(TypeMouvement.SORTIE, MotifMouvement.CONSOMMATION, 8, SITE_A, null));
-        assertThat(balanceService.quantite(produitId, SITE_A)).isEqualTo(12.0);
-    }
-
-    @Test
-    void transfert_deplace_entre_sites_solde_total_conserve() {
-        service.create(payload(TypeMouvement.ENTREE, MotifMouvement.ACHAT, 20, null, SITE_A));
-        service.create(payload(TypeMouvement.TRANSFERT, MotifMouvement.TRANSFERT, 5, SITE_A, SITE_B));
-
-        assertThat(balanceService.quantite(produitId, SITE_A)).isEqualTo(15.0);
-        assertThat(balanceService.quantite(produitId, SITE_B)).isEqualTo(5.0);
+        assertThat(balanceService.quantite(produitId, null)).isEqualTo(20.0);
         assertThat(balanceService.quantiteTotale(produitId)).isEqualTo(20.0);
     }
 
     @Test
-    void entree_sans_destination_invalide() {
-        assertThatThrownBy(() -> service.create(payload(TypeMouvement.ENTREE, MotifMouvement.ACHAT, 5, null, null)))
-                .isInstanceOf(IllegalArgumentException.class);
+    void sortie_stock_insuffisant_rejetee_422() {
+        assertThatThrownBy(() -> service.create(payload(TypeMouvement.SORTIE, MotifMouvement.CONSOMMATION, 5)))
+                .isInstanceOf(StockOperationException.class);
+        // aucun mouvement ni solde négatif
+        assertThat(balanceService.quantite(produitId, null)).isZero();
     }
 
     @Test
-    void transfert_meme_site_invalide() {
-        assertThatThrownBy(() -> service.create(payload(TypeMouvement.TRANSFERT, MotifMouvement.TRANSFERT, 5, SITE_A, SITE_A)))
+    void sortie_valide_debite_le_stock() {
+        service.create(payload(TypeMouvement.ENTREE, MotifMouvement.ACHAT, 20));
+        service.create(payload(TypeMouvement.SORTIE, MotifMouvement.CONSOMMATION, 8));
+        assertThat(balanceService.quantite(produitId, null)).isEqualTo(12.0);
+    }
+
+    @Test
+    void ajustement_valide_en_entree_comme_en_sortie() {
+        service.create(payload(TypeMouvement.ENTREE, MotifMouvement.AJUSTEMENT, 10));
+        service.create(payload(TypeMouvement.SORTIE, MotifMouvement.AJUSTEMENT, 3));
+        assertThat(balanceService.quantite(produitId, null)).isEqualTo(7.0);
+    }
+
+    @Test
+    void combinaison_entree_motif_invalide_rejetee() {
+        // VENTE n'est pas un motif d'ENTREE valide.
+        assertThatThrownBy(() -> service.create(payload(TypeMouvement.ENTREE, MotifMouvement.VENTE, 5)))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThat(balanceService.quantiteTotale(produitId)).isZero();
+    }
+
+    @Test
+    void combinaison_sortie_motif_invalide_rejetee() {
+        // ACHAT n'est pas un motif de SORTIE valide.
+        assertThatThrownBy(() -> service.create(payload(TypeMouvement.SORTIE, MotifMouvement.ACHAT, 5)))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 }

@@ -21,8 +21,6 @@ public class MouvementPayload {
     private TypeMouvement type;
     private MotifMouvement motif;
     private double quantite;
-    private String siteSourceId;
-    private String siteDestinationId;
 
     @JsonFormat(pattern = "yyyy-MM-dd")
     private LocalDate date;

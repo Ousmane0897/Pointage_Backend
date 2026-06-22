@@ -5,7 +5,6 @@ public enum MotifMouvement {
     PRODUCTION,
     CONSOMMATION,
     VENTE,
-    TRANSFERT,
     AJUSTEMENT,
     RETOUR,
     PERTE

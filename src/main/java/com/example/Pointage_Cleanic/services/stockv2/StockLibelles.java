@@ -17,7 +17,6 @@ public final class StockLibelles {
         return switch (type) {
             case ACHAT_FOURNISSEUR -> "Achat fournisseur";
             case RETOUR_PRODUCTION -> "Retour production";
-            case TRANSFERT_INTER_SITES -> "Transfert inter-sites";
             case REINTEGRATION -> "Réintégration";
         };
     }
@@ -40,7 +39,6 @@ public final class StockLibelles {
         return switch (type) {
             case ACHAT_FOURNISSEUR -> MotifMouvement.ACHAT;
             case RETOUR_PRODUCTION -> MotifMouvement.PRODUCTION;
-            case TRANSFERT_INTER_SITES -> MotifMouvement.TRANSFERT;
             case REINTEGRATION -> MotifMouvement.RETOUR;
         };
     }

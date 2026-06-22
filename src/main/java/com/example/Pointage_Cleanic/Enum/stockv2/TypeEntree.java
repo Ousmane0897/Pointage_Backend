@@ -4,6 +4,5 @@ package com.example.Pointage_Cleanic.Enum.stockv2;
 public enum TypeEntree {
     ACHAT_FOURNISSEUR,
     RETOUR_PRODUCTION,
-    TRANSFERT_INTER_SITES,
     REINTEGRATION
 }

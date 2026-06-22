@@ -1,11 +1,8 @@
 package com.example.Pointage_Cleanic.services.stockv2;
 
 import com.example.Pointage_Cleanic.Dto.stockv2.EtatStockDto;
-import com.example.Pointage_Cleanic.Dto.stockv2.MouvementPayload;
 import com.example.Pointage_Cleanic.Dto.stockv2.SeuilPayload;
-import com.example.Pointage_Cleanic.Enum.stockv2.MotifMouvement;
 import com.example.Pointage_Cleanic.Enum.stockv2.StatutStock;
-import com.example.Pointage_Cleanic.Enum.stockv2.TypeMouvement;
 import com.example.Pointage_Cleanic.Enum.stockv2.TypeProduit;
 import com.example.Pointage_Cleanic.Enum.stockv2.UniteStock;
 import com.example.Pointage_Cleanic.config.MongoTestContainer;
@@ -32,7 +29,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class EtatStockServiceIT extends MongoTestContainer {
 
     @Autowired private EtatStockService etatService;
-    @Autowired private MouvementStockService mouvementService;
+    @Autowired private StockBalanceService balanceService;
     @Autowired private ProduitStockRepository produitRepository;
     @Autowired private MongoTemplate mongoTemplate;
 
@@ -107,9 +104,8 @@ class EtatStockServiceIT extends MongoTestContainer {
         assertThat(recalc.getStatut()).isEqualTo(StatutStock.CRITIQUE);
     }
 
+    // Les saisies directes étant consolidées, on alimente directement le solde de SITE_A pour tester l'état par site.
     private void entrer(double qte) {
-        mouvementService.create(MouvementPayload.builder()
-                .produitId(produitId).type(TypeMouvement.ENTREE).motif(MotifMouvement.ACHAT)
-                .quantite(qte).siteDestinationId(SITE_A).build());
+        balanceService.appliquerDelta(produitId, SITE_A, qte);
     }
 }

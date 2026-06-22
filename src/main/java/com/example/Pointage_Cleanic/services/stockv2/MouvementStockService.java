@@ -34,7 +34,6 @@ public class MouvementStockService {
     private final MouvementStockMapper mapper;
     private final ProduitStockRepository produitRepository;
     private final StockBalanceService balanceService;
-    private final ReferentielSiteService referentielSite;
     private final CompteurStockService compteurService;
     private final CurrentUserProvider currentUser;
     private final MongoTemplate mongoTemplate;
@@ -96,37 +95,21 @@ public class MouvementStockService {
         if (payload.getQuantite() <= 0) {
             throw new IllegalArgumentException("La quantité doit être strictement positive");
         }
+        validerCombinaison(payload.getType(), payload.getMotif());
         ProduitStock produit = produitRepository.findById(payload.getProduitId())
                 .orElseThrow(() -> new ResourceNotFoundException("Produit introuvable : " + payload.getProduitId()));
 
-        String siteSourceId = blankToNull(payload.getSiteSourceId());
-        String siteDestinationId = blankToNull(payload.getSiteDestinationId());
-        validerSites(payload.getType(), siteSourceId, siteDestinationId);
-
-        // Vérification de faisabilité AVANT toute écriture
-        String nomSource = referentielSite.nomDuSite(siteSourceId);
-        String nomDestination = referentielSite.nomDuSite(siteDestinationId);
-        if (payload.getType() == TypeMouvement.SORTIE || payload.getType() == TypeMouvement.TRANSFERT) {
-            balanceService.verifierDisponibilite(produit.getId(), siteSourceId, payload.getQuantite(), nomSource);
+        // Saisie directe : pas de site (stock consolidé « tous sites », bucket siteId=null).
+        // Vérification de faisabilité AVANT toute écriture (SORTIE uniquement).
+        if (payload.getType() == TypeMouvement.SORTIE) {
+            balanceService.verifierDisponibiliteAvecConsolide(produit.getId(), null, payload.getQuantite(), null);
         }
 
-        // Application de l'impact avec compensation manuelle
-        boolean sourceDebite = false;
-        try {
-            switch (payload.getType()) {
-                case ENTREE -> balanceService.appliquerDelta(produit.getId(), siteDestinationId, payload.getQuantite());
-                case SORTIE -> balanceService.appliquerDelta(produit.getId(), siteSourceId, -payload.getQuantite());
-                case TRANSFERT -> {
-                    balanceService.appliquerDelta(produit.getId(), siteSourceId, -payload.getQuantite());
-                    sourceDebite = true;
-                    balanceService.appliquerDelta(produit.getId(), siteDestinationId, payload.getQuantite());
-                }
-            }
-        } catch (RuntimeException ex) {
-            if (sourceDebite) {
-                balanceService.appliquerDelta(produit.getId(), siteSourceId, payload.getQuantite());
-            }
-            throw ex;
+        // Application de l'impact sur le bucket consolidé (siteId=null) : un seul bucket touché,
+        // pas de compensation multi-document nécessaire.
+        switch (payload.getType()) {
+            case ENTREE -> balanceService.appliquerDelta(produit.getId(), null, payload.getQuantite());
+            case SORTIE -> balanceService.debiterAvecRepli(produit.getId(), null, payload.getQuantite());
         }
 
         MouvementStock mvt = MouvementStock.builder()
@@ -138,10 +121,6 @@ public class MouvementStockService {
                 .type(payload.getType())
                 .motif(payload.getMotif())
                 .quantite(payload.getQuantite())
-                .siteSourceId(siteSourceId)
-                .siteSourceNom(nomSource)
-                .siteDestinationId(siteDestinationId)
-                .siteDestinationNom(nomDestination)
                 .date(payload.getDate() != null ? payload.getDate() : LocalDate.now())
                 .utilisateur(currentUser.currentUserNom())
                 .commentaire(payload.getCommentaire())
@@ -159,30 +138,19 @@ public class MouvementStockService {
                 .orElseThrow(() -> new ResourceNotFoundException("Mouvement introuvable : " + id));
     }
 
-    private void validerSites(TypeMouvement type, String source, String destination) {
-        switch (type) {
-            case ENTREE -> {
-                if (destination == null) {
-                    throw new IllegalArgumentException("ENTREE : le site de destination est obligatoire");
-                }
-            }
-            case SORTIE -> {
-                if (source == null) {
-                    throw new IllegalArgumentException("SORTIE : le site source est obligatoire");
-                }
-            }
-            case TRANSFERT -> {
-                if (source == null || destination == null) {
-                    throw new IllegalArgumentException("TRANSFERT : les sites source et destination sont obligatoires");
-                }
-                if (source.equals(destination)) {
-                    throw new IllegalArgumentException("TRANSFERT : les sites source et destination doivent être différents");
-                }
-            }
+    /**
+     * Combinaisons type/motif autorisées pour une saisie directe :
+     * ENTREE → ACHAT | PRODUCTION | RETOUR | AJUSTEMENT ; SORTIE → CONSOMMATION | VENTE | PERTE | AJUSTEMENT.
+     */
+    private void validerCombinaison(TypeMouvement type, MotifMouvement motif) {
+        boolean valide = switch (type) {
+            case ENTREE -> motif == MotifMouvement.ACHAT || motif == MotifMouvement.PRODUCTION
+                    || motif == MotifMouvement.RETOUR || motif == MotifMouvement.AJUSTEMENT;
+            case SORTIE -> motif == MotifMouvement.CONSOMMATION || motif == MotifMouvement.VENTE
+                    || motif == MotifMouvement.PERTE || motif == MotifMouvement.AJUSTEMENT;
+        };
+        if (!valide) {
+            throw new IllegalArgumentException("Motif " + motif + " invalide pour un mouvement " + type);
         }
-    }
-
-    private String blankToNull(String s) {
-        return (s == null || s.isBlank()) ? null : s;
     }
 }

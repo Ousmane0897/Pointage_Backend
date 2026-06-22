@@ -3,11 +3,8 @@ package com.example.Pointage_Cleanic.services.stockv2;
 import com.example.Pointage_Cleanic.Dto.stockv2.ComptagePayload;
 import com.example.Pointage_Cleanic.Dto.stockv2.InventaireDto;
 import com.example.Pointage_Cleanic.Dto.stockv2.InventairePlanifPayload;
-import com.example.Pointage_Cleanic.Dto.stockv2.MouvementPayload;
-import com.example.Pointage_Cleanic.Enum.stockv2.MotifMouvement;
 import com.example.Pointage_Cleanic.Enum.stockv2.PerimetreInventaire;
 import com.example.Pointage_Cleanic.Enum.stockv2.StatutInventaire;
-import com.example.Pointage_Cleanic.Enum.stockv2.TypeMouvement;
 import com.example.Pointage_Cleanic.Enum.stockv2.TypeProduit;
 import com.example.Pointage_Cleanic.Enum.stockv2.UniteStock;
 import com.example.Pointage_Cleanic.config.MongoTestContainer;
@@ -41,7 +38,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class InventaireWorkflowServiceIT extends MongoTestContainer {
 
     @Autowired private InventaireService inventaireService;
-    @Autowired private MouvementStockService mouvementService;
     @Autowired private StockBalanceService balanceService;
     @Autowired private ProduitStockRepository produitRepository;
     @Autowired private MouvementStockRepository mouvementRepository;
@@ -61,10 +57,8 @@ class InventaireWorkflowServiceIT extends MongoTestContainer {
         produitId = produitRepository.save(ProduitStock.builder()
                 .code("P1").libelle("Savon").typeProduit(TypeProduit.CONSOMMABLE)
                 .unite(UniteStock.PIECE).seuilAlerte(5).prixUnitaire(1000L).actif(true).build()).getId();
-        // stock système = 20 sur SITE_A
-        mouvementService.create(MouvementPayload.builder()
-                .produitId(produitId).type(TypeMouvement.ENTREE).motif(MotifMouvement.ACHAT)
-                .quantite(20).siteDestinationId(SITE_A).build());
+        // stock système = 20 sur SITE_A (les saisies directes étant consolidées, on alimente le solde du site directement)
+        balanceService.appliquerDelta(produitId, SITE_A, 20);
     }
 
     private InventaireDto creerInventaire() {
