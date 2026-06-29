@@ -2,14 +2,15 @@ package com.example.Pointage_Cleanic.services;
 
 import com.example.Pointage_Cleanic.entities.Pointage;
 import com.example.Pointage_Cleanic.entities.rh.DossierEmploye;
+import com.example.Pointage_Cleanic.exception.ResourceNotFoundException;
 import com.example.Pointage_Cleanic.repositories.PointageRepository;
 import com.example.Pointage_Cleanic.repositories.rh.DossierEmployeRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.*;
+import org.springframework.data.mongodb.core.FindAndModifyOptions;
 import org.springframework.data.mongodb.core.MongoTemplate;
 
-import java.time.LocalDate;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -79,9 +80,10 @@ class PointageServicesTest {
 
         when(dossierEmployeRepository.findByAgentId("1234"))
                 .thenReturn(Optional.of(agent("1234", "Ouakam / zone A")));
-        when(pointageRepository.findFirstByCodeSecretAndDateAndHeureDepartIsNullOrderByTimestampDesc(
-                eq("1234"), any(LocalDate.class)))
-                .thenReturn(Optional.empty());
+        // Aucun pointage ouvert : la clôture atomique ne matche rien → arrivée.
+        when(mongoTemplate.findAndModify(any(), any(),
+                any(FindAndModifyOptions.class), eq(Pointage.class)))
+                .thenReturn(null);
         when(pointageRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         Pointage result = service.enregistrerPointage("1234", "DEV-1", 14.717, -17.467);
@@ -102,14 +104,15 @@ class PointageServicesTest {
     void should_update_existing_pointage() {
 
         Pointage existing = new Pointage();
+        existing.setId("p-open");
         existing.setHeureArrive("08:00");
 
         when(dossierEmployeRepository.findByAgentId("1234"))
                 .thenReturn(Optional.of(agent("1234", "Dakar")));
-        when(pointageRepository.findFirstByCodeSecretAndDateAndHeureDepartIsNullOrderByTimestampDesc(
-                eq("1234"), any(LocalDate.class)))
-                .thenReturn(Optional.of(existing));
-        when(pointageRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        // Clôture atomique : findAndModify renvoie l'état pré-update (heureArrive).
+        when(mongoTemplate.findAndModify(any(), any(),
+                any(FindAndModifyOptions.class), eq(Pointage.class)))
+                .thenReturn(existing);
 
         Pointage result = service.enregistrerPointage("1234", "DEV-1", 14.717, -17.467);
 
@@ -117,7 +120,9 @@ class PointageServicesTest {
         assertEquals("TERMINÉ", result.getStatus());
         assertNotNull(result.getHeureDepart());
         assertNotNull(result.getDuree());
-        verify(pointageRepository).save(existing);
+        // Durée renseignée par un updateFirst ciblé ; pas de save() repository.
+        verify(mongoTemplate).updateFirst(any(), any(), eq(Pointage.class));
+        verify(pointageRepository, never()).save(any());
     }
 
     // ======================================================
@@ -130,9 +135,9 @@ class PointageServicesTest {
         when(dossierEmployeRepository.findByAgentId("1234"))
                 .thenReturn(Optional.of(agent("1234", "Site B")));
         // Aucun pointage ouvert (le précédent est déjà clôturé) → nouvelle arrivée
-        when(pointageRepository.findFirstByCodeSecretAndDateAndHeureDepartIsNullOrderByTimestampDesc(
-                eq("1234"), any(LocalDate.class)))
-                .thenReturn(Optional.empty());
+        when(mongoTemplate.findAndModify(any(), any(),
+                any(FindAndModifyOptions.class), eq(Pointage.class)))
+                .thenReturn(null);
         when(pointageRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         Pointage result = service.enregistrerPointage("1234", "DEV-1", 14.717, -17.467);
@@ -145,7 +150,7 @@ class PointageServicesTest {
     }
 
     // ======================================================
-    // 🧪 enregistrerPointage() — AGENT NOT FOUND → 404 (IllegalArgumentException)
+    // 🧪 enregistrerPointage() — AGENT NOT FOUND → 404 (ResourceNotFoundException)
     // ======================================================
 
     @Test
@@ -153,7 +158,7 @@ class PointageServicesTest {
 
         when(dossierEmployeRepository.findByAgentId("1234")).thenReturn(Optional.empty());
 
-        RuntimeException ex = assertThrows(IllegalArgumentException.class,
+        RuntimeException ex = assertThrows(ResourceNotFoundException.class,
                 () -> service.enregistrerPointage("1234", "DEV-1", 14.717, -17.467));
 
         assertTrue(ex.getMessage().contains("Employé introuvable"));

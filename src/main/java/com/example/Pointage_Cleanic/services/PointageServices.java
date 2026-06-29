@@ -3,6 +3,7 @@ package com.example.Pointage_Cleanic.services;
 
 import com.example.Pointage_Cleanic.entities.Pointage;
 import com.example.Pointage_Cleanic.entities.rh.DossierEmploye;
+import com.example.Pointage_Cleanic.exception.ResourceNotFoundException;
 import com.example.Pointage_Cleanic.repositories.PointageRepository;
 import com.example.Pointage_Cleanic.repositories.rh.DossierEmployeRepository;
 import com.lowagie.text.PageSize;
@@ -18,6 +19,7 @@ import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.data.domain.*;
+import org.springframework.data.mongodb.core.FindAndModifyOptions;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
@@ -273,15 +275,58 @@ public class PointageServices {
                 Double longitude
         ) {
 
-            // 1️⃣ Vérifier l’employé (référentiel dossier-employé, clé = agentId)
+            // 1️⃣ Vérifier l’employé (référentiel dossier-employé, clé = agentId).
+            // Code vide / inconnu → 404 NOT_FOUND JSON via GlobalExceptionHandler.
             DossierEmploye agent = dossierEmployeRepository.findByAgentId(codeSecret)
-                    .orElseThrow(() -> new IllegalArgumentException("Employé introuvable"));
+                    .orElseThrow(() -> new ResourceNotFoundException("Employé introuvable"));
 
             LocalDate today = LocalDate.now();
             LocalTime now = LocalTime.now();
             String currentTime = now.format(DateTimeFormatter.ofPattern("HH:mm"));
 
-            // 2️⃣ Adresse (safe)
+            // 2️⃣ DÉPART en priorité — clôture ATOMIQUE du pointage ouvert du jour.
+            // Un agent peut enchaîner plusieurs pointages/jour (un par site). Le
+            // findAndModify pose heureDepart de façon atomique : un seul appel
+            // concurrent matche (ensuite heureDepart n'est plus null), ce qui
+            // supprime la fenêtre TOCTOU du read-then-save précédent.
+            Query openQuery = new Query(Criteria.where("codeSecret").is(codeSecret)
+                    .and("date").is(today)
+                    .and("heureDepart").is(null))
+                    .with(Sort.by(Sort.Direction.DESC, "timestamp"));
+            Update closeUpdate = new Update()
+                    .set("heureDepart", currentTime)
+                    .set("status", "TERMINÉ");
+            Pointage ouvert = mongoTemplate.findAndModify(
+                    openQuery, closeUpdate,
+                    FindAndModifyOptions.options().returnNew(false),
+                    Pointage.class);
+
+            if (ouvert != null) {
+                // La durée dépend de heureArrive (état pré-update renvoyé par
+                // returnNew(false)) : second update ciblé par _id pour la renseigner.
+                LocalTime startTime = LocalTime.parse(ouvert.getHeureArrive());
+                Duration duration = Duration.between(startTime, now);
+                long hours = duration.toHours();
+                long minutes = duration.toMinutes() % 60;
+                String formattedDuration =
+                        hours > 0
+                                ? hours + "h" + (minutes > 0 ? minutes + "mn" : "")
+                                : minutes + "mn";
+
+                mongoTemplate.updateFirst(
+                        new Query(Criteria.where("_id").is(ouvert.getId())),
+                        new Update().set("duree", formattedDuration),
+                        Pointage.class);
+
+                ouvert.setHeureDepart(currentTime);
+                ouvert.setStatus("TERMINÉ");
+                ouvert.setDuree(formattedDuration);
+                return ouvert;
+            }
+
+            // 3️⃣ ARRIVÉE (aucun pointage ouvert → nouveau pointage).
+            // Adresse calculée ici seulement (évite un appel géocodage bloquant
+            // à chaque clôture).
             String adresse = "Adresse non disponible";
             try {
                 if (latitude != null && longitude != null) {
@@ -293,52 +338,18 @@ public class PointageServices {
                 log.warn("Reverse geocoding échoué", e);
             }
 
-            // 3️⃣ Chercher le pointage encore ouvert du jour (heureDepart == null).
-            // Un agent peut enchaîner plusieurs pointages/jour (un par site) : tant
-            // qu'un pointage est ouvert, le POST le clôture ; sinon il en crée un nouveau.
-            Optional<Pointage> optional = pointageRepository
-                    .findFirstByCodeSecretAndDateAndHeureDepartIsNullOrderByTimestampDesc(codeSecret, today);
-
-            // =====================
-            // 🟢 ARRIVÉE (aucun pointage ouvert → nouveau pointage)
-            // =====================
-            if (optional.isEmpty()) {
-
-                Pointage pointage = Pointage.builder()
-                        .codeSecret(agent.getAgentId())
-                        .prenom(agent.getPrenom())
-                        .nom(agent.getNom())
-                        .site(decouperSites(agent.getSiteAffecte()))
-                        .date(today)
-                        .heureArrive(currentTime)
-                        .status("EN COURS...")
-                        .deviceId(deviceId)
-                        .timestamp(Instant.now())
-                        .adresse(adresse)
-                        .build();
-
-                return pointageRepository.save(pointage);
-            }
-
-            // =====================
-            // 🔵 DÉPART (clôture du pointage ouvert)
-            // =====================
-            Pointage pointage = optional.get();
-
-            LocalTime startTime = LocalTime.parse(pointage.getHeureArrive());
-            Duration duration = Duration.between(startTime, now);
-
-            long hours = duration.toHours();
-            long minutes = duration.toMinutes() % 60;
-
-            String formattedDuration =
-                    hours > 0
-                            ? hours + "h" + (minutes > 0 ? minutes + "mn" : "")
-                            : minutes + "mn";
-
-            pointage.setHeureDepart(currentTime);
-            pointage.setDuree(formattedDuration);
-            pointage.setStatus("TERMINÉ");
+            Pointage pointage = Pointage.builder()
+                    .codeSecret(agent.getAgentId())
+                    .prenom(agent.getPrenom())
+                    .nom(agent.getNom())
+                    .site(decouperSites(agent.getSiteAffecte()))
+                    .date(today)
+                    .heureArrive(currentTime)
+                    .status("EN COURS...")
+                    .deviceId(deviceId)
+                    .timestamp(Instant.now())
+                    .adresse(adresse)
+                    .build();
 
             return pointageRepository.save(pointage);
         }

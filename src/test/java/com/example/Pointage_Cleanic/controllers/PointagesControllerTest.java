@@ -1,6 +1,7 @@
 package com.example.Pointage_Cleanic.controllers;
 
 import com.example.Pointage_Cleanic.entities.Pointage;
+import com.example.Pointage_Cleanic.exception.ResourceNotFoundException;
 import com.example.Pointage_Cleanic.models.PointageRequest;
 import com.example.Pointage_Cleanic.repositories.PointageRepository;
 import com.example.Pointage_Cleanic.security.JwtRequestFilter;
@@ -91,6 +92,58 @@ class PointagesControllerTest {
                         .content(objectMapper.writeValueAsBytes(request)))
                 .andExpect(status().isTooManyRequests())
                 .andExpect(content().string(containsString("téléphone")));
+    }
+
+    // ==========================================
+    // POST /api/pointages — VALIDATION (corps invalide → 400, plus de NPE/500)
+    // ==========================================
+
+    @Test
+    void should_return_400_when_body_empty() throws Exception {
+
+        // Corps {} : codeSecret + deviceId absents → @Valid rejette (avant : NPE → 500)
+        mockMvc.perform(post("/api/pointages")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("VALIDATION_ERROR"))
+                .andExpect(jsonPath("$.errors").isArray());
+    }
+
+    @Test
+    void should_return_400_when_device_id_blank() throws Exception {
+
+        PointageRequest request = new PointageRequest();
+        request.setCodeSecret("1234");
+        request.setDeviceId("   "); // blank → @NotBlank
+
+        mockMvc.perform(post("/api/pointages")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsBytes(request)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("VALIDATION_ERROR"));
+    }
+
+    // ==========================================
+    // POST /api/pointages — EMPLOYÉ INTROUVABLE → 404 JSON
+    // ==========================================
+
+    @Test
+    void should_return_404_when_employe_not_found() throws Exception {
+
+        PointageRequest request = new PointageRequest();
+        request.setCodeSecret("9999");
+        request.setDeviceId("DEV-1");
+
+        Mockito.when(pointageServices.canPoint(eq("DEV-1"), Mockito.anyInt())).thenReturn(true);
+        Mockito.when(pointageServices.enregistrerPointage(eq("9999"), eq("DEV-1"), any(), any()))
+                .thenThrow(new ResourceNotFoundException("Employé introuvable"));
+
+        mockMvc.perform(post("/api/pointages")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsBytes(request)))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error").value("NOT_FOUND"));
     }
 
     // ==========================================

@@ -6,6 +6,7 @@ import com.example.Pointage_Cleanic.entities.Pointage;
 import com.example.Pointage_Cleanic.models.PointageRequest;
 import com.example.Pointage_Cleanic.repositories.PointageRepository;
 import com.example.Pointage_Cleanic.services.PointageServices;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -26,22 +27,12 @@ public class PointagesController {
 
     private final PointageServices pointageServices;
     private final PointageRepository pointageRepository;
-
     @PostMapping
-    public ResponseEntity<?> pointer(@RequestBody PointageRequest request) {
+    public ResponseEntity<?> pointer(@Valid @RequestBody PointageRequest request) {
 
-        String rawCode = request.getCodeSecret();
-
-        String cleanCode = rawCode
+        // codeSecret et deviceId sont garantis non-blank par @Valid (sinon 400 VALIDATION_ERROR).
+        String cleanCode = request.getCodeSecret()
                 .replaceAll("[^0-9]", ""); // 🔥 SUPPRIME TOUT SAUF CHIFFRES
-
-
-        if (request.getDeviceId() == null || request.getDeviceId().isBlank()) {
-            return ResponseEntity
-                    .status(HttpStatus.BAD_REQUEST)
-                    .body("Device ID manquant");
-        }
-
 
         if (!pointageServices.canPoint(request.getDeviceId(), 20)) {
             return ResponseEntity
@@ -49,19 +40,15 @@ public class PointagesController {
                     .body("Ce téléphone a déjà été utilisé pour un pointage récemment.");
         }
 
-        try {
-            Pointage pointage = pointageServices.enregistrerPointage(
-                    cleanCode,
-                    request.getDeviceId(),
-                    request.getLatitude(),
-                    request.getLongitude()
-            );
-            return ResponseEntity.ok(pointage);
-        } catch (IllegalArgumentException e) {
-            return ResponseEntity
-                    .status(HttpStatus.NOT_FOUND)
-                    .body(e.getMessage());
-        }
+        // Employé introuvable / code invalide → ResourceNotFoundException (404 JSON) géré
+        // par GlobalExceptionHandler ; pas de try/catch local.
+        Pointage pointage = pointageServices.enregistrerPointage(
+                cleanCode,
+                request.getDeviceId(),
+                request.getLatitude(),
+                request.getLongitude()
+        );
+        return ResponseEntity.ok(pointage);
     }
 
     @GetMapping
