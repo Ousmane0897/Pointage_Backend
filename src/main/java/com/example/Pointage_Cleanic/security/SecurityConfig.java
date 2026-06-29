@@ -51,7 +51,7 @@ public class SecurityConfig {
 
                     // Méthodes autorisées
                     config.setAllowedMethods(List.of(
-                            "GET", "POST", "PUT", "DELETE", "OPTIONS"
+                            "GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"
                     ));
 
                     // Headers autorisés
@@ -109,6 +109,7 @@ public class SecurityConfig {
                         .requestMatchers("/ws/info").authenticated()
                         .requestMatchers("/api/super-admin/**").authenticated()
                         .requestMatchers("/api/terrain/**").authenticated()
+                        .requestMatchers("/api/stock/**").authenticated()
 
                         // Toutes les autres requêtes nécessitent authentification
                         .anyRequest().authenticated()

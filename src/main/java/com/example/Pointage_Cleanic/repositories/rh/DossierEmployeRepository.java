@@ -39,4 +39,9 @@ public interface DossierEmployeRepository extends MongoRepository<DossierEmploye
 
     // Subordonnés d'un employé donné (organigramme)
     List<DossierEmploye> findBySuperieurHierarchiqueId(String superieurHierarchiqueId);
+
+    // Stock v2 7.4 : repérage du « Responsable Achats » (validateur des bons)
+    List<DossierEmploye> findByPosteIgnoreCase(String poste);
+
+    List<DossierEmploye> findByDepartementIgnoreCase(String departement);
 }

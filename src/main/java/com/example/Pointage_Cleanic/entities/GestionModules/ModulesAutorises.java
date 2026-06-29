@@ -1,6 +1,7 @@
 package com.example.Pointage_Cleanic.entities.GestionModules;
 
 import com.example.Pointage_Cleanic.entities.GestionModules.SousModules.ProductionChimie;
+import com.example.Pointage_Cleanic.entities.GestionModules.SousModules.Stock;
 import com.example.Pointage_Cleanic.entities.GestionModules.SousModules.Terrain;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.AllArgsConstructor;
@@ -19,4 +20,5 @@ public class ModulesAutorises {
 
     private ProductionChimie productionChimie;
     private Terrain terrain;
+    private Stock stock;
 }

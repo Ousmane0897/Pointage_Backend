@@ -45,13 +45,13 @@ Standard layered Spring MVC: `controllers → services → repositories (Spring 
 
 Things that only make sense after reading several files:
 
-- **Auth is stateless JWT.** `security/SecurityConfig.java` disables CSRF, sets `SessionCreationPolicy.STATELESS`, and installs `JwtRequestFilter` before `UsernamePasswordAuthenticationFilter`. The filter skips `OPTIONS` (preflight) and rejects expired/invalid tokens with 401. Public routes are whitelisted there: `/api/login/**`, `/auth/forgot-password`, `/auth/reset-password/**`, Swagger, `/ws/**`, image endpoints (`/api/produits/image/**`, `/api/employe-complet/image/**`), and the mobile clock-in surface: `POST /api/pointages`, `GET /api/pointages/{codeSecret}` (statut), and the legacy `/pointages/**` tree (mobile clocks in without a token). **Les vues superviseur sont protégées** depuis 2026-06 : `GET /api/pointages/today`, `/api/pointages/historique/**` (recherche + exports) et `GET /api/pointages` (getAll) exigent un JWT (ordre des matchers : règles `.authenticated()` placées avant le `permitAll` car `/{codeSecret}` recouvre `/today`). Everything else is `.authenticated()`. When adding a controller, decide explicitly whether to permit it here.
+- **Auth is stateless JWT.** `security/SecurityConfig.java` disables CSRF, sets `SessionCreationPolicy.STATELESS`, and installs `JwtRequestFilter` before `UsernamePasswordAuthenticationFilter`. The filter skips `OPTIONS` (preflight) and rejects expired/invalid tokens with 401. Public routes are whitelisted there: `/api/login/**`, `/auth/forgot-password`, `/auth/reset-password/**`, Swagger, `/ws/**`, image endpoints (`/api/produits/image/**`, `/api/employe-complet/image/**`), and the mobile clock-in surface: `POST /api/pointages`, `GET /api/pointages/{codeSecret}` (statut), and the legacy `/pointages/**` tree (mobile clocks in without a token). **Les vues superviseur sont protégées** depuis 2026-06 : `GET /api/pointages/today`, `/api/pointages/historique/**` (recherche + exports) et `GET /api/pointages` (getAll) exigent un JWT (ordre des matchers : règles `.authenticated()` placées avant le `permitAll` car `/{codeSecret}` recouvre `/today`). Everything else is `.authenticated()` — y compris `/api/terrain/**` et `/api/stock/**` (module Stock v2, ajouté 2026-06), explicitement listés avant le `anyRequest`. When adding a controller, decide explicitly whether to permit it here.
 
 - **CORS allowlist is in `SecurityConfig`, not a properties file.** Frontend origins (`pointic-cleanic.com`, `app.pointic-cleanic.com`, ngrok subdomains, localhost) are hardcoded. Add new origins there.
 
 - **Two parallel user models coexist.** `User` (collection used by `LoginRepository` + `DataLoader` bootstrap superadmin `diarra.niang@cleanicsenegal.com`) and `Utilisateur` (richer admin entity with `RoleAdmin`, `ModulesAutorises`, activation flags). `MyUserDetailsService` bridges them for Spring Security. Don't collapse them without understanding which flows use which.
 
-- **Module-based authorization.** `Utilisateur.modulesAutorises: ModulesAutorises` is a per-user feature-flag object (booleans for top-level modules + nested sub-module objects under `entities/GestionModules/SousModules/`). Route-level authorization in `SecurityConfig` is coarse (`.authenticated()`); fine-grained gating is **delegated to the Angular frontend** which reads `ModulesAutorises` from the JWT/`AuthResponse2` to show/hide screens — there are **no `@PreAuthorize`/`@Secured` annotations** on the backend. Top-level flags include `Dashboard, Admin, StatistiquesAgences, Planifications, Calendrier, JourFeries, Employes, Agences, RH`; sub-modules `CollecteLivraison, Absences, Pointages, Stock` carry nested booleans. The `RH` flag (added 2026-04-30) gates the entire RH module 6.1–6.4. `RoleAdmin.RH` exists in the enum but is just a profile tag — without `ModulesAutorises.RH=true`, the RH screens stay hidden.
+- **Module-based authorization.** `Utilisateur.modulesAutorises: ModulesAutorises` is a per-user feature-flag object (booleans for top-level modules + nested sub-module objects under `entities/GestionModules/SousModules/`). Route-level authorization in `SecurityConfig` is coarse (`.authenticated()`); fine-grained gating is **delegated to the Angular frontend** which reads `ModulesAutorises` from the JWT/`AuthResponse2` to show/hide screens — there are **no `@PreAuthorize`/`@Secured` annotations** on the backend. Top-level flags include `Dashboard, Admin, StatistiquesAgences, Planifications, Calendrier, JourFeries, Employes, Agences, RH`; sub-modules `CollecteLivraison, Absences, Pointages, Stock` carry nested booleans. The `RH` flag (added 2026-04-30) gates the entire RH module 6.1–6.4. Le module **Stock v2** a son propre objet `ModulesAutorises.stock` (`SousModules/Stock`, ajouté 2026-06) avec 27 sous-flags : 7 pour 7.3 `{catalogue, mouvements, etatStock, inventaires, synthese, approvisionnement, tableauBord}` + 8 pour 7.4 `{categorisation, bonsEntree, bonsSortie, workflowValidation, historiqueDestinataire, plafonds, dotation, rapportsConso}` + 5 pour 7.5 `{analyseMensuelle, chantiers, dons, comparatif, filtresCroises}` + 7 pour 7.6 `{coutUnitaire, coutMouvements, valeurStock, coutSite, coutChantier, marges, tableauBordFinancier}` ; sérialisé tel quel dans le claim JWT `modules` (`@JsonInclude(NON_NULL)` → les utilisateurs existants restent inchangés). `RoleAdmin.RH` exists in the enum but is just a profile tag — without `ModulesAutorises.RH=true`, the RH screens stay hidden.
 
 - **WebSockets (STOMP over SockJS) are a first-class channel**, not an afterthought. `WebSocketConfig` exposes `/ws`, broadcast prefixes `/topic` + `/queue`, client-to-server prefix `/app`. Used for the admin ↔ superadmin cancel/validate workflow (see `Dto/AnnulationRequestMessage.java`, `Dto/AnnulationDecisionMessage.java`, `Dto/CancelRequestDto.java`, `Dto/ValidationRequestDto.java`). `/ws/**` is permitAll but `/ws/info` requires auth — mirror that pattern for new endpoints.
 
@@ -71,7 +71,7 @@ Things that only make sense after reading several files:
 | `/api/agences`, `/api/site` | AgencesController, SitesController |
 | `/api/planification`, `/api/ferie` | PlanificationController, FerieController |
 | `/api/pointages`, `/api/absences` | PointagesController (public), AbsencesControllers |
-| `/api/produits`, `/api/stock` | ProduitController, StockController |
+| `/api/produits` | ProduitController (**stock historique** — entité `Produit`, collection `produits`. ⚠️ Ne mappe PAS `/api/stock`, qui appartient au module Stock v2 7.3/7.4/7.5 ci-dessous) |
 | `/api/besoins` | CollecteBesoinController |
 | `/api/dashboard`, `/api/dashboard_par_agence` | DashboardController, DashboardParAgence |
 | `/ws` | STOMP endpoint |
@@ -109,6 +109,29 @@ Things that only make sense after reading several files:
 | `/api/production-chimie/controle-qualite/controles` | ControlesQualiteController (multipart photos, + /tendances) |
 | `/api/production-chimie/formats-conditionnement` | FormatsConditionnementController |
 | `/api/production-chimie/tableau-bord` | TableauBordProductionController (+ /rapport agrégé, /comparaison-periodes) |
+| **— Stock v2 7.3 — stocks & approvisionnement** (`controllers/stockv2`, collections `stockv2_*`) | |
+| `/api/stock/produits` | ProduitStockController (multipart photo + fiche technique, `/actifs`, `/{id}/photo`, `/{id}/fiche-technique`, `/bulk` transactionnel) |
+| `/api/stock/categories` | CategorieStockController (arborescence : `/racines`, `/enfants`, plat ; DELETE 409 si non vide) |
+| `/api/stock/mouvements` | MouvementStockController (ENTREE/SORTIE/TRANSFERT, impact sur `StockParSite`, 422 si insuffisant) |
+| `/api/stock/etat-stock` | EtatStockController (consolidé / `parSite`, statut + valeur ; PUT `/seuils`) |
+| `/api/stock/inventaires` | InventaireController (workflow `/comptage`, `/validation`, `/cloture`) |
+| `/api/stock/synthese-mensuelle` | SyntheseMensuelleController |
+| `/api/stock/approvisionnement` | ApprovisionnementController (`/suggestions`) |
+| `/api/stock/tableau-bord` | TableauBordStockController |
+| **— Stock v2 7.4 — contrôle des mouvements** (`controllers/stockv2`, collections `stockv2_bons_*`, `stockv2_plafonds`) | |
+| `/api/stock/bons-entree` | BonEntreeController (bon multi-lignes à workflow ; `/{id}/soumettre`, `/valider`, `/refuser`) |
+| `/api/stock/bons-sortie` | BonSortieController (idem ; valider → mouvements SORTIE, 422 si stock insuffisant) |
+| `/api/stock/workflow/bons` | WorkflowStockController (Kanban unifié entrées+sorties, non paginé) |
+| `/api/stock/categorisation/stats` | CategorisationStockController |
+| `/api/stock/plafonds` | PlafondController (CRUD + `/consommation`) |
+| `/api/stock/dotation/comparatif` | DotationController |
+| `/api/stock/consommation` | ConsommationController (`/par-destinataire`, `/rapport`) |
+| **— Stock v2 7.5 — analyse des consommations** (`controllers/stockv2`, collection `stockv2_chantiers` ; le reste agrégé à la volée) | |
+| `/api/stock/chantiers` | ChantierController (CRUD + `/actifs`, `/{id}` DetailChantier agrégé, `/{id}/cloture` ; 409 si clôturé/réf dupliquée) |
+| `/api/stock/analyse` | AnalyseStockController (`/mensuel`, `/dons`, `/comparatif`, `/croise` — **lecture seule**, agrégation des sorties EFFECTIVES) |
+| **— Stock v2 7.6 — valorisation financière** (`controllers/stockv2`, collections `stockv2_parametrage_valorisation`, `stockv2_historique_cout`) | |
+| `/api/stock/valorisation` | ValorisationController (`/parametrage` GET+PUT, `/couts-produits`(+`/{id}/historique`), `/mouvements`, `/valeur-stock`, `/cout-site`, `/chantiers`(+`/{id}`), `/marges`, `/tableau-bord` — lecture seule sauf PUT parametrage) |
+| `/api/stock/produits/{id}/valorisation`, `/prix-vente` | ProduitStockController (2 **PATCH** : méthode de valo + prix de vente, hors formulaire multipart 7.3) |
 
 ## Testing conventions
 
@@ -169,3 +192,41 @@ Spécificités vs Production Chimie :
 - **TODO** : sous-permissions `ModulesAutorises.terrain.*` à ajouter dans `entities/GestionModules/SousModules/` (gating frontend) ; tests d'intégration.
 
 Détails endpoints, payloads WebSocket, hypothèses (seuils escalade/maintenance, identité utilisateur courant), codes d'erreur : **voir `.claude/docs/module-terrain.md`**.
+
+## Module Stock v2 (7.3 + 7.4 + 7.5 + 7.6) — ✅ Backend terminé
+
+Sous-module **« Stocks & Approvisionnement » (7.3)** + **« Contrôle des mouvements » (7.4)** + **« Analyse des consommations » (7.5)** + **« Valorisation financière » (7.6)**, **autonome** (collections préfixées `stockv2_`, ne partage rien avec le stock historique `produits` ni stock-chimie `production_chimie_*`). 19 contrôleurs REST sous `/api/stock/`. Code sous les sous-packages `stockv2` : `controllers/stockv2`, `services/stockv2`, `repositories/stockv2`, `entities/stockv2`, `Dto/stockv2`, `Mapper/stockv2`, `Enum/stockv2`. **Frontend Angular figé** → contrats (chemins, champs JSON, enums, codes HTTP) respectés à la lettre. Créé sur la branche `feature/stock` (7.3 : 2026-06-17 ; 7.4 + 7.5 : 2026-06-18 ; 7.6 : 2026-06-19).
+
+Spécificités / patterns :
+- **`StockParSite` = source de vérité des quantités** (collection `stockv2_etats_stock`, index composé unique `(produitId, siteId)`). `ProduitStock.quantiteTotale` n'est **pas** stocké : dénormalisé en lecture (somme des soldes). Logique de solde mutualisée dans `StockBalanceService`. Bucket `siteId=null` pour le stock initial d'import (sans site).
+- **Sites en lecture seule** depuis le module Terrain : `ReferentielSiteService` lit `sites_clients` (via `SiteClientRepository`) pour valider `siteId` et dénormaliser `siteNom`. Aucun référentiel de sites côté stock.
+- **Utilisateur créateur** déduit du JWT via `CurrentUserProvider` (réutilisé depuis `services/terrain`), jamais envoyé par le client.
+- **Dates ISO** : `LocalDate` avec `@JsonFormat("yyyy-MM-dd")`, `LocalDateTime` ISO, `mois` en `yyyy-MM` (pas le `dd/MM/yyyy` global).
+- **Erreurs** : `GlobalExceptionHandler` global. Nouvelles exceptions — `StockOperationException` → **422** (stock insuffisant, écart d'inventaire non justifié, transition de workflow invalide), `StockConflitException` → **409** (code produit dupliqué). Le `/bulk` renvoie le **même corps** `{total, inserted, failed, insertedIds, errors[]}` en 200 (succès total) et 422 (échec → rollback total, 0 créé).
+- **Transactionnalité** sans transaction Mongo : compensation manuelle (pattern `OrdreFabricationService`) pour le `/bulk` all-or-nothing et la clôture d'inventaire (écarts appliqués via mouvements `AJUSTEMENT`).
+- **Références** générées par `CompteurStockService` (même `findAndModify` que `CompteurLotService`) : `MVT-yyyyMMdd-NNN`, `INV-yyyyMMdd-NNN`.
+- **Binaire inline** (`byte[] @JsonIgnore` photo + fiche technique sur `ProduitStock`), URL calculée par le mapper, endpoints de streaming protégés JWT.
+- **Tests** : 10 IT Testcontainers (`services/stockv2/*IT`, dont les 4 de 7.5 : `ChantierServiceIT`, `AnalyseDonsServiceIT`, `ComparatifAnalyseServiceIT`, `FiltreCroiseServiceIT`) + 4 slices `@WebMvcTest` (`controllers/stockv2`).
+
+**Ajout 7.4 « Contrôle des mouvements »** (par-dessus 7.3) :
+- **Bon multi-lignes porteur du workflow** `BROUILLON→SOUMIS→VALIDE→EFFECTIF` ou `SOUMIS→REFUSE` (`BonEntree`/`BonSortie`, collections `stockv2_bons_entree`/`_sortie`). Un bon **ne touche au stock qu'à la validation (EFFECTIF)** : `MouvementBonGenerator` crée un `MouvementStock` 7.3 par ligne (compensation manuelle all-or-nothing) qui met à jour `StockParSite` par le mécanisme 7.3. Sortie insuffisante → **422** (pré-vérif cumulée par produit avant toute écriture).
+- **`MouvementStock` étendu** de 5 champs optionnels : `origine` (`DIRECT`/`BON`), `bonId`, `bonReference`, `categorieEntree`/`categorieSortie`. Réfs `BE-`/`BS-yyyyMMdd-NNN` (même `CompteurStockService`).
+- ⚠️ **Transition de bon invalide → 409** (`StockConflitException`) — contrat frontend figé, **distinct** du 422 « transition » d'inventaire 7.3. Refus sans commentaire → **400**.
+- **Plafonds de dotation** (`stockv2_plafonds`), comparatif prévu/réel, catégorisation (sur mouvements `origine=BON`), consommation par destinataire (sur `BonSortie` EFFECTIFS) + rapports (sur mouvements SORTIE effectifs).
+- **WebSocket** `StockNotificationService` → `/topic/stock-validations` (broadcast) + `/user/queue/notifications-stock` (Responsable Achats / dépassement plafond), payload `NotificationStockDto`.
+- **RBAC** : 8 sous-flags ajoutés à `SousModules/Stock` (`categorisation, bonsEntree, bonsSortie, workflowValidation, historiqueDestinataire, plafonds, dotation, rapportsConso`) — gating **frontend uniquement**, sérialisés dans `modules.stock`.
+
+**Ajout 7.5 « Analyse des consommations »** (par-dessus 7.4) — **analytique, LECTURE SEULE** sauf l'unique entité persistée `Chantier` :
+- **Enrichissement du contrat 7.4** : `TypeSortie` gagne la valeur `DON` (→ 5 valeurs) + enum `NatureDon`. `BonSortie`/`BonSortiePayload`/`BonSortieDto` portent `natureDon`+`beneficiaireDon` (requis si `type=DON`, `chantierId` interdit) et `chantierId`+`chantierReference` (requis si `type=DISTRIBUTION_CHANTIER`, `natureDon` interdit) — validés dans `BonSortieService`. `MouvementBonGenerator` **recopie ces 4 champs sur chaque `MouvementStock` SORTIE** (entité+DTO étendus) pour rendre dons/chantiers requêtables sur la collection mouvements. Valider un bon `DISTRIBUTION_CHANTIER` vers un chantier `CLOTURE` → **409**.
+- **Périmètre « sortie effective »** des 4 endpoints d'analyse = `MouvementStock` `type=SORTIE` **ET** `origine="BON"` (jamais les saisies DIRECT 7.3 ni brouillons/soumis) — centralisé dans `AnalyseSupport`. **Valorisation** : `montant = round(quantité × ProduitStock.prixUnitaire)` (prix fixe porté par le produit), FCFA entiers. Filtre `categorieId` appliqué en mémoire (pas de catégorie sur le mouvement).
+- **`Chantier`** (collection `stockv2_chantiers`, réf. unique, enum `StatutChantier {EN_COURS, CLOTURE}`) : `coutTotal`/`nbMouvements` **non maintenus à l'écriture** → recalculés à la lecture depuis `MouvementStockRepository.findByChantierId`. Conflits d'état (double clôture, édition/suppression d'un clôturé, réf dupliquée) → **409** ; clôture pose `dateFin = today`.
+- **Dons** (`/analyse/dons`) agrégés depuis `BonSortie` `type=DON & statut=EFFECTIF` (une ligne par bon, montant = `montantTotal`). **Comparatif** (`/analyse/comparatif`) : barème `SensEvolution {HAUSSE, BAISSE, STABLE, ALERTE}` sur l'écart % vs mois précédent de la ligne (1ʳᵉ colonne et précédent=0 → `evolutionPct=null` pour éviter `Infinity`) ; `nbAlertes` = cellules `ALERTE`. **Filtres croisés** (`/analyse/croise`) : pivot 1D (sans `axeColonnes` → `entetesColonnes=[]`/`valeurs=[]`/`total` rempli) ou 2D ; enums `AxeAnalyse`, `MesureCroise`, `AxeComparatif`.
+- **RBAC** : 5 sous-flags ajoutés à `SousModules/Stock` (`analyseMensuelle, chantiers, dons, comparatif, filtresCroises`) — gating **frontend uniquement**.
+
+**Ajout 7.6 « Valorisation financière »** (par-dessus 7.5) — volet **FINANCIER**, calculs serveur, FCFA entiers (créé 2026-06-19) :
+- **`ProduitStock.prixUnitaire` = désormais le « coût unitaire courant »** : statique si méthode `FIXE`, recalculé à chaque ENTREE de bon si `CUMP`/`DERNIER_PRIX`. 2 champs ajoutés (`methodeValorisation` enum `MethodeValorisation {CUMP,DERNIER_PRIX,FIXE}` nullable → hérite du global `ParametrageValorisation.methodeDefaut` → `FIXE` ; `prixVente` Long). **Non éditables via le formulaire multipart 7.3** : exclus de `ProduitStockMapper.toEntity`/`updateEntityFromDto` (sinon le PUT figé les écraserait), écrits seulement par les 2 PATCH dédiés. `MouvementStock` += `coutUnitaireSnapshot`/`valeurMouvement` (renseignés à chaque nouveau mouvement ; mouvements pré-7.6 = null → reconstitution au coût courant + `estEstime=true`).
+- **Recalcul** (`ValorisationSupport`, pur+testé) : CUMP `round((stockAvant×ancienCout + q×pa)/(stockAvant+q))` (stock+q≤0→`round(pa)`, q≤0→inchangé), DERNIER_PRIX→`round(pa)`, FIXE→rien. Hook dans `MouvementBonGenerator.genererPourEntree` (met à jour `prixUnitaire` + historise un `HistoriquePointCout`), **participe à la compensation manuelle** all-or-nothing. Entrée DIRECTE 7.3 = pas de recalcul (snapshot au coût courant). `pa` = `LigneBon.prixUnitaire`, alimenté par le **nouveau champ optionnel `LignePayload.prixUnitaire`** (additif ; absent ⇒ coût courant, comportement 7.4/7.5 inchangé).
+- **Valeur historique** (`valeurPrecedente`, `evolutionValeur`) = rejeu des mouvements × coût courant actuel (approximation, comme TableauBordStock). Seuils serveur : dérive 20 % (gravité CRITIQUE ≥40 / ATTENTION ≥20), marge mini 15 %, écart coût anormal 50 %. Marges = sorties effectives `categorieSortie=VENTE_PRODUIT`.
+- **CORS** : `PATCH` ajouté à `SecurityConfig.setAllowedMethods`. 7 sous-flags ajoutés à `SousModules/Stock` (`coutUnitaire, coutMouvements, valeurStock, coutSite, coutChantier, marges, tableauBordFinancier`) — gating frontend only.
+
+Détails endpoints (query params, payloads), entités/collections/index, formules serveur (synthèse, suggestions appro, KPIs dashboard, valorisation 7.6), workflow inventaire, workflow des bons 7.4, analyses 7.5, codes d'erreur : **voir `.claude/docs/module-stockv2.md`**.

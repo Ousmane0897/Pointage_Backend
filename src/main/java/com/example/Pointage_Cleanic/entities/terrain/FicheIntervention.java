@@ -38,9 +38,6 @@ public class FicheIntervention {
     private LocalDateTime dateFin;
     private Integer duree;
 
-    private PositionGps positionDebut;
-    private PositionGps positionFin;
-
     @Builder.Default
     private List<TacheChecklist> taches = new ArrayList<>();
     @Builder.Default

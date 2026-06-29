@@ -1,7 +1,6 @@
 package com.example.Pointage_Cleanic.Dto.terrain;
 
 import com.example.Pointage_Cleanic.Enum.terrain.StatutIntervention;
-import com.example.Pointage_Cleanic.entities.terrain.PositionGps;
 import com.example.Pointage_Cleanic.entities.terrain.ProduitUtilise;
 import com.example.Pointage_Cleanic.entities.terrain.SignatureClient;
 import com.example.Pointage_Cleanic.entities.terrain.TacheChecklist;
@@ -42,9 +41,6 @@ public class FicheInterventionDto {
     private LocalDateTime dateDebut;
     private LocalDateTime dateFin;
     private Integer duree;
-
-    private PositionGps positionDebut;
-    private PositionGps positionFin;
 
     private List<TacheChecklist> taches;
     private List<ProduitUtilise> produits;
