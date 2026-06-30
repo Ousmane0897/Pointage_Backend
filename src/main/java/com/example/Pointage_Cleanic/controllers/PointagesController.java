@@ -28,7 +28,8 @@ public class PointagesController {
     private final PointageServices pointageServices;
     private final PointageRepository pointageRepository;
     @PostMapping
-    public ResponseEntity<?> pointer(@Valid @RequestBody PointageRequest request) {
+    public ResponseEntity<?> pointer(@Valid @RequestBody
+                                         PointageRequest request) {
 
         // codeSecret et deviceId sont garantis non-blank par @Valid (sinon 400 VALIDATION_ERROR).
         String cleanCode = request.getCodeSecret()

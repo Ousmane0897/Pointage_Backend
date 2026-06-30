@@ -1,6 +1,7 @@
 package com.example.Pointage_Cleanic.entities.GestionModules;
 
 import com.example.Pointage_Cleanic.entities.GestionModules.SousModules.ProductionChimie;
+import com.example.Pointage_Cleanic.entities.GestionModules.SousModules.Rh;
 import com.example.Pointage_Cleanic.entities.GestionModules.SousModules.Stock;
 import com.example.Pointage_Cleanic.entities.GestionModules.SousModules.Terrain;
 import com.fasterxml.jackson.annotation.JsonInclude;
@@ -16,7 +17,7 @@ public class ModulesAutorises {
 
     private boolean dashboard;
     private boolean admin;
-    private boolean rh;
+    private Rh rh;
 
     private ProductionChimie productionChimie;
     private Terrain terrain;

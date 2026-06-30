@@ -251,4 +251,88 @@ class UtilisateurControllerTest {
         verify(loginRepository).save(captor.capture());
         org.junit.jupiter.api.Assertions.assertEquals("ANCIEN_HASH", captor.getValue().getPassword());
     }
+
+    // =========================
+    // POST /api/superadmin — un bloc `stock` PARTIEL est persisté sans filtrage
+    // (clés absentes du JSON => false). Non-régression : le front envoie 27 sous-flags
+    // optionnels, le backend doit les transmettre en bloc, comme terrain/productionChimie.
+    // =========================
+    @Test
+    void create_avec_stock_partiel_est_persiste() throws Exception {
+
+        String body = "{"
+                + "\"email\":\"stock@test.com\","
+                + "\"password\":\"123456\","
+                + "\"role\":\"SUPERVISEUR\","
+                + "\"modulesAutorises\":{\"stock\":{"
+                + "\"catalogue\":true,\"bonsSortie\":true,\"marges\":true}}"
+                + "}";
+
+        when(utilisateurRepository.findAllByEmail("stock@test.com")).thenReturn(List.of());
+        when(loginRepository.findAllByEmail("stock@test.com")).thenReturn(List.of());
+        when(passwordEncoder.encode(any())).thenReturn("ENCODED");
+
+        mockMvc.perform(post("/api/superadmin")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isOk())
+                // la réponse ré-expose le bloc stock tel quel
+                .andExpect(jsonPath("$.modulesAutorises.stock.catalogue").value(true))
+                .andExpect(jsonPath("$.modulesAutorises.stock.bonsSortie").value(true))
+                .andExpect(jsonPath("$.modulesAutorises.stock.marges").value(true))
+                .andExpect(jsonPath("$.modulesAutorises.stock.inventaires").value(false));
+
+        org.mockito.ArgumentCaptor<Utilisateur> captor =
+                org.mockito.ArgumentCaptor.forClass(Utilisateur.class);
+        verify(utilisateurRepository).save(captor.capture());
+
+        com.example.Pointage_Cleanic.entities.GestionModules.SousModules.Stock stock =
+                captor.getValue().getModulesAutorises().getStock();
+        org.junit.jupiter.api.Assertions.assertNotNull(stock, "le bloc stock doit être persisté");
+        org.junit.jupiter.api.Assertions.assertTrue(stock.isCatalogue());
+        org.junit.jupiter.api.Assertions.assertTrue(stock.isBonsSortie());
+        org.junit.jupiter.api.Assertions.assertTrue(stock.isMarges());
+        // clé absente du JSON => false (rétro-compatibilité)
+        org.junit.jupiter.api.Assertions.assertFalse(stock.isInventaires());
+    }
+
+    // =========================
+    // PUT /api/superadmin/{id} — un bloc `stock` PARTIEL est persisté sans filtrage
+    // =========================
+    @Test
+    void update_avec_stock_partiel_est_persiste() throws Exception {
+
+        Utilisateur existing = new Utilisateur();
+        existing.setId("123");
+        existing.setEmail("stock@test.com");
+
+        when(utilisateursService.getByid("123")).thenReturn(existing);
+        when(utilisateursService.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        String body = "{"
+                + "\"email\":\"stock@test.com\","
+                + "\"role\":\"SUPERVISEUR\","
+                + "\"modulesAutorises\":{\"stock\":{"
+                + "\"catalogue\":true,\"bonsSortie\":true,\"marges\":true}}"
+                + "}";
+
+        mockMvc.perform(put("/api/superadmin/123")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.modulesAutorises.stock.catalogue").value(true))
+                .andExpect(jsonPath("$.modulesAutorises.stock.inventaires").value(false));
+
+        org.mockito.ArgumentCaptor<Utilisateur> captor =
+                org.mockito.ArgumentCaptor.forClass(Utilisateur.class);
+        verify(utilisateursService).save(captor.capture());
+
+        com.example.Pointage_Cleanic.entities.GestionModules.SousModules.Stock stock =
+                captor.getValue().getModulesAutorises().getStock();
+        org.junit.jupiter.api.Assertions.assertNotNull(stock, "le bloc stock doit être persisté");
+        org.junit.jupiter.api.Assertions.assertTrue(stock.isCatalogue());
+        org.junit.jupiter.api.Assertions.assertTrue(stock.isBonsSortie());
+        org.junit.jupiter.api.Assertions.assertTrue(stock.isMarges());
+        org.junit.jupiter.api.Assertions.assertFalse(stock.isInventaires());
+    }
 }
