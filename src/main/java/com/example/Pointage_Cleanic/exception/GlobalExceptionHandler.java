@@ -59,15 +59,6 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(body);
     }
 
-    @ExceptionHandler(DemandeValidationConflictException.class)
-    public ResponseEntity<Map<String, Object>> handleDemandeValidationConflict(
-            DemandeValidationConflictException ex) {
-        Map<String, Object> body = new HashMap<>();
-        body.put("error", "DEMANDE_VALIDATION_CONFLICT");
-        body.put("message", ex.getMessage());
-        return ResponseEntity.status(HttpStatus.CONFLICT).body(body);
-    }
-
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<Map<String, Object>> handleIllegalArgument(IllegalArgumentException ex) {
         Map<String, Object> body = new HashMap<>();

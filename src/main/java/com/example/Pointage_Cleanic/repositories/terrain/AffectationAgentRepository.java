@@ -15,4 +15,6 @@ public interface AffectationAgentRepository extends MongoRepository<AffectationA
 
     List<AffectationAgent> findByStatutInAndDateFinGreaterThanEqualAndDateDebutLessThanEqual(
             List<StatutAffectation> statuts, LocalDateTime borneBasse, LocalDateTime borneHaute);
+
+    long countBySiteIdAndStatutNot(String siteId, StatutAffectation statut);
 }

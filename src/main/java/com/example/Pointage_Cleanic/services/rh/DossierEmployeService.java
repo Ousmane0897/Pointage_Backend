@@ -1,15 +1,15 @@
 package com.example.Pointage_Cleanic.services.rh;
 
-import com.example.Pointage_Cleanic.Dto.rh.AlertePeriodeEssaiDossierDto;
+import com.example.Pointage_Cleanic.Dto.rh.AffectationSiteDto;
 import com.example.Pointage_Cleanic.Dto.rh.DossierEmployeBulkImportRequest;
 import com.example.Pointage_Cleanic.Dto.rh.DossierEmployeBulkImportResponse;
 import com.example.Pointage_Cleanic.Dto.rh.DossierEmployeBulkLigneDto;
 import com.example.Pointage_Cleanic.Dto.rh.DossierEmployeDto;
 import com.example.Pointage_Cleanic.Dto.rh.DossierEmployeImportError;
 import com.example.Pointage_Cleanic.Dto.rh.DossierEmployeStatutRequest;
+import com.example.Pointage_Cleanic.Enum.rh.JoursTravail;
 import com.example.Pointage_Cleanic.Enum.rh.SituationMatrimoniale;
 import com.example.Pointage_Cleanic.Enum.rh.StatutDossierEmploye;
-import com.example.Pointage_Cleanic.Enum.rh.StatutPeriodeEssai;
 import com.example.Pointage_Cleanic.Enum.StrategieErreursImport;
 import com.example.Pointage_Cleanic.Mapper.rh.DossierEmployeMapper;
 import com.example.Pointage_Cleanic.entities.rh.DossierEmploye;
@@ -17,6 +17,7 @@ import com.example.Pointage_Cleanic.exception.BulkInsertPartialFailureException;
 import com.example.Pointage_Cleanic.exception.EmployeAlreadyExistsException;
 import com.example.Pointage_Cleanic.exception.ResourceNotFoundException;
 import com.example.Pointage_Cleanic.repositories.rh.DossierEmployeRepository;
+import com.example.Pointage_Cleanic.util.SiteAffecteUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -29,14 +30,12 @@ import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.data.support.PageableExecutionUtils;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
-import java.time.LocalDate;
-import java.time.temporal.ChronoUnit;
+import java.time.LocalTime;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -56,13 +55,9 @@ public class DossierEmployeService {
     private final DossierEmployeRepository dossierEmployeRepository;
     private final DossierEmployeMapper mapper;
     private final MongoTemplate mongoTemplate;
-    private final PeriodeEssaiService periodeEssaiService;
 
     @Value("${rh.import.bulk.max-size:1000}")
     private int bulkMaxSize;
-
-    private static final String COMMENTAIRE_TRANSITION_AUTO =
-            "Transition automatique depuis dossier employé";
 
     // agentId = code agent 4 chiffres, clé du pointage
     private static final java.util.regex.Pattern AGENT_ID_PATTERN =
@@ -85,7 +80,10 @@ public class DossierEmployeService {
             criterias.add(Criteria.where("departement").regex("^" + departement + "$", "i"));
         }
         if (site != null && !site.isBlank()) {
-            criterias.add(Criteria.where("siteAffecte").regex("^" + site + "$", "i"));
+            // Sous-chaîne insensible à la casse (et non plus ancrée ^…$) pour
+            // matcher un employé multi-sites dont le siteAffecte concatène
+            // plusieurs sites (ex. "Sacré-Coeur - Point E" trouvé par "Point E").
+            criterias.add(Criteria.where("siteAffecte").regex(java.util.regex.Pattern.quote(site), "i"));
         }
         if (poste != null && !poste.isBlank()) {
             criterias.add(Criteria.where("poste").regex(poste, "i"));
@@ -124,22 +122,22 @@ public class DossierEmployeService {
         }
         validerCoherenceDureeEssai(dto.getStatut(), dto.getDureeEssaiMois());
         validerCoherenceNombreEnfants(dto.getSituationMatrimoniale(), dto.getNombreEnfants());
+        validerJoursTravail(dto.getJoursTravail());
 
         DossierEmploye entity = mapper.toEntity(dto);
         nettoyerChampsOptionnels(entity);
+        appliquerAffectations(entity, dto);
 
         if (photo != null && !photo.isEmpty()) {
             entity.setPhoto(photo.getBytes());
         }
 
         DossierEmploye saved = dossierEmployeRepository.save(entity);
-        seedPeriodeEssaiSafe(saved);
         return toDtoWithUrl(saved);
     }
 
     public DossierEmployeDto update(String id, DossierEmployeDto dto, MultipartFile photo) throws IOException {
         DossierEmploye existing = requireById(id);
-        StatutDossierEmploye ancienStatut = existing.getStatut();
 
         if (dto.getMatricule() != null && !dto.getMatricule().equals(existing.getMatricule())
                 && dossierEmployeRepository.existsByMatricule(dto.getMatricule())) {
@@ -154,18 +152,24 @@ public class DossierEmployeService {
             }
         }
 
+        // Validation de la valeur entrante avant le merge (null = ignoré par le
+        // merge null-safe → valeur existante conservée, pas de validation requise).
+        validerJoursTravail(dto.getJoursTravail());
+
         mapper.updateEntityFromDto(dto, existing);
         // Règles de cohérence post-mise-à-jour
         validerCoherenceDureeEssai(existing.getStatut(), existing.getDureeEssaiMois());
         validerCoherenceNombreEnfants(existing.getSituationMatrimoniale(), existing.getNombreEnfants());
         nettoyerChampsOptionnels(existing);
+        // Remplacement complet des affectations (le mapper les a ignorées) +
+        // re-dérivation de siteAffecte.
+        appliquerAffectations(existing, dto);
 
         if (photo != null && !photo.isEmpty()) {
             existing.setPhoto(photo.getBytes());
         }
 
         DossierEmploye saved = dossierEmployeRepository.save(existing);
-        synchroniserPeriodeEssaiSafe(saved, ancienStatut);
         return toDtoWithUrl(saved);
     }
 
@@ -176,7 +180,6 @@ public class DossierEmployeService {
 
     public DossierEmployeDto updateStatut(String id, DossierEmployeStatutRequest request) {
         DossierEmploye existing = requireById(id);
-        StatutDossierEmploye ancienStatut = existing.getStatut();
 
         existing.setStatut(request.getStatut());
         if (request.getStatut() == StatutDossierEmploye.EN_PERIODE_ESSAI) {
@@ -189,32 +192,12 @@ public class DossierEmployeService {
         }
 
         DossierEmploye saved = dossierEmployeRepository.save(existing);
-        synchroniserPeriodeEssaiSafe(saved, ancienStatut);
-        return toDtoWithUrl(saved);
-    }
-
-    public DossierEmployeDto titulariser(String id) {
-        DossierEmploye existing = requireById(id);
-        StatutDossierEmploye ancienStatut = existing.getStatut();
-        existing.setStatut(StatutDossierEmploye.ACTIF);
-        existing.setDureeEssaiMois(null);
-        DossierEmploye saved = dossierEmployeRepository.save(existing);
-        synchroniserPeriodeEssaiSafe(saved, ancienStatut);
         return toDtoWithUrl(saved);
     }
 
     public byte[] getPhoto(String id) {
         DossierEmploye d = requireById(id);
         return d.getPhoto();
-    }
-
-    public List<AlertePeriodeEssaiDossierDto> getAlertesPeriodeEssai() {
-        LocalDate today = LocalDate.now();
-        return dossierEmployeRepository
-                .findByStatutAndDureeEssaiMoisIsNotNull(StatutDossierEmploye.EN_PERIODE_ESSAI)
-                .stream()
-                .map(d -> toAlerteDto(d, today))
-                .toList();
     }
 
     public DossierEmploye requireById(String id) {
@@ -228,32 +211,6 @@ public class DossierEmployeService {
             dto.setPhotoUrl("/api/dossier-employe/" + entity.getId() + "/photo");
         }
         return dto;
-    }
-
-    private AlertePeriodeEssaiDossierDto toAlerteDto(DossierEmploye d, LocalDate today) {
-        LocalDate dateFin = null;
-        long joursRestants = 0;
-        if (d.getDateEntree() != null && d.getDureeEssaiMois() != null) {
-            dateFin = d.getDateEntree().plusMonths(d.getDureeEssaiMois());
-            joursRestants = ChronoUnit.DAYS.between(today, dateFin);
-        }
-        String alerteStatut = joursRestants < 0 ? "EXPIRE"
-                : joursRestants <= 15 ? "IMMINENT"
-                : "EN_ESSAI";
-
-        return AlertePeriodeEssaiDossierDto.builder()
-                .id(d.getId())
-                .matricule(d.getMatricule())
-                .nom(d.getNom())
-                .prenom(d.getPrenom())
-                .poste(d.getPoste())
-                .departement(d.getDepartement())
-                .dateEntree(d.getDateEntree())
-                .dureeEssaiMois(d.getDureeEssaiMois())
-                .dateFinEssaiCalculee(dateFin)
-                .joursRestants(joursRestants)
-                .statut(alerteStatut)
-                .build();
     }
 
     private void validerAgentId(String agentId) {
@@ -278,12 +235,104 @@ public class DossierEmployeService {
         }
     }
 
+    /**
+     * Valide que {@code joursTravail}, s'il est présent, appartient à l'ensemble
+     * des valeurs de {@link JoursTravail} ({@code LUN_VEN, LUN_SAM, LUN_DIM}).
+     * Champ optionnel / nullable (rétro-compat) : {@code null}/blank est accepté.
+     */
+    private void validerJoursTravail(String joursTravail) {
+        if (joursTravail == null || joursTravail.isBlank()) return;
+        if (!estJoursTravailValide(joursTravail)) {
+            throw new IllegalArgumentException(
+                    "joursTravail invalide : " + joursTravail
+                            + " (valeurs autorisées : LUN_VEN, LUN_SAM, LUN_DIM)");
+        }
+    }
+
+    private boolean estJoursTravailValide(String joursTravail) {
+        try {
+            JoursTravail.valueOf(joursTravail);
+            return true;
+        } catch (IllegalArgumentException ex) {
+            return false;
+        }
+    }
+
     private void nettoyerChampsOptionnels(DossierEmploye d) {
         if (d.getStatut() != StatutDossierEmploye.EN_PERIODE_ESSAI) {
             d.setDureeEssaiMois(null);
         }
         if (d.getSituationMatrimoniale() != com.example.Pointage_Cleanic.Enum.rh.SituationMatrimoniale.MARIE) {
             d.setNombreEnfants(null);
+        }
+    }
+
+    // =========================================================================
+    //  Affectations multi-sites + dérivation siteAffecte
+    // =========================================================================
+
+    /**
+     * Applique les affectations reçues et maintient {@code siteAffecte} comme
+     * champ dérivé (source de vérité serveur).
+     * <ul>
+     *   <li>Si {@code affectations} est présent/non vide : chaque affectation est
+     *       validée (site obligatoire, cohérence horaire), la liste remplace
+     *       intégralement l'existante, et {@code siteAffecte} est recalculé en
+     *       joignant les noms de sites par {@code " - "} (ordre reçu). Le
+     *       {@code siteAffecte} envoyé par le client est ignoré.</li>
+     *   <li>Sinon (rétro-compat anciens clients) : on honore le {@code siteAffecte}
+     *       reçu tel quel (s'il est fourni) et on en dérive des affectations sans
+     *       horaires pour rester cohérent.</li>
+     * </ul>
+     */
+    private void appliquerAffectations(DossierEmploye entity, DossierEmployeDto dto) {
+        List<AffectationSiteDto> aff = dto.getAffectations();
+        if (aff != null && !aff.isEmpty()) {
+            aff.forEach(this::validerAffectation);
+            entity.setAffectations(mapper.toAffectationEntities(aff));
+            entity.setSiteAffecte(deriverSiteAffecte(aff));
+        } else {
+            if (dto.getSiteAffecte() != null) {
+                entity.setSiteAffecte(dto.getSiteAffecte());
+            }
+            entity.setAffectations(
+                    SiteAffecteUtils.affectationsDepuisSiteAffecte(entity.getSiteAffecte()));
+        }
+    }
+
+    private String deriverSiteAffecte(List<AffectationSiteDto> affectations) {
+        return affectations.stream()
+                .map(AffectationSiteDto::getSite)
+                .map(String::trim)
+                .collect(Collectors.joining(SiteAffecteUtils.SEPARATEUR));
+    }
+
+    private void validerAffectation(AffectationSiteDto affectation) {
+        if (affectation == null || affectation.getSite() == null || affectation.getSite().isBlank()) {
+            throw new IllegalArgumentException("Le site de l'affectation est obligatoire");
+        }
+        String debut = affectation.getHoraireDebut();
+        String fin = affectation.getHoraireFin();
+        boolean debutPresent = debut != null && !debut.isBlank();
+        boolean finPresent = fin != null && !fin.isBlank();
+        // Contrainte de cohérence uniquement si les DEUX horaires sont présents.
+        if (debutPresent && finPresent) {
+            LocalTime tDebut = parseHeure(debut, affectation.getSite());
+            LocalTime tFin = parseHeure(fin, affectation.getSite());
+            if (!tDebut.isBefore(tFin)) {
+                throw new IllegalArgumentException(
+                        "horaireDebut doit être antérieur à horaireFin pour le site "
+                                + affectation.getSite());
+            }
+        }
+    }
+
+    private LocalTime parseHeure(String valeur, String site) {
+        try {
+            return LocalTime.parse(valeur);
+        } catch (DateTimeParseException ex) {
+            throw new IllegalArgumentException(
+                    "Horaire invalide (format attendu HH:mm) pour le site " + site + " : " + valeur);
         }
     }
 
@@ -314,6 +363,12 @@ public class DossierEmployeService {
      * {@code situationMatrimoniale == MARIE} ⇒ {@code nombreEnfants} non null
      * est enforcée ici (alors que {@link #create} se contente de nullifier
      * {@code nombreEnfants} hors MARIE).
+     * <p>
+     * <b>Affectations :</b> l'import bulk ne gère PAS les tranches horaires
+     * (comme la photo). Les {@code affectations} sont dérivées du
+     * {@code siteAffecte} importé (sites sans horaires) via
+     * {@link SiteAffecteUtils#affectationsDepuisSiteAffecte}, pour rester
+     * cohérent avec le CRUD unitaire.
      *
      * @param request   requête contenant les lignes et la stratégie d'erreurs
      * @param userEmail email de l'utilisateur ayant déclenché l'import (audit log)
@@ -393,6 +448,11 @@ public class DossierEmployeService {
                 entity.setSuperieurHierarchiqueNom(buildNomComplet(sup.getNom(), sup.getPrenom()));
             }
             nettoyerChampsOptionnels(entity);
+            // Import bulk : pas de gestion des horaires (comme la photo). Les
+            // affectations sont dérivées du siteAffecte importé (sites sans
+            // horaires) pour rester cohérent avec le CRUD unitaire.
+            entity.setAffectations(
+                    SiteAffecteUtils.affectationsDepuisSiteAffecte(entity.getSiteAffecte()));
             aInserer.add(entity);
         }
 
@@ -436,15 +496,6 @@ public class DossierEmployeService {
                     idsDejaInseres, ex);
         }
 
-        // Auto-création des PeriodeEssai pour les employés EN_PERIODE_ESSAI
-        // insérés dans ce batch. Les erreurs ne cassent pas l'import : l'employé
-        // est déjà persisté, seul le seed peut louper et sera repris au prochain
-        // démarrage par PeriodeEssaiBackfillRunner.
-        for (String idInsere : insertedIds) {
-            dossierEmployeRepository.findById(idInsere)
-                    .ifPresent(this::seedPeriodeEssaiSafe);
-        }
-
         long durationMs = System.currentTimeMillis() - t0;
         log.info("Import bulk RH terminé : total={}, inserted={}, failed={}, durée={}ms, user={}",
                 total, insertedIds.size(), allErrors.size(), durationMs, userEmail);
@@ -455,58 +506,6 @@ public class DossierEmployeService {
 
         return new DossierEmployeBulkImportResponse(
                 total, insertedIds.size(), allErrors.size(), insertedIds, allErrors);
-    }
-
-    // =========================================================================
-    //  Synchronisation PeriodeEssai (auto-création / auto-clôture)
-    // =========================================================================
-
-    private void seedPeriodeEssaiSafe(DossierEmploye dossier) {
-        try {
-            periodeEssaiService.seedFromDossier(dossier);
-        } catch (RuntimeException ex) {
-            log.warn("Auto-création PeriodeEssai échouée pour employé {} : {}",
-                    dossier.getId(), ex.getMessage());
-        }
-    }
-
-    /**
-     * Synchronise la PeriodeEssai active selon la transition de statut côté
-     * DossierEmploye. À utiliser après tout save qui peut faire entrer ou
-     * sortir l'employé du statut EN_PERIODE_ESSAI.
-     */
-    private void synchroniserPeriodeEssaiSafe(
-            DossierEmploye saved, StatutDossierEmploye ancienStatut) {
-        try {
-            if (saved.getStatut() == StatutDossierEmploye.EN_PERIODE_ESSAI) {
-                periodeEssaiService.seedFromDossier(saved);
-                return;
-            }
-            if (ancienStatut == StatutDossierEmploye.EN_PERIODE_ESSAI) {
-                StatutPeriodeEssai cible = mapStatutSortantVersCible(saved.getStatut());
-                if (cible != null) {
-                    periodeEssaiService.applyTransitionStatutForEmploye(
-                            saved.getId(), cible, currentUserName(), COMMENTAIRE_TRANSITION_AUTO);
-                }
-            }
-        } catch (RuntimeException ex) {
-            log.warn("Synchronisation PeriodeEssai échouée pour employé {} : {}",
-                    saved.getId(), ex.getMessage());
-        }
-    }
-
-    private StatutPeriodeEssai mapStatutSortantVersCible(StatutDossierEmploye nouveauStatut) {
-        if (nouveauStatut == null) return null;
-        return switch (nouveauStatut) {
-            case ACTIF -> StatutPeriodeEssai.TITULARISE;
-            case SUSPENDU, SORTI -> StatutPeriodeEssai.NON_RENOUVELE;
-            case EN_PERIODE_ESSAI -> null;
-        };
-    }
-
-    private String currentUserName() {
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        return auth != null ? auth.getName() : "system";
     }
 
     private void validerGardeFousRequete(DossierEmployeBulkImportRequest request) {
@@ -582,6 +581,15 @@ public class DossierEmployeService {
             errorsByLine.get(index).add(new DossierEmployeImportError(
                     index, dto.getMatricule(), "nombreEnfants", "VALIDATION_CONDITIONNELLE",
                     "nombreEnfants est obligatoire lorsque situationMatrimoniale = MARIE"));
+        }
+
+        // joursTravail : optionnel (le front ne l'importe pas). Validé seulement
+        // s'il est présent, pour ne pas casser le template existant.
+        String joursTravail = dto.getJoursTravail();
+        if (joursTravail != null && !joursTravail.isBlank() && !estJoursTravailValide(joursTravail)) {
+            errorsByLine.get(index).add(new DossierEmployeImportError(
+                    index, dto.getMatricule(), "joursTravail", "VALEUR_INVALIDE",
+                    "joursTravail invalide (valeurs autorisées : LUN_VEN, LUN_SAM, LUN_DIM)"));
         }
     }
 

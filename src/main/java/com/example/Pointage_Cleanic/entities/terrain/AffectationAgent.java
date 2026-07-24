@@ -37,6 +37,11 @@ public class AffectationAgent {
     private String motifRemplacement;
     private String commentaire;
 
+    /** Traçabilité de l'annulation — renseignée uniquement par {@code PlanningService.annuler}. */
+    private String motifAnnulation;
+    private LocalDateTime dateAnnulation;
+    private String annuleParNom;
+
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

@@ -6,6 +6,7 @@ import com.example.Pointage_Cleanic.entities.rh.DossierEmploye;
 import com.example.Pointage_Cleanic.exception.ResourceNotFoundException;
 import com.example.Pointage_Cleanic.repositories.PointageRepository;
 import com.example.Pointage_Cleanic.repositories.rh.DossierEmployeRepository;
+import com.example.Pointage_Cleanic.util.SiteAffecteUtils;
 import com.lowagie.text.PageSize;
 import com.lowagie.text.Phrase;
 import com.lowagie.text.pdf.PdfPCell;
@@ -255,17 +256,14 @@ public class PointageServices {
 
         /**
          * Découpe le champ {@code siteAffecte} du dossier-employé (chaîne
-         * « / »-séparée) en tableau de sites pour {@code Pointage.site[]}.
+         * multi-sites) en tableau de sites pour {@code Pointage.site[]}.
+         * Délègue à {@link SiteAffecteUtils#decouper} (séparateurs tolérants
+         * {@code /}, {@code ,} ou {@code " - "} — le tiret collé est préservé,
+         * ex. « Sacré-Coeur »).
          * Ex. "Keur gorgui / yoff / bgfi tann" → ["Keur gorgui","yoff","bgfi tann"].
          */
         static String[] decouperSites(String siteAffecte) {
-            if (siteAffecte == null || siteAffecte.isBlank()) {
-                return new String[0];
-            }
-            return Arrays.stream(siteAffecte.split("/"))
-                    .map(String::trim)
-                    .filter(s -> !s.isEmpty())
-                    .toArray(String[]::new);
+            return SiteAffecteUtils.decouper(siteAffecte).toArray(new String[0]);
         }
 
         public Pointage enregistrerPointage(

@@ -26,7 +26,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class DemandeCongeService {
 
-    private static final int JOURS_ACQUIS_PAR_AN = 30;
+    private static final int JOURS_ACQUIS_PAR_AN = 22;
 
     private final DemandeCongeRepository demandeCongeRepository;
     private final DossierEmployeRepository dossierEmployeRepository;
@@ -150,7 +150,7 @@ public class DemandeCongeService {
                 .acquis(JOURS_ACQUIS_PAR_AN)
                 .pris(pris)
                 .enCours(enCours)
-                .solde(JOURS_ACQUIS_PAR_AN - pris - enCours)
+                .solde(Math.max(0, JOURS_ACQUIS_PAR_AN - pris - enCours))
                 .build();
     }
 

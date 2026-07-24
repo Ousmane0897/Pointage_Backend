@@ -34,9 +34,6 @@ public interface DossierEmployeRepository extends MongoRepository<DossierEmploye
 
     List<DossierEmploye> findByStatutIn(List<StatutDossierEmploye> statuts);
 
-    // Employés actuellement en période d'essai (pour alertes)
-    List<DossierEmploye> findByStatutAndDureeEssaiMoisIsNotNull(StatutDossierEmploye statut);
-
     // Subordonnés d'un employé donné (organigramme)
     List<DossierEmploye> findBySuperieurHierarchiqueId(String superieurHierarchiqueId);
 
