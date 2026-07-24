@@ -9,10 +9,13 @@ import com.example.Pointage_Cleanic.entities.productionchimie.EtapeFormulation;
 import com.example.Pointage_Cleanic.entities.productionchimie.FicheFormulation;
 import com.example.Pointage_Cleanic.entities.productionchimie.IngredientFormulation;
 import com.example.Pointage_Cleanic.entities.productionchimie.VersionFormulation;
+import com.example.Pointage_Cleanic.entities.productionchimie.MatierePremiere;
 import com.example.Pointage_Cleanic.exception.EmployeAlreadyExistsException;
 import com.example.Pointage_Cleanic.exception.EntiteReferenceeException;
+import com.example.Pointage_Cleanic.exception.FormulationInvalideException;
 import com.example.Pointage_Cleanic.exception.ResourceNotFoundException;
 import com.example.Pointage_Cleanic.repositories.productionchimie.FormulationRepository;
+import com.example.Pointage_Cleanic.repositories.productionchimie.MatierePremiereRepository;
 import com.example.Pointage_Cleanic.util.PageResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -25,13 +28,16 @@ import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 
 @Slf4j
 @Service
@@ -43,6 +49,9 @@ public class FormulationService {
     private final FormulationRepository repository;
     private final FormulationMapper mapper;
     private final MongoTemplate mongoTemplate;
+    private final FormulationCalculService calculService;
+    private final MatierePremiereRepository matiereRepository;
+    private final ParametresProductionChimieService parametresService;
 
     public PageResponse<FicheFormulationDto> list(int page, int size, String q, StatutFormulation statut) {
         Pageable pageable = PageRequest.of(page, size, Sort.by("nom").ascending());
@@ -64,15 +73,15 @@ public class FormulationService {
         List<FicheFormulation> results = mongoTemplate.find(query, FicheFormulation.class);
         Query countQuery = Query.of(query).limit(-1).skip(-1);
         long total = mongoTemplate.count(countQuery, FicheFormulation.class);
-        return new PageResponse<>(results.stream().map(mapper::toDto).toList(), total);
+        return new PageResponse<>(results.stream().map(this::toDtoAvecSynthese).toList(), total);
     }
 
     public List<FicheFormulationDto> listValidees() {
-        return repository.findByStatut(StatutFormulation.VALIDEE).stream().map(mapper::toDto).toList();
+        return repository.findByStatut(StatutFormulation.VALIDEE).stream().map(this::toDtoAvecSynthese).toList();
     }
 
     public FicheFormulationDto getById(String id) {
-        return mapper.toDto(loadOrThrow(id));
+        return toDtoAvecSynthese(loadOrThrow(id));
     }
 
     public FicheFormulation loadOrThrow(String id) {
@@ -84,7 +93,9 @@ public class FormulationService {
         if (repository.existsByCode(dto.getCode())) {
             throw new EmployeAlreadyExistsException("Code formulation déjà utilisé : " + dto.getCode());
         }
+        validerLignesComplement(dto.getIngredients());
         FicheFormulation entity = mapper.toEntity(dto);
+        normaliserLignesComplement(entity);
         entity.setId(null);
         entity.setVersionCourante(1);
         entity.setVersions(new ArrayList<>());
@@ -97,7 +108,7 @@ public class FormulationService {
         entity.setCreatedBy(user);
         entity.setUpdatedAt(now);
         entity.setUpdatedBy(user);
-        return mapper.toDto(repository.save(entity));
+        return toDtoAvecSynthese(repository.save(entity));
     }
 
     public FicheFormulationDto update(String id, FicheFormulationDto dto) {
@@ -107,6 +118,7 @@ public class FormulationService {
                 && repository.existsByCode(dto.getCode())) {
             throw new EmployeAlreadyExistsException("Code formulation déjà utilisé : " + dto.getCode());
         }
+        validerLignesComplement(dto.getIngredients());
 
         if (entity.getVersions() == null) {
             entity.setVersions(new ArrayList<>());
@@ -114,11 +126,12 @@ public class FormulationService {
         entity.getVersions().add(snapshotVersionCourante(entity, dto.getMotif()));
 
         mapper.updateEntityFromDto(dto, entity);
+        normaliserLignesComplement(entity);
 
         entity.setVersionCourante(entity.getVersionCourante() + 1);
         entity.setUpdatedAt(LocalDateTime.now());
         entity.setUpdatedBy(currentUser());
-        return mapper.toDto(repository.save(entity));
+        return toDtoAvecSynthese(repository.save(entity));
     }
 
     public void delete(String id) {
@@ -161,7 +174,7 @@ public class FormulationService {
         entity.setVersionCourante(entity.getVersionCourante() + 1);
         entity.setUpdatedAt(LocalDateTime.now());
         entity.setUpdatedBy(currentUser());
-        return mapper.toDto(repository.save(entity));
+        return toDtoAvecSynthese(repository.save(entity));
     }
 
     public ComparaisonVersions comparerVersions(String id, Integer v1, Integer v2) {
@@ -271,6 +284,8 @@ public class FormulationService {
                     .unite(i.getUnite())
                     .ordre(i.getOrdre())
                     .remarque(i.getRemarque())
+                    .ingredientComplement(i.isIngredientComplement())
+                    .qs(i.isQs())
                     .build());
         }
         return copy;
@@ -292,6 +307,65 @@ public class FormulationService {
                     .build());
         }
         return copy;
+    }
+
+    /** Mappe l'entité en DTO et y attache la synthèse dérivée (MA, eau qsp, contrôle du total). Jamais persistée. */
+    private FicheFormulationDto toDtoAvecSynthese(FicheFormulation entity) {
+        FicheFormulationDto dto = mapper.toDto(entity);
+        Map<String, MatierePremiere> mpById = chargerMatieres(entity.getIngredients());
+        dto.setSynthese(calculService.calculer(
+                entity.getIngredients(), entity.getQuantiteRef(), mpById, toleranceCourante()));
+        return dto;
+    }
+
+    private Map<String, MatierePremiere> chargerMatieres(List<IngredientFormulation> ingredients) {
+        if (ingredients == null || ingredients.isEmpty()) {
+            return Map.of();
+        }
+        Set<String> ids = new LinkedHashSet<>();
+        for (IngredientFormulation ing : ingredients) {
+            if (ing.getMatierePremiereId() != null) {
+                ids.add(ing.getMatierePremiereId());
+            }
+        }
+        if (ids.isEmpty()) {
+            return Map.of();
+        }
+        Map<String, MatierePremiere> map = new HashMap<>();
+        for (MatierePremiere mp : matiereRepository.findAllById(ids)) {
+            map.put(mp.getId(), mp);
+        }
+        return map;
+    }
+
+    /** Tolérance courante du contrôle du total, lue depuis le paramétrage global éditable (défaut ± 0,1 %). */
+    private BigDecimal toleranceCourante() {
+        Double pct = parametresService.getOrCreate().getToleranceTotalPct();
+        return pct == null ? null : BigDecimal.valueOf(pct);
+    }
+
+    /** Règle Fonction B : au plus une ligne « ingrédient de complément (qsp) » par formule. */
+    private void validerLignesComplement(List<IngredientFormulation> ingredients) {
+        if (ingredients == null) {
+            return;
+        }
+        long nb = ingredients.stream().filter(IngredientFormulation::isIngredientComplement).count();
+        if (nb > 1) {
+            throw new FormulationInvalideException(
+                    "Une seule ligne de complément (qsp) est autorisée par formule (" + nb + " trouvées).");
+        }
+    }
+
+    /** La quantité d'une ligne de complément est dérivée (Fonction B) : jamais stockée en base. */
+    private void normaliserLignesComplement(FicheFormulation entity) {
+        if (entity.getIngredients() == null) {
+            return;
+        }
+        for (IngredientFormulation ing : entity.getIngredients()) {
+            if (ing.isIngredientComplement()) {
+                ing.setDosage(null);
+            }
+        }
     }
 
     private String currentUser() {

@@ -12,6 +12,7 @@ import org.mapstruct.NullValuePropertyMappingStrategy;
 public interface FormulationMapper {
 
     @Mapping(target = "motif", ignore = true)
+    @Mapping(target = "synthese", ignore = true)
     FicheFormulationDto toDto(FicheFormulation entity);
 
     @Mapping(target = "versions", ignore = true)

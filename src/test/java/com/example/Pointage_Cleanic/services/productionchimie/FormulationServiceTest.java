@@ -9,7 +9,9 @@ import com.example.Pointage_Cleanic.Mapper.productionchimie.FormulationMapperImp
 import com.example.Pointage_Cleanic.entities.productionchimie.EtapeFormulation;
 import com.example.Pointage_Cleanic.entities.productionchimie.FicheFormulation;
 import com.example.Pointage_Cleanic.entities.productionchimie.IngredientFormulation;
+import com.example.Pointage_Cleanic.entities.productionchimie.ParametresProductionChimie;
 import com.example.Pointage_Cleanic.repositories.productionchimie.FormulationRepository;
+import com.example.Pointage_Cleanic.repositories.productionchimie.MatierePremiereRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -26,6 +28,7 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -34,6 +37,9 @@ class FormulationServiceTest {
     @Mock private FormulationRepository repository;
     @Spy private FormulationMapper mapper = new FormulationMapperImpl();
     @Mock private MongoTemplate mongoTemplate;
+    @Spy private FormulationCalculService calculService = new FormulationCalculService();
+    @Mock private MatierePremiereRepository matiereRepository;
+    @Mock private ParametresProductionChimieService parametresService;
 
     @InjectMocks
     private FormulationService service;
@@ -42,6 +48,9 @@ class FormulationServiceTest {
 
     @BeforeEach
     void setUp() {
+        lenient().when(matiereRepository.findAllById(any())).thenReturn(new ArrayList<>());
+        lenient().when(parametresService.getOrCreate()).thenReturn(
+                ParametresProductionChimie.builder().toleranceTotalPct(0.1).build());
         existante = FicheFormulation.builder()
                 .id("F-1").code("FORM-1").nom("Eau de Javel")
                 .versionCourante(1)

@@ -56,6 +56,9 @@ public class FicheFormulationDto {
 
     private List<VersionFormulation> versions;
 
+    /** Synthèse dérivée (MA, eau qsp, contrôle du total). ⚠️ Calculée, jamais persistée. Lecture seule. */
+    private SyntheseFormulation synthese;
+
     private LocalDateTime createdAt;
     private String createdBy;
     private LocalDateTime updatedAt;

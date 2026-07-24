@@ -30,6 +30,11 @@ public class MatierePremiere {
     private Double seuilCritique;
     private String fournisseur;
 
+    /** Concentration en matière active (%, 0–100). Nombre, jamais texte. Null si non renseignée. */
+    private Double matiereActivePct;
+    /** La MP entre-t-elle dans le calcul de la matière active d'une formule (Fonction A). */
+    private boolean compterDansMa;
+
     @JsonIgnore
     private byte[] ficheSecurite;
     private String ficheSecuriteNom;
