@@ -40,6 +40,10 @@ public class PlanningService {
     private static final List<StatutAffectation> STATUTS_ANNULABLES =
             List.of(StatutAffectation.PLANIFIEE, StatutAffectation.EN_COURS);
 
+    /** Seuls ces statuts peuvent être modifiés : une prestation terminée/annulée/remplacée est figée. */
+    private static final List<StatutAffectation> STATUTS_MODIFIABLES =
+            List.of(StatutAffectation.PLANIFIEE, StatutAffectation.EN_COURS);
+
     private static final int LONGUEUR_MIN_MOTIF_ANNULATION = 5;
 
     private final AffectationAgentRepository repository;
@@ -135,6 +139,12 @@ public class PlanningService {
 
     public AffectationAgentDto update(String id, AffectationAgentDto dto) {
         AffectationAgent entity = loadOrThrow(id);
+        // Garde de statut : une affectation figée (EFFECTUEE / ANNULEE / REMPLACEE) ne se modifie plus.
+        // On teste le statut STOCKÉ (avant mapping du DTO), pas celui du corps de la requête.
+        if (!STATUTS_MODIFIABLES.contains(entity.getStatut())) {
+            throw new TerrainConflitException(
+                    "Modification impossible : l'affectation est au statut " + entity.getStatut());
+        }
         mapper.updateEntityFromDto(dto, entity);
         validerEtDenormaliser(entity);
         verifierConflit(entity, id);
