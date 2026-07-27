@@ -1,6 +1,5 @@
 package com.example.Pointage_Cleanic.controllers.rh.gestionpersonnel;
 
-import com.example.Pointage_Cleanic.Dto.rh.AlertePeriodeEssaiDossierDto;
 import com.example.Pointage_Cleanic.Dto.rh.DossierEmployeBulkImportRequest;
 import com.example.Pointage_Cleanic.Dto.rh.DossierEmployeBulkImportResponse;
 import com.example.Pointage_Cleanic.Dto.rh.DossierEmployeDto;
@@ -19,7 +18,6 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
-import java.util.List;
 
 @RestController
 @RequestMapping("/api/gestion-personnel/employes")
@@ -59,7 +57,7 @@ public class DossierEmployeController {
     @PutMapping(value = "/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<DossierEmployeDto> update(
             @PathVariable String id,
-            @RequestPart("employe") String dossierJson,
+            @RequestPart("dossier") String dossierJson,
             @RequestPart(value = "photo", required = false) MultipartFile photo
     ) throws IOException {
         DossierEmployeDto dto = objectMapper.readValue(dossierJson, DossierEmployeDto.class);
@@ -80,11 +78,6 @@ public class DossierEmployeController {
         return ResponseEntity.ok(service.updateStatut(id, request));
     }
 
-    @PutMapping("/{id}/titulariser")
-    public ResponseEntity<DossierEmployeDto> titulariser(@PathVariable String id) {
-        return ResponseEntity.ok(service.titulariser(id));
-    }
-
     @GetMapping("/{id}/photo")
     public ResponseEntity<byte[]> getPhoto(@PathVariable String id) {
         byte[] photo = service.getPhoto(id);
@@ -94,11 +87,6 @@ public class DossierEmployeController {
         return ResponseEntity.ok()
                 .contentType(MediaType.IMAGE_JPEG)
                 .body(photo);
-    }
-
-    @GetMapping("/alertes-essai")
-    public ResponseEntity<List<AlertePeriodeEssaiDossierDto>> getAlertesEssai() {
-        return ResponseEntity.ok(service.getAlertesPeriodeEssai());
     }
 
     /**

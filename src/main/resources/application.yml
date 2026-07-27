@@ -41,6 +41,11 @@ rh:
     bulk:
       # Taille maximale d'un import bulk de dossiers employés (POST /api/dossier-employe/bulk).
       max-size: 1000
+  pointage:
+    # Tolérance de retard (minutes) sur le pointage centralisé RH : un retard n'est marqué
+    # (statut RETARD + comptage dans resume.retards) que si retardBrut > ce seuil. 15 pile
+    # = non retard. Ajustable sans recompilation (env RH_POINTAGE_TOLERANCE_RETARD_MINUTES).
+    tolerance-retard-minutes: 15
 
 
 logging:

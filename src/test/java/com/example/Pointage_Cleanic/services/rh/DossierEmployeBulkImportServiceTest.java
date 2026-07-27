@@ -47,13 +47,12 @@ class DossierEmployeBulkImportServiceTest {
     @Mock DossierEmployeRepository repository;
     @Mock DossierEmployeMapper mapper;
     @Mock MongoTemplate mongoTemplate;
-    @Mock PeriodeEssaiService periodeEssaiService;
 
     DossierEmployeService service;
 
     @BeforeEach
     void setUp() {
-        service = new DossierEmployeService(repository, mapper, mongoTemplate, periodeEssaiService);
+        service = new DossierEmployeService(repository, mapper, mongoTemplate);
         ReflectionTestUtils.setField(service, "bulkMaxSize", 1000);
 
         // Mapper mock : copie les champs du DTO vers l'entité (suffisant pour valider le flux).

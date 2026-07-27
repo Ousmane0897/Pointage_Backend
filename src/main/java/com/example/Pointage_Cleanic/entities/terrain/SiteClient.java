@@ -52,6 +52,9 @@ public class SiteClient {
     private String frequencePersonnalisee;
     private String specificites;
 
+    /** Plafond optionnel du nombre d'employés rattachés au site (null = pas de plafond). */
+    private Integer nombreMaxEmployes;
+
     private boolean actif;
 
     private LocalDateTime createdAt;

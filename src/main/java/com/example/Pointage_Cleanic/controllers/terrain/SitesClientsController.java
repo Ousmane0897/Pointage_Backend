@@ -1,8 +1,11 @@
 package com.example.Pointage_Cleanic.controllers.terrain;
 
+import com.example.Pointage_Cleanic.Dto.terrain.EffectifSiteDto;
 import com.example.Pointage_Cleanic.Dto.terrain.SiteClientDto;
 import com.example.Pointage_Cleanic.Enum.terrain.FrequencePassage;
+import com.example.Pointage_Cleanic.Enum.terrain.PerimetreEffectif;
 import com.example.Pointage_Cleanic.entities.terrain.SiteClient;
+import com.example.Pointage_Cleanic.services.terrain.EffectifSiteService;
 import com.example.Pointage_Cleanic.services.terrain.SiteClientService;
 import com.example.Pointage_Cleanic.util.PageResponse;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -23,6 +26,7 @@ import java.util.List;
 public class SitesClientsController {
 
     private final SiteClientService service;
+    private final EffectifSiteService effectifSiteService;
     private final ObjectMapper objectMapper;
 
     @GetMapping
@@ -44,6 +48,15 @@ public class SitesClientsController {
     @GetMapping("/{id}")
     public SiteClientDto getById(@PathVariable String id) {
         return service.getById(id);
+    }
+
+    @GetMapping("/{id}/effectif")
+    public EffectifSiteDto effectif(
+            @PathVariable String id,
+            @RequestParam PerimetreEffectif perimetre,
+            @RequestParam(required = false) String excludeEmployeId,
+            @RequestParam(required = false) String excludeAffectationId) {
+        return effectifSiteService.calculer(id, perimetre, excludeEmployeId, excludeAffectationId);
     }
 
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)

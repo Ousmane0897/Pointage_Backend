@@ -8,7 +8,7 @@ import lombok.NoArgsConstructor;
 /**
  * Sous-flags du module RH (6.1 → 6.4), portés dans le claim JWT {@code modules.rh}.
  * Auparavant {@code modulesAutorises.rh} était un simple booléen ; il est désormais un
- * objet imbriqué de 19 sous-flags par fonctionnalité, exactement comme {@code stock} /
+ * objet imbriqué de 17 sous-flags par fonctionnalité, exactement comme {@code stock} /
  * {@code terrain} / {@code productionChimie}. Le gating fin est délégué au frontend Angular
  * (cf. CLAUDE.md) — aucune logique métier ne dépend de ces valeurs côté serveur.
  *
@@ -27,8 +27,6 @@ public class Rh {
     private boolean dossierEmploye;
     private boolean contrats;
     private boolean organigramme;
-    private boolean periodeEssai;
-    private boolean titularisations;
     private boolean documents;
 
     // --- 6.2 Temps & Présences ---

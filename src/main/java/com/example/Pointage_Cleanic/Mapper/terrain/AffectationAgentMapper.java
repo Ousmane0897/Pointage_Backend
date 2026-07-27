@@ -13,13 +13,21 @@ public interface AffectationAgentMapper {
 
     AffectationAgentDto toDto(AffectationAgent entity);
 
+    // Les 3 champs d'annulation sont en sortie seule : renseignés par PlanningService.annuler
+    // depuis le JWT, jamais depuis le corps d'un POST/PUT (sinon l'auteur serait usurpable).
     @Mapping(target = "createdAt", ignore = true)
     @Mapping(target = "updatedAt", ignore = true)
+    @Mapping(target = "motifAnnulation", ignore = true)
+    @Mapping(target = "dateAnnulation", ignore = true)
+    @Mapping(target = "annuleParNom", ignore = true)
     AffectationAgent toEntity(AffectationAgentDto dto);
 
     @BeanMapping(nullValuePropertyMappingStrategy = NullValuePropertyMappingStrategy.IGNORE)
     @Mapping(target = "id", ignore = true)
     @Mapping(target = "createdAt", ignore = true)
     @Mapping(target = "updatedAt", ignore = true)
+    @Mapping(target = "motifAnnulation", ignore = true)
+    @Mapping(target = "dateAnnulation", ignore = true)
+    @Mapping(target = "annuleParNom", ignore = true)
     void updateEntityFromDto(AffectationAgentDto dto, @MappingTarget AffectationAgent entity);
 }

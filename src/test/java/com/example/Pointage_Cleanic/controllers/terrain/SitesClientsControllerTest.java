@@ -4,6 +4,7 @@ import com.example.Pointage_Cleanic.Dto.terrain.SiteClientDto;
 import com.example.Pointage_Cleanic.security.JwtRequestFilter;
 import com.example.Pointage_Cleanic.security.JwtUtil;
 import com.example.Pointage_Cleanic.services.MyUserDetailsService;
+import com.example.Pointage_Cleanic.services.terrain.EffectifSiteService;
 import com.example.Pointage_Cleanic.services.terrain.SiteClientService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
@@ -39,6 +40,9 @@ class SitesClientsControllerTest {
 
     @MockBean
     private SiteClientService service;
+
+    @MockBean
+    private EffectifSiteService effectifSiteService;
 
     // === Sécurité (OBLIGATOIRE en WebMvcTest même avec addFilters=false)
     @MockBean private MyUserDetailsService myUserDetailsService;
