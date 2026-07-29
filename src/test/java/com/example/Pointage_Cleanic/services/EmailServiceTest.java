@@ -46,7 +46,8 @@ class EmailServiceTest {
         assertEquals("test@example.com", sentMessage.getTo()[0]);
         assertEquals("Sujet X", sentMessage.getSubject());
         assertEquals("Hello World", sentMessage.getText());
-        assertEquals("tonEmail@gmail.com", sentMessage.getFrom());
+        // Expéditeur = spring.mail.username, avec repli sur le compte Cleanic hors Spring.
+        assertEquals("cleanicsarl24@gmail.com", sentMessage.getFrom());
     }
 
 

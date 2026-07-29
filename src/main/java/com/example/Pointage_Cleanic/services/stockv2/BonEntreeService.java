@@ -39,6 +39,7 @@ public class BonEntreeService {
     private final ReferentielSiteService referentielSite;
     private final MouvementBonGenerator mouvementGenerator;
     private final StockNotificationService notificationService;
+    private final BonMailNotificationService mailNotificationService;
     private final CompteurStockService compteurService;
     private final MongoTemplate mongoTemplate;
 
@@ -100,7 +101,9 @@ public class BonEntreeService {
                 .updatedAt(now)
                 .build();
         bon.getHistorique().add(support.historique(ActionWorkflow.CREATION, null));
-        return mapper.toDto(repository.save(bon));
+        BonEntree saved = repository.save(bon);
+        mailNotificationService.notifierCreationEntree(saved);
+        return mapper.toDto(saved);
     }
 
     public BonEntreeDto modifier(String id, BonEntreePayload payload) {

@@ -1,5 +1,6 @@
 package com.example.Pointage_Cleanic.repositories;
 
+import com.example.Pointage_Cleanic.Enum.RoleAdmin;
 import com.example.Pointage_Cleanic.entities.Utilisateur;
 import org.springframework.data.mongodb.repository.MongoRepository;
 
@@ -12,4 +13,7 @@ public interface UtilisateurRepository extends MongoRepository<Utilisateur, Stri
     Optional<Utilisateur> findByEmail(String email);
 
     List<Utilisateur> findAllByEmail(String email);
+
+    /** Comptes actifs portant un rôle donné (destinataires des notifications e-mail). */
+    List<Utilisateur> findByRoleAndActiveTrue(RoleAdmin role);
 }
