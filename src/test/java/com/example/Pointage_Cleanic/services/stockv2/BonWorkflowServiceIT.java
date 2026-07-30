@@ -34,6 +34,7 @@ import org.springframework.data.mongodb.core.query.Query;
 
 import java.util.List;
 
+import static com.example.Pointage_Cleanic.services.stockv2.StockBalanceService.ENTREPOT;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -99,7 +100,7 @@ class BonWorkflowServiceIT extends MongoTestContainer {
         BonEntreeDto valide = bonEntreeService.valider(cree.getId(), null);
 
         assertThat(valide.getStatut()).isEqualTo(StatutBon.EFFECTIF);
-        assertThat(balanceService.quantite(produitId, SITE_A)).isEqualTo(20.0);
+        assertThat(balanceService.quantite(produitId, ENTREPOT)).isEqualTo(20.0);
 
         List<MouvementStock> mvts = mouvementRepository.findByProduitIdOrderByDateDesc(produitId);
         assertThat(mvts).hasSize(1);
@@ -121,7 +122,25 @@ class BonWorkflowServiceIT extends MongoTestContainer {
         BonSortieDto valide = bonSortieService.valider(sortie.getId(), null);
 
         assertThat(valide.getStatut()).isEqualTo(StatutBon.EFFECTIF);
-        assertThat(balanceService.quantite(produitId, SITE_A)).isEqualTo(12.0);
+        assertThat(balanceService.quantite(produitId, ENTREPOT)).isEqualTo(12.0);
+    }
+
+    @Test
+    void bon_entree_credite_l_entrepot_et_pas_le_site_destination() {
+        BonEntreeDto cree = bonEntreeService.creer(entreePayload(20));
+        bonEntreeService.soumettre(cree.getId());
+        bonEntreeService.valider(cree.getId(), null);
+
+        // Le stock entre dans l'entrepôt unique...
+        assertThat(balanceService.quantite(produitId, ENTREPOT)).isEqualTo(20.0);
+        // ...et non sur le site de destination du bon, qui reste purement documentaire.
+        assertThat(balanceService.quantite(produitId, SITE_A)).isZero();
+        assertThat(balanceService.soldesDuProduit(produitId)).hasSize(1);
+
+        // Le site reste tracé sur le mouvement (analyses, historique).
+        MouvementStock mvt = mouvementRepository.findByProduitIdOrderByDateDesc(produitId).get(0);
+        assertThat(mvt.getSiteDestinationId()).isEqualTo(SITE_A);
+        assertThat(mvt.getSiteDestinationNom()).isEqualTo("Dakar Plateau");
     }
 
     @Test
@@ -135,7 +154,7 @@ class BonWorkflowServiceIT extends MongoTestContainer {
         // Rien validé : statut inchangé, aucun mouvement, solde nul.
         assertThat(bonSortieService.getById(sortie.getId()).getStatut()).isEqualTo(StatutBon.SOUMIS);
         assertThat(mouvementRepository.findByProduitIdOrderByDateDesc(produitId)).isEmpty();
-        assertThat(balanceService.quantite(produitId, SITE_A)).isZero();
+        assertThat(balanceService.quantite(produitId, ENTREPOT)).isZero();
     }
 
     @Test

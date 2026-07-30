@@ -24,6 +24,8 @@ import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import static com.example.Pointage_Cleanic.services.stockv2.StockBalanceService.ENTREPOT;
+
 /**
  * Génère les {@link MouvementStock} 7.3 (un par ligne) lors du passage d'un bon en EFFECTIF.
  * C'est le seul point qui touche le stock pour un bon : il réutilise le mécanisme de solde 7.3
@@ -45,7 +47,14 @@ public class MouvementBonGenerator {
     private final ProduitStockRepository produitRepository;
     private final ValorisationSupport valorisationSupport;
 
-    /** Bon d'entrée -> mouvements ENTREE créditant le site destination, avec recalcul du coût courant. */
+    /**
+     * Bon d'entrée -> mouvements ENTREE créditant l'entrepôt, avec recalcul du coût courant.
+     * <p>
+     * Le site de destination du bon est purement documentaire (destination prévue de la
+     * réception) : il est recopié sur le mouvement pour la traçabilité, mais le stock entre
+     * toujours dans l'entrepôt unique ({@code siteId = null}), comme pour un mouvement direct
+     * ou un stock initial d'import.
+     */
     public void genererPourEntree(BonEntree bon) {
         Map<String, ProduitStock> produits = produitsParId(bon.getLignes());
         List<MouvementStock> sauvegardes = new ArrayList<>();
@@ -53,9 +62,9 @@ public class MouvementBonGenerator {
         List<LigneBon> deltasAppliques = new ArrayList<>();
         try {
             for (LigneBon ligne : bon.getLignes()) {
-                // Stock AVANT l'entrée (pour le CUMP), puis application du delta.
+                // Stock AVANT l'entrée (pour le CUMP), puis application du delta sur l'entrepôt.
                 double stockAvant = balanceService.quantiteTotale(ligne.getProduitId());
-                balanceService.appliquerDelta(ligne.getProduitId(), bon.getSiteDestinationId(), ligne.getQuantite());
+                balanceService.appliquerDelta(ligne.getProduitId(), ENTREPOT, ligne.getQuantite());
                 deltasAppliques.add(ligne);
 
                 MouvementStock mvt = baseMouvement(bon.getReference(), bon.getId(), bon.getDate(), ligne);
@@ -81,7 +90,7 @@ public class MouvementBonGenerator {
             recalculs.forEach(valorisationSupport::compenserEntree);
             Collections.reverse(deltasAppliques);
             deltasAppliques.forEach(ligne ->
-                    balanceService.appliquerDelta(ligne.getProduitId(), bon.getSiteDestinationId(), -ligne.getQuantite()));
+                    balanceService.appliquerDelta(ligne.getProduitId(), ENTREPOT, -ligne.getQuantite()));
             throw ex;
         }
     }
