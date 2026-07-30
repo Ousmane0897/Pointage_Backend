@@ -36,6 +36,13 @@ google:
     api:
       key: "AIzaSyAijDeBFgsJUYLqS6Nn3EQfi56cPPMtN_Q"
 
+app:
+  frontend:
+    # URL publique du front, utilisée pour le lien « Ouvrir le bon » des e-mails de
+    # notification (création d'un bon d'entrée / de sortie). Si vide, le mail part sans
+    # lien plutôt qu'avec un lien cassé.
+    base-url: ${APP_FRONTEND_BASE_URL:http://localhost:4200}
+
 rh:
   import:
     bulk:

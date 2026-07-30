@@ -156,7 +156,7 @@ Le `MouvementStock` 7.3 reste l'**effet instantané** en stock. Un `Bon` (entré
 ### Bons d'entrée — `/api/stock/bons-entree` (`BonEntreeController`)
 - `GET ?page&size&q&statut&type&siteId&dateDebut&dateFin` → `PageResponse<BonEntreeDto>` (`q` = référence/fournisseur ; `siteId` = site destination ; tri date desc).
 - `GET /{id}`.
-- `POST` (`BonEntreePayload`) → **201**, statut `BROUILLON`, `reference` attribuée, `historique[CREATION]`.
+- `POST` (`BonEntreePayload`) → **201**, statut `BROUILLON`, `reference` attribuée, `historique[CREATION]`, **mail de notification** (voir « Notification e-mail à la création » ci-dessous).
 - `PUT /{id}` → **409** si statut ≠ BROUILLON ; sinon re-dénormalise + `historique[MODIFICATION]`.
 - `DELETE /{id}` → **204** ; **409** si ≠ BROUILLON.
 - `POST /{id}/soumettre` → `BROUILLON→SOUMIS` (sinon **409**), `historique[SOUMISSION]`, WS `BON_SOUMIS`.
@@ -165,6 +165,39 @@ Le `MouvementStock` 7.3 reste l'**effet instantané** en stock. Un `Bon` (entré
 
 ### Bons de sortie — `/api/stock/bons-sortie` (`BonSortieController`)
 Mêmes routes/transitions ; `siteId` du GET = site source. `BonSortiePayload` porte `siteSourceId`, `destinataire`, `motif`. **La validation génère des mouvements SORTIE** débitant le site source et renvoie **422** si le stock est insuffisant (pré-vérification cumulée par produit AVANT toute écriture → rien n'est validé).
+
+### Notification e-mail à la création d'un bon (`BonMailNotificationService`)
+
+Déclenchée **uniquement** par le `POST` des deux contrôleurs de bons (jamais par
+`modifier` / `soumettre` / `valider` / `refuser`), juste après le `save`.
+
+- **Destinataires** — l'adresse de **connexion** de chaque profil habilité à traiter les bons :
+  - `SUPERADMIN` : `UserRepository.findByRoleIgnoreCase("SUPERADMIN")` sur la collection
+    `login` — c'est le **seul** endroit où ce rôle existe (il n'est pas dans `RoleAdmin`) ;
+  - `CONTROLEUR_STOCK` : `UtilisateurRepository.findByRoleAndActiveTrue(RoleAdmin.CONTROLEUR_STOCK)`
+    sur la collection `utilisateur` (comptes **actifs** seulement).
+
+  Adresses vides ignorées, dédoublonnage insensible à la casse, **un envoi par destinataire**
+  (`EmailService` ne gère qu'une adresse et cela évite d'exposer les adresses entre elles).
+  L'auteur du bon n'est pas exclu de la liste.
+- **Contenu** — HTML récapitulatif (référence, type, date, site source/destination,
+  destinataire ou fournisseur, nombre de lignes, montant total en FCFA, auteur issu de
+  `historique[CREATION]`) + bouton « Ouvrir le bon » vers
+  `{app.frontend.base-url}/admin/stock-v2/controle-mouvements/bons-{entree|sortie}/{id}`.
+  Les valeurs métier saisies librement (fournisseur, nom de client…) sont **échappées**.
+  Si `app.frontend.base-url` est vide, le mail part **sans lien** plutôt qu'avec un lien cassé.
+- **Technique** — `EmailService.sendHtmlEmail`, **synchrone**, même mécanique que le mail
+  « mot de passe oublié » (`ResetPasswordService`). L'expéditeur est désormais
+  `spring.mail.username` (repli `cleanicsarl24@gmail.com`) au lieu d'être codé en dur.
+- ⚠️ **Tolérance aux pannes** : chaque envoi, et la méthode entière, sont enveloppés dans un
+  `try/catch` + `log.warn` (convention `StockNotificationService`). **Un incident SMTP ou
+  Mongo ne doit jamais faire échouer la création du bon** — c'est le point vérifié par
+  `BonMailNotificationServiceTest`.
+- **Configuration** : `app.frontend.base-url` — **URL publique de l'application** (celle que
+  l'utilisateur ouvre dans son navigateur), à ne pas confondre avec celle de l'API.
+  Défaut `http://localhost:4200` en dev, `https://pointic-cleanic.com` en prod (aligné sur les
+  origines autorisées par le CORS de `SecurityConfig`) ; surchargeable par la variable
+  d'environnement `APP_FRONTEND_BASE_URL`.
 
 ### Workflow (Kanban unifié) — `/api/stock/workflow/bons` (`WorkflowStockController`)
 - `GET ?statut&sens&q` → `BonWorkflowDto[]` **non paginé** (entrées + sorties agrégées, tri date desc). `libelleType` = libellé du type ; `siteNom` = destination (entrée)/source (sortie) ; `destinataireNom` (sorties).
