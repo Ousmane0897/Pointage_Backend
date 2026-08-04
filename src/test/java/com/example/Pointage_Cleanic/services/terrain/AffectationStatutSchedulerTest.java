@@ -102,6 +102,19 @@ class AffectationStatutSchedulerTest {
         }
     }
 
+    @Test
+    void regle_sans_dateFin_reste_en_cours_indefiniment() {
+        // Affectation à durée indéterminée : elle démarre puis ne se clôture jamais
+        // toute seule — la clôture reste une action humaine.
+        StatutAffectation demarrage = AffectationStatutScheduler.appliquerRegle(
+                StatutAffectation.PLANIFIEE, NOW.minusDays(30), null, NOW);
+        assertThat(demarrage).isEqualTo(StatutAffectation.EN_COURS);
+
+        StatutAffectation maintien = AffectationStatutScheduler.appliquerRegle(
+                StatutAffectation.EN_COURS, NOW.minusDays(30), null, NOW);
+        assertThat(maintien).isEqualTo(StatutAffectation.EN_COURS);
+    }
+
     // --- B. Job complet : sélection, idempotence, updatedAt -------------------
 
     @Test

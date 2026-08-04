@@ -33,7 +33,7 @@ public class AffectationAgentDto {
     @NotNull
     private LocalDateTime dateDebut;
 
-    @NotNull
+    /** Optionnelle : absente = affectation à durée indéterminée. */
     private LocalDateTime dateFin;
 
     private StatutAffectation statut;
