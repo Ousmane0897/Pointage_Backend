@@ -56,6 +56,8 @@ public class RhDeserializer extends JsonDeserializer<Rh> {
         rh.setPointageCentralise(value);
         rh.setAbsences(value);
         rh.setConges(value);
+        rh.setCongesValidation(value);
+        rh.setCongesMesDemandes(value);
         rh.setHeuresSupplementaires(value);
         rh.setRecapitulatif(value);
         rh.setGrilleSalariale(value);
@@ -80,6 +82,8 @@ public class RhDeserializer extends JsonDeserializer<Rh> {
         rh.setPointageCentralise(node.path("pointageCentralise").asBoolean(false));
         rh.setAbsences(node.path("absences").asBoolean(false));
         rh.setConges(node.path("conges").asBoolean(false));
+        rh.setCongesValidation(node.path("congesValidation").asBoolean(false));
+        rh.setCongesMesDemandes(node.path("congesMesDemandes").asBoolean(false));
         rh.setHeuresSupplementaires(node.path("heuresSupplementaires").asBoolean(false));
         rh.setRecapitulatif(node.path("recapitulatif").asBoolean(false));
         rh.setGrilleSalariale(node.path("grilleSalariale").asBoolean(false));

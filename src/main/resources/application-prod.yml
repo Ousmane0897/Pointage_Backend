@@ -20,3 +20,9 @@ google:
   maps:
     api:
       key: "AIzaSyAijDeBFgsJUYLqS6Nn3EQfi56cPPMtN_Q"
+
+app:
+  frontend:
+    base-url: ${APP_FRONTEND_BASE_URL:https://pointic-cleanic.com}
+  conges:
+    jours-acquis-par-an: ${CONGES_JOURS_ACQUIS_PAR_AN:22}

@@ -10,6 +10,7 @@ import com.example.Pointage_Cleanic.repositories.rh.DemandeCongeRepository;
 import com.example.Pointage_Cleanic.repositories.rh.DossierEmployeRepository;
 import com.example.Pointage_Cleanic.Enum.rh.StatutDossierEmploye;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
@@ -17,7 +18,6 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
-import java.time.temporal.ChronoUnit;
 import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -26,27 +26,24 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class DemandeCongeService {
 
-    private static final int JOURS_ACQUIS_PAR_AN = 30;
-
     private final DemandeCongeRepository demandeCongeRepository;
     private final DossierEmployeRepository dossierEmployeRepository;
+    private final CongeMapper mapper;
+    private final CongeWorkflowService workflowService;
 
+    /**
+     * Jours de congé acquis par année pleine, en <b>jours ouvrés</b>.
+     * Configurable — la valeur historique de 30 jours était erronée.
+     */
+    @Value("${app.conges.jours-acquis-par-an:22}")
+    private int joursAcquisParAn;
+
+    /**
+     * Dépôt d'une demande : délégué au circuit de validation, qui résout le demandeur
+     * depuis le JWT, fige le validateur de niveau 1 et pose le statut initial.
+     */
     public DemandeCongeDto create(DemandeCongeDto dto) {
-        DossierEmploye employe = dossierEmployeRepository.findById(dto.getEmployeId())
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        "Dossier employé introuvable : " + dto.getEmployeId()));
-
-        DemandeConge demande = toEntity(dto);
-        // Snapshot employé
-        demande.setMatricule(employe.getMatricule());
-        demande.setNom(employe.getNom());
-        demande.setPrenom(employe.getPrenom());
-        demande.setDepartement(employe.getDepartement());
-        demande.setNombreJours(computeNombreJours(demande.getDateDebut(), demande.getDateFin()));
-        demande.setDateDemande(LocalDate.now());
-        if (demande.getStatut() == null) demande.setStatut(StatutDemande.EN_ATTENTE);
-
-        return toDto(demandeCongeRepository.save(demande));
+        return workflowService.creer(dto);
     }
 
     public DemandeCongeDto getById(String id) {
@@ -74,32 +71,24 @@ public class DemandeCongeService {
         return toDto(demandeCongeRepository.save(existing));
     }
 
+    /** Annulation : le circuit vérifie que l'appelant est le demandeur (ou RH/super-admin). */
     public void delete(String id) {
-        DemandeConge demande = demandeCongeRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Demande de congé introuvable : " + id));
-        demandeCongeRepository.delete(demande);
+        workflowService.annuler(id);
     }
 
-    public DemandeCongeDto approuver(String id, String decideurId, String decideurNom, String commentaire) {
-        DemandeConge demande = demandeCongeRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Demande de congé introuvable : " + id));
-        demande.setStatut(StatutDemande.APPROUVE);
-        demande.setDateDecision(LocalDate.now());
-        demande.setDecideurId(decideurId);
-        demande.setDecideurNom(decideurNom);
-        demande.setCommentaireDecision(commentaire);
-        return toDto(demandeCongeRepository.save(demande));
+    /** Valide le niveau courant du circuit — le niveau est déduit serveur du statut. */
+    public DemandeCongeDto valider(String id, String commentaire) {
+        return workflowService.valider(id, commentaire);
     }
 
-    public DemandeCongeDto refuser(String id, String decideurId, String decideurNom, String commentaire) {
-        DemandeConge demande = demandeCongeRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Demande de congé introuvable : " + id));
-        demande.setStatut(StatutDemande.REFUSE);
-        demande.setDateDecision(LocalDate.now());
-        demande.setDecideurId(decideurId);
-        demande.setDecideurNom(decideurNom);
-        demande.setCommentaireDecision(commentaire);
-        return toDto(demandeCongeRepository.save(demande));
+    /** @deprecated remplacé par {@link #valider(String, String)}. */
+    @Deprecated
+    public DemandeCongeDto approuver(String id, String commentaire) {
+        return workflowService.valider(id, commentaire);
+    }
+
+    public DemandeCongeDto refuser(String id, String motif) {
+        return workflowService.refuser(id, motif);
     }
 
     public SoldeCongeDto getSolde(String employeId) {
@@ -135,8 +124,10 @@ public class DemandeCongeService {
                 .mapToInt(c -> c.getNombreJours() != null ? c.getNombreJours() : 0)
                 .sum();
 
+        // Toute demande encore dans le circuit réserve des jours — pas seulement celles
+        // au premier niveau, sinon une demande en cours de validation disparaîtrait du solde.
         int enCours = congesAnnee.stream()
-                .filter(c -> c.getStatut() == StatutDemande.EN_ATTENTE)
+                .filter(c -> c.getStatut() != null && c.getStatut().estEnCours())
                 .mapToInt(c -> c.getNombreJours() != null ? c.getNombreJours() : 0)
                 .sum();
 
@@ -147,10 +138,10 @@ public class DemandeCongeService {
                 .prenom(employe.getPrenom())
                 .departement(employe.getDepartement())
                 .anneeReference(annee)
-                .acquis(JOURS_ACQUIS_PAR_AN)
+                .acquis(joursAcquisParAn)
                 .pris(pris)
                 .enCours(enCours)
-                .solde(JOURS_ACQUIS_PAR_AN - pris - enCours)
+                .solde(joursAcquisParAn - pris - enCours)
                 .build();
     }
 
@@ -159,16 +150,20 @@ public class DemandeCongeService {
      * Filtrage en mémoire ; intervalle [dateDebut, dateFin] = chevauchement.
      */
     public Page<DemandeCongeDto> searchDemandes(
-            String employeId, String departement, String statut, String type,
-            LocalDate dateDebut, LocalDate dateFin, String q, int page, int size) {
+            String employeId, String departement, List<String> statuts, String type,
+            LocalDate dateDebut, LocalDate dateFin, String q, String niveau, int page, int size) {
 
         List<DemandeCongeDto> filtered = demandeCongeRepository.findAll().stream()
                 .map(this::toDto)
                 .filter(d -> employeId == null || employeId.isBlank() || employeId.equals(d.getEmployeId()))
                 .filter(d -> departement == null || departement.isBlank()
                         || (d.getDepartement() != null && d.getDepartement().equalsIgnoreCase(departement)))
-                .filter(d -> statut == null || statut.isBlank()
-                        || (d.getStatut() != null && d.getStatut().name().equalsIgnoreCase(statut)))
+                .filter(d -> statuts == null || statuts.isEmpty()
+                        || (d.getStatut() != null
+                            && statuts.stream().anyMatch(s -> d.getStatut().name().equalsIgnoreCase(s))))
+                .filter(d -> niveau == null || niveau.isBlank()
+                        || (d.getNiveauCourant() != null
+                            && d.getNiveauCourant().name().equalsIgnoreCase(niveau)))
                 .filter(d -> type == null || type.isBlank()
                         || (d.getType() != null && d.getType().name().equalsIgnoreCase(type)))
                 .filter(d -> dateDebut == null || (d.getDateFin() != null && !d.getDateFin().isBefore(dateDebut)))
@@ -182,6 +177,7 @@ public class DemandeCongeService {
         int start = (int) pageable.getOffset();
         int end = Math.min(start + pageable.getPageSize(), filtered.size());
         List<DemandeCongeDto> content = start >= filtered.size() ? List.of() : filtered.subList(start, end);
+        content.forEach(workflowService::decorer);
         return new PageImpl<>(content, pageable, filtered.size());
     }
 
@@ -193,29 +189,12 @@ public class DemandeCongeService {
                 || (matricule != null && matricule.toLowerCase().contains(s));
     }
 
+    /** Jours ouvrés (week-ends exclus) — même unité que le solde acquis. */
     private int computeNombreJours(LocalDate debut, LocalDate fin) {
-        if (debut == null || fin == null) return 0;
-        return (int) ChronoUnit.DAYS.between(debut, fin) + 1;
+        return CongeCalendrier.joursOuvres(debut, fin);
     }
 
     private DemandeCongeDto toDto(DemandeConge e) {
-        return DemandeCongeDto.builder()
-                .id(e.getId()).employeId(e.getEmployeId()).matricule(e.getMatricule())
-                .nom(e.getNom()).prenom(e.getPrenom()).departement(e.getDepartement())
-                .type(e.getType()).dateDebut(e.getDateDebut()).dateFin(e.getDateFin())
-                .nombreJours(e.getNombreJours()).motif(e.getMotif()).statut(e.getStatut())
-                .dateDemande(e.getDateDemande()).dateDecision(e.getDateDecision())
-                .decideurId(e.getDecideurId()).decideurNom(e.getDecideurNom())
-                .commentaireDecision(e.getCommentaireDecision())
-                .build();
-    }
-
-    private DemandeConge toEntity(DemandeCongeDto dto) {
-        return DemandeConge.builder()
-                .employeId(dto.getEmployeId()).matricule(dto.getMatricule())
-                .nom(dto.getNom()).prenom(dto.getPrenom()).departement(dto.getDepartement())
-                .type(dto.getType()).dateDebut(dto.getDateDebut()).dateFin(dto.getDateFin())
-                .motif(dto.getMotif()).statut(dto.getStatut())
-                .build();
+        return mapper.toDto(e);
     }
 }

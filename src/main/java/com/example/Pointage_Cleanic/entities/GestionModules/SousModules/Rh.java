@@ -8,7 +8,7 @@ import lombok.NoArgsConstructor;
 /**
  * Sous-flags du module RH (6.1 → 6.4), portés dans le claim JWT {@code modules.rh}.
  * Auparavant {@code modulesAutorises.rh} était un simple booléen ; il est désormais un
- * objet imbriqué de 19 sous-flags par fonctionnalité, exactement comme {@code stock} /
+ * objet imbriqué de 21 sous-flags par fonctionnalité, exactement comme {@code stock} /
  * {@code terrain} / {@code productionChimie}. Le gating fin est délégué au frontend Angular
  * (cf. CLAUDE.md) — aucune logique métier ne dépend de ces valeurs côté serveur.
  *
@@ -35,6 +35,14 @@ public class Rh {
     private boolean pointageCentralise;
     private boolean absences;
     private boolean conges;
+    /**
+     * File de validation des congés. Posé automatiquement à l'émission du JWT pour tout
+     * employé encadrant au moins un subordonné (cf. {@code LoginController}) : un manager
+     * n'a pas besoin qu'on lui coche un droit RH pour valider les congés de son équipe.
+     */
+    private boolean congesValidation;
+    /** Écran « Mes demandes de congé » (auto-service du collaborateur). */
+    private boolean congesMesDemandes;
     private boolean heuresSupplementaires;
     private boolean recapitulatif;
 

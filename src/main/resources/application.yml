@@ -42,6 +42,15 @@ rh:
       # Taille maximale d'un import bulk de dossiers employés (POST /api/dossier-employe/bulk).
       max-size: 1000
 
+app:
+  frontend:
+    # URL publique de l'application : sert à construire les liens des e-mails de
+    # notification. Vide ⇒ les mails partent sans bouton d'accès direct.
+    base-url: ${APP_FRONTEND_BASE_URL:http://localhost:4200}
+  conges:
+    # Jours de congé acquis par année pleine, en jours ouvrés (week-ends exclus).
+    jours-acquis-par-an: ${CONGES_JOURS_ACQUIS_PAR_AN:22}
+
 
 logging:
   level:

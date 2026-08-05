@@ -4,12 +4,14 @@ import com.example.Pointage_Cleanic.Dto.AuthRequest;
 import com.example.Pointage_Cleanic.Dto.AuthResponse;
 import com.example.Pointage_Cleanic.Dto.AuthResponse2;
 import com.example.Pointage_Cleanic.Dto.ChangePasswordRequest;
+import com.example.Pointage_Cleanic.entities.GestionModules.ModulesAutorises;
 import com.example.Pointage_Cleanic.entities.Utilisateur;
 import com.example.Pointage_Cleanic.entities.User;
 import com.example.Pointage_Cleanic.repositories.*;
 import com.example.Pointage_Cleanic.security.JwtUtil;
 import com.example.Pointage_Cleanic.services.LoginService;
 import com.example.Pointage_Cleanic.services.MyUserDetailsService;
+import com.example.Pointage_Cleanic.services.rh.CongeModuleEnricher;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -38,6 +40,7 @@ public class LoginController {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final UtilisateurRepository utilisateurRepository;
+    private final CongeModuleEnricher congeModuleEnricher;
 
 
     @PostMapping
@@ -59,8 +62,9 @@ public class LoginController {
 
         if (utilisateur.isPresent()) {
             Utilisateur utilisateur1 = utilisateur.get();
-            String jwt = jwtUtil.generateToken(userDetails,utilisateur1.getPrenom(), utilisateur1.getNom(), utilisateur1.getRole(), utilisateur1.getEmail(), utilisateur1.getPoste(), utilisateur1.isMustChangePassword(), utilisateur1.getModulesAutorises() );
-            System.out.println("MODULES BACKEND = " + utilisateur1.getModulesAutorises());
+            ModulesAutorises modules = congeModuleEnricher.enrichir(
+                    utilisateur1.getModulesAutorises(), utilisateur1.getEmail());
+            String jwt = jwtUtil.generateToken(userDetails,utilisateur1.getPrenom(), utilisateur1.getNom(), utilisateur1.getRole(), utilisateur1.getEmail(), utilisateur1.getPoste(), utilisateur1.isMustChangePassword(), modules );
             return ResponseEntity.ok(new AuthResponse(jwt));
         }
 
