@@ -5,7 +5,9 @@ import com.example.Pointage_Cleanic.Dto.stockv2.BonEntreePayload;
 import com.example.Pointage_Cleanic.Dto.stockv2.DecisionPayload;
 import com.example.Pointage_Cleanic.Enum.stockv2.StatutBon;
 import com.example.Pointage_Cleanic.Enum.stockv2.TypeEntree;
+import com.example.Pointage_Cleanic.Dto.stockv2.MotifPayload;
 import com.example.Pointage_Cleanic.services.stockv2.BonEntreeService;
+import com.example.Pointage_Cleanic.services.stockv2.SuppressionDefinitiveService;
 import com.example.Pointage_Cleanic.util.PageResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -29,6 +31,7 @@ import java.time.LocalDate;
 public class BonEntreeController {
 
     private final BonEntreeService service;
+    private final SuppressionDefinitiveService suppressionService;
 
     @GetMapping
     public ResponseEntity<PageResponse<BonEntreeDto>> list(
@@ -61,6 +64,18 @@ public class BonEntreeController {
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> supprimer(@PathVariable String id) {
         service.supprimer(id);
+        return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * Suppression d'un bon quel que soit son statut, <b>super-administrateur uniquement</b> : les
+     * mouvements d'entrée générés à la validation sont contre-passés (422 si la marchandise a déjà
+     * été consommée) et l'opération est journalisée.
+     */
+    @PostMapping("/{id}/suppression-definitive")
+    public ResponseEntity<Void> supprimerDefinitivement(@PathVariable String id,
+                                                        @RequestBody(required = false) MotifPayload payload) {
+        suppressionService.supprimerBonEntree(id, payload == null ? null : payload.getMotif());
         return ResponseEntity.noContent().build();
     }
 

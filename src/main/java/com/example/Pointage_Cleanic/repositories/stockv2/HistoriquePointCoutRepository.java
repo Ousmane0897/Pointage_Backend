@@ -3,6 +3,7 @@ package com.example.Pointage_Cleanic.repositories.stockv2;
 import com.example.Pointage_Cleanic.entities.stockv2.HistoriquePointCout;
 import org.springframework.data.mongodb.repository.MongoRepository;
 
+import java.util.Collection;
 import java.util.List;
 
 public interface HistoriquePointCoutRepository extends MongoRepository<HistoriquePointCout, String> {
@@ -10,4 +11,7 @@ public interface HistoriquePointCoutRepository extends MongoRepository<Historiqu
     List<HistoriquePointCout> findByProduitIdOrderByDateAsc(String produitId);
 
     List<HistoriquePointCout> findByProduitIdOrderByCreatedAtDesc(String produitId);
+
+    /** Points de coût rattachés à des mouvements supprimés (contre-passement d'un bon d'entrée). */
+    List<HistoriquePointCout> findByReferenceMouvementIn(Collection<String> referencesMouvement);
 }

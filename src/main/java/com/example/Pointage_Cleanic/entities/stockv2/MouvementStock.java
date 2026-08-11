@@ -58,7 +58,10 @@ public class MouvementStock {
     private LocalDateTime createdAt;
 
     // --- 7.4 Contrôle des mouvements (champs optionnels, rétro-compatibles) ---
-    /** "DIRECT" = saisie directe 7.3 ; "BON" = généré par la validation d'un bon 7.4. */
+    /**
+     * "DIRECT" = saisie directe 7.3 ; "BON" = généré par la validation d'un bon 7.4 ;
+     * "INVENTAIRE" = ajustement généré par la clôture d'un inventaire 7.3.
+     */
     private String origine;
     /** Id du bon source (si origine = BON). */
     @Indexed
@@ -69,6 +72,12 @@ public class MouvementStock {
     private TypeEntree categorieEntree;
     /** Catégorie typée du bon de sortie à l'origine du mouvement. */
     private TypeSortie categorieSortie;
+
+    /** Id de l'inventaire dont la clôture a généré l'ajustement (si origine = INVENTAIRE). */
+    @Indexed
+    private String inventaireId;
+    /** Référence de l'inventaire source : INV-AAAAMMJJ-XXX (si origine = INVENTAIRE). */
+    private String inventaireReference;
 
     // --- 7.5 : traçabilité analytique (recopiée depuis le bon de sortie) ---
     /** Nature du don, recopiée si le bon source est de type DON (sinon null). */

@@ -162,6 +162,18 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(body);
     }
 
+    /**
+     * Le handler générique {@code RuntimeException → 500} capture tout ce qui n'est pas déclaré
+     * ici : sans cette entrée, le refus de suppression définitive sortirait en 500.
+     */
+    @ExceptionHandler(StockAccesRefuseException.class)
+    public ResponseEntity<Map<String, Object>> handleStockAccesRefuse(StockAccesRefuseException ex) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("error", "STOCK_ACCES_REFUSE");
+        body.put("message", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(body);
+    }
+
     @ExceptionHandler(StockOperationException.class)
     public ResponseEntity<Map<String, Object>> handleStockOperation(StockOperationException ex) {
         Map<String, Object> body = new HashMap<>();
