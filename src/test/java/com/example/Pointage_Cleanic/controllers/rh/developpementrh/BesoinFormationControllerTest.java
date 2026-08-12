@@ -55,7 +55,7 @@ class BesoinFormationControllerTest {
     void create_ok() throws Exception {
         when(besoinFormationService.create(any())).thenReturn(dto("b-1"));
 
-        mockMvc.perform(post("/api/developpement-rh/besoins-formation")
+        mockMvc.perform(post("/api/developpement-rh/formations/besoins")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto(null))))
                 .andExpect(status().isCreated())
@@ -68,7 +68,7 @@ class BesoinFormationControllerTest {
         when(besoinFormationService.search(any(), any(), any()))
                 .thenReturn(List.of(dto("b-1")));
 
-        mockMvc.perform(get("/api/developpement-rh/besoins-formation"))
+        mockMvc.perform(get("/api/developpement-rh/formations/besoins"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].id").value("b-1"));
     }
@@ -78,7 +78,7 @@ class BesoinFormationControllerTest {
         when(besoinFormationService.getByEmploye("emp-1"))
                 .thenReturn(List.of(dto("b-1")));
 
-        mockMvc.perform(get("/api/developpement-rh/besoins-formation/employe/emp-1"))
+        mockMvc.perform(get("/api/developpement-rh/formations/besoins/employe/emp-1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].employeId").value("emp-1"));
     }
@@ -90,7 +90,7 @@ class BesoinFormationControllerTest {
         when(besoinFormationService.changerStatut(eq("b-1"), eq(StatutBesoin.PLANIFIE)))
                 .thenReturn(planifie);
 
-        mockMvc.perform(put("/api/developpement-rh/besoins-formation/b-1/statut")
+        mockMvc.perform(put("/api/developpement-rh/formations/besoins/b-1/statut")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of("statut", "PLANIFIE"))))
                 .andExpect(status().isOk())
