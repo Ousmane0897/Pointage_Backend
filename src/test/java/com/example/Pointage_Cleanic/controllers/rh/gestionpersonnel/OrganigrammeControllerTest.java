@@ -43,7 +43,8 @@ class OrganigrammeControllerTest {
 
         Mockito.when(organigrammeService.getOrganigramme("")).thenReturn(List.of(node));
 
-        mockMvc.perform(get("/api/organigramme"))
+        // La liste plate est sur /departements ; la base sert l'arbre (cf. get_arbre_ok).
+        mockMvc.perform(get("/api/gestion-personnel/organigramme/departements"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(1))
                 .andExpect(jsonPath("$[0].nomComplet").value("DIOP Mamadou"));
@@ -59,7 +60,7 @@ class OrganigrammeControllerTest {
 
         Mockito.when(organigrammeService.getOrganigramme("Dakar")).thenReturn(List.of(node));
 
-        mockMvc.perform(get("/api/organigramme?departement=Dakar"))
+        mockMvc.perform(get("/api/gestion-personnel/organigramme/departements?departement=Dakar"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].agence").value("Dakar"));
     }
@@ -80,7 +81,7 @@ class OrganigrammeControllerTest {
 
         Mockito.when(organigrammeService.getArbre()).thenReturn(List.of(racine));
 
-        mockMvc.perform(get("/api/organigramme/arbre"))
+        mockMvc.perform(get("/api/gestion-personnel/organigramme"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(1))
                 .andExpect(jsonPath("$[0].sousOrdres.length()").value(1));

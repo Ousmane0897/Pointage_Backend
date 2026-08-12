@@ -12,8 +12,20 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Besoins de formation — sous-ressource des formations.
+ *
+ * <p>⚠ Ce contrôleur était mappé sur {@code /api/developpement-rh/tableau-bord} : les besoins
+ * étaient donc inatteignables sous l'URL que le front appelle, et son {@code GET} de base répondait
+ * à la place du tableau de bord RH. Le chemin ci-dessous est celui du client déployé
+ * ({@code formation.service.ts}), seul contrat qui fasse foi.
+ *
+ * <p>Le segment littéral {@code besoins} prime sur le {@code /{id}} de {@code FormationController},
+ * qui partage la base {@code /formations} : Spring ordonne les patterns du plus spécifique au moins
+ * spécifique.
+ */
 @RestController
-@RequestMapping("/api/developpement-rh/tableau-bord")
+@RequestMapping("/api/developpement-rh/formations/besoins")
 @RequiredArgsConstructor
 public class BesoinFormationController {
 

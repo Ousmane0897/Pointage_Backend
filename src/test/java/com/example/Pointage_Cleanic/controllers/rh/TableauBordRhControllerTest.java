@@ -50,7 +50,7 @@ class TableauBordRhControllerTest {
                 .build();
         when(tableauBordRhService.calculer(any(), any(), any(), any())).thenReturn(kpis);
 
-        mockMvc.perform(get("/api/tableau-bord-rh"))
+        mockMvc.perform(get("/api/developpement-rh/tableau-bord"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.effectifTotal").value(42))
                 .andExpect(jsonPath("$.turnover").value(3.5))
@@ -66,7 +66,7 @@ class TableauBordRhControllerTest {
                 eq("Nettoyage"), eq("DKR-01")))
                 .thenReturn(KpiRhDto.builder().effectifTotal(10L).build());
 
-        mockMvc.perform(get("/api/tableau-bord-rh")
+        mockMvc.perform(get("/api/developpement-rh/tableau-bord")
                         .param("dateDebut", "2026-04-01")
                         .param("dateFin", "2026-04-30")
                         .param("departement", "Nettoyage")

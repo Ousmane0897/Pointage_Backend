@@ -12,8 +12,16 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDate;
 
+/**
+ * KPI du tableau de bord RH (6.4).
+ *
+ * <p>⚠ Mappé auparavant sur {@code /api/tableau-bord-rh}, que <b>rien n'appelait</b> : le front
+ * interroge {@code /api/developpement-rh/tableau-bord} ({@code tableau-bord-rh.service.ts}), URL
+ * alors occupée par {@code BesoinFormationController}, dont le {@code GET} renvoyait une liste de
+ * besoins de formation en lieu et place des KPI.
+ */
 @RestController
-@RequestMapping("/api/tableau-bord-rh")
+@RequestMapping("/api/developpement-rh/tableau-bord")
 @RequiredArgsConstructor
 public class TableauBordRhController {
 
