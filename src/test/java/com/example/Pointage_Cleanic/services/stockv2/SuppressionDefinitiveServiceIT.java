@@ -187,26 +187,35 @@ class SuppressionDefinitiveServiceIT extends MongoTestContainer {
         assertThat(mouvementRepository.findById(ajustement.getId())).isEmpty();
     }
 
+    /**
+     * ⚠ Les soldes des bons se lisent sur l'{@link StockBalanceService#ENTREPOT} (lieu de stockage
+     * unique) et non sur le site du bon : une entrée y crédite tout, une sortie y puise. Le site
+     * reste à zéro, c'est un destinataire, pas un emplacement.
+     */
     @Test
-    void suppression_bon_sortie_effectif_recredite_le_stock() {
+    void suppression_bon_sortie_effectif_recredite_l_entrepot() {
         entreeEffective(20);
         BonSortieDto sortie = sortieEffective(8);
-        assertThat(balanceService.quantite(produitId, SITE_A)).isEqualTo(12.0);
+        assertThat(balanceService.quantite(produitId, StockBalanceService.ENTREPOT)).isEqualTo(12.0);
 
         suppressionService.supprimerBonSortie(sortie.getId(), MOTIF);
 
-        assertThat(balanceService.quantite(produitId, SITE_A)).isEqualTo(20.0);
+        assertThat(balanceService.quantite(produitId, StockBalanceService.ENTREPOT)).isEqualTo(20.0);
+        // Aucun stock fantôme créé sur le site source du bon.
+        assertThat(balanceService.quantite(produitId, SITE_A)).isZero();
         assertThat(mouvementRepository.findByBonId(sortie.getId())).isEmpty();
         assertThat(bonSortieRepository.findById(sortie.getId())).isEmpty();
         assertThat(logRepository.findByDocumentId(sortie.getId())).hasSize(1);
     }
 
     @Test
-    void suppression_bon_entree_effectif_retire_le_stock_recu() {
+    void suppression_bon_entree_effectif_retire_le_stock_recu_de_l_entrepot() {
         BonEntreeDto entree = entreeEffective(20);
+        assertThat(balanceService.quantite(produitId, StockBalanceService.ENTREPOT)).isEqualTo(20.0);
 
         suppressionService.supprimerBonEntree(entree.getId(), MOTIF);
 
+        assertThat(balanceService.quantite(produitId, StockBalanceService.ENTREPOT)).isZero();
         assertThat(balanceService.quantite(produitId, SITE_A)).isZero();
         assertThat(mouvementRepository.findByBonId(entree.getId())).isEmpty();
         assertThat(bonEntreeRepository.findById(entree.getId())).isEmpty();
@@ -223,7 +232,7 @@ class SuppressionDefinitiveServiceIT extends MongoTestContainer {
         // Rien touché : le bon et son mouvement sont toujours là, le solde est intact.
         assertThat(bonEntreeRepository.findById(entree.getId())).isPresent();
         assertThat(mouvementRepository.findByBonId(entree.getId())).hasSize(1);
-        assertThat(balanceService.quantite(produitId, SITE_A)).isEqualTo(5.0);
+        assertThat(balanceService.quantite(produitId, StockBalanceService.ENTREPOT)).isEqualTo(5.0);
     }
 
     @Test
@@ -237,6 +246,7 @@ class SuppressionDefinitiveServiceIT extends MongoTestContainer {
         suppressionService.supprimerBonSortie(brouillon.getId(), MOTIF);
 
         assertThat(bonSortieRepository.findById(brouillon.getId())).isEmpty();
+        assertThat(balanceService.quantite(produitId, StockBalanceService.ENTREPOT)).isZero();
         assertThat(balanceService.quantite(produitId, SITE_A)).isZero();
         assertThat(logRepository.findByDocumentId(brouillon.getId())).singleElement()
                 .satisfies(l -> assertThat(l.getNbMouvementsContrePasses()).isZero());
