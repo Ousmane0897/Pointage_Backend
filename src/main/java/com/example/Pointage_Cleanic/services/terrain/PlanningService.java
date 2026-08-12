@@ -92,10 +92,11 @@ public class PlanningService {
                                   String employeId, String siteId, StatutAffectation statut) {
         if (dateDebut != null && dateFin != null) {
             // Chevauchement avec la fenêtre [dateDebut 00:00, dateFin 23:59:59]
-            query.addCriteria(Criteria.where("dateFin").gte(dateDebut.atStartOfDay())
-                    .and("dateDebut").lte(dateFin.atTime(LocalTime.MAX)));
+            query.addCriteria(new Criteria().andOperator(
+                    finApres(dateDebut),
+                    Criteria.where("dateDebut").lte(dateFin.atTime(LocalTime.MAX))));
         } else if (dateDebut != null) {
-            query.addCriteria(Criteria.where("dateFin").gte(dateDebut.atStartOfDay()));
+            query.addCriteria(finApres(dateDebut));
         } else if (dateFin != null) {
             query.addCriteria(Criteria.where("dateDebut").lte(dateFin.atTime(LocalTime.MAX)));
         }
@@ -108,6 +109,17 @@ public class PlanningService {
         if (statut != null) {
             query.addCriteria(Criteria.where("statut").is(statut));
         }
+    }
+
+    /**
+     * Borne basse d'une fenêtre : l'affectation se termine après le début de la
+     * fenêtre, ou n'a pas de fin du tout (durée indéterminée) — auquel cas elle
+     * chevauche toute fenêtre postérieure à son début.
+     */
+    private Criteria finApres(LocalDate borneBasse) {
+        return new Criteria().orOperator(
+                Criteria.where("dateFin").gte(borneBasse.atStartOfDay()),
+                Criteria.where("dateFin").is(null));
     }
 
     public AffectationAgentDto getById(String id) {
@@ -146,6 +158,9 @@ public class PlanningService {
                     "Modification impossible : l'affectation est au statut " + entity.getStatut());
         }
         mapper.updateEntityFromDto(dto, entity);
+        // Le mapper ignore les valeurs nulles : `dateFin` étant optionnelle, on la
+        // réaffecte explicitement pour permettre le retour à une durée indéterminée.
+        entity.setDateFin(dto.getDateFin());
         validerEtDenormaliser(entity);
         verifierConflit(entity, id);
         entity.setUpdatedAt(LocalDateTime.now());

@@ -103,6 +103,29 @@ class AffectationStatutSchedulerIT extends MongoTestContainer {
         assertThat(relire(annulee).getUpdatedAt()).isEqualTo(updatedAtAvant);
     }
 
+    /**
+     * Affectation à <b>durée indéterminée</b> ({@code dateFin} absente) : elle démarre, puis ne se
+     * clôture jamais toute seule — la clôture reste une action humaine (ajout d'une date de fin ou
+     * annulation).
+     * <p>
+     * Ce que ce test protège réellement : {@code conditionPassageEffectuee} est un
+     * {@code dateFin <= now}, et Mongo <b>ne matche pas</b> un champ nul sur un opérateur de
+     * comparaison (parenthésage par type). La non-clôture découle donc du moteur, pas d'une clause
+     * explicite — d'où l'intérêt de la vérifier plutôt que de la supposer.
+     */
+    @Test
+    void affectation_sans_date_de_fin_passe_en_cours_et_y_reste() {
+        LocalDateTime now = LocalDateTime.now();
+        String id = creer(StatutAffectation.PLANIFIEE, now.minusDays(30), null);
+
+        scheduler.rafraichirStatuts();
+        assertThat(relire(id).getStatut()).isEqualTo(StatutAffectation.EN_COURS);
+
+        // Une seconde passe ne doit pas la faire basculer en EFFECTUEE.
+        scheduler.rafraichirStatuts();
+        assertThat(relire(id).getStatut()).isEqualTo(StatutAffectation.EN_COURS);
+    }
+
     @Test
     void affectation_future_reste_planifiee() {
         LocalDateTime now = LocalDateTime.now();
