@@ -22,6 +22,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/stock/chantiers")
@@ -45,6 +46,11 @@ public class ChantierController {
     @GetMapping("/actifs")
     public ResponseEntity<List<ChantierDto>> actifs() {
         return ResponseEntity.ok(service.actifs());
+    }
+
+    @GetMapping("/prochaine-reference")
+    public ResponseEntity<Map<String, String>> prochaineReference() {
+        return ResponseEntity.ok(Map.of("reference", service.prochaineReference()));
     }
 
     @GetMapping("/{id}")

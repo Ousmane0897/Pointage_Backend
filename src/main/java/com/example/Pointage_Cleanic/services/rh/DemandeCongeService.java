@@ -196,7 +196,8 @@ public class DemandeCongeService {
                 .acquis(joursAcquisParAn)
                 .pris(pris)
                 .enCours(enCours)
-                .solde(joursAcquisParAn - pris - enCours)
+                // Acquis configurable, et jamais de solde négatif à l'affichage.
+                .solde(Math.max(0, joursAcquisParAn - pris - enCours))
                 .build();
     }
 

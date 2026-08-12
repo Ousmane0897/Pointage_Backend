@@ -231,6 +231,11 @@ public class InventaireService {
                         .utilisateur(utilisateur)
                         .commentaire("Ajustement inventaire " + inv.getReference())
                         .createdAt(now)
+                        // Rattachement explicite : le commentaire était le seul lien vers l'inventaire,
+                        // ce qui ne permettait pas de retrouver ces ajustements de façon fiable.
+                        .origine("INVENTAIRE")
+                        .inventaireId(inv.getId())
+                        .inventaireReference(inv.getReference())
                         .build();
                 mvt = mouvementRepository.save(mvt);
                 mvtCrees.add(mvt.getId());

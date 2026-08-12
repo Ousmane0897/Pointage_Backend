@@ -36,20 +36,26 @@ google:
     api:
       key: "AIzaSyAijDeBFgsJUYLqS6Nn3EQfi56cPPMtN_Q"
 
+app:
+  frontend:
+    # URL publique du front, utilisée pour construire les liens des e-mails de notification
+    # (« Ouvrir le bon » à la création d'un bon d'entrée / de sortie, « Ouvrir la demande »
+    # pour les congés). Si vide, le mail part sans lien plutôt qu'avec un lien cassé.
+    base-url: ${APP_FRONTEND_BASE_URL:http://localhost:4200}
+  conges:
+    # Jours de congé acquis par année pleine, en jours ouvrés (week-ends exclus).
+    jours-acquis-par-an: ${CONGES_JOURS_ACQUIS_PAR_AN:22}
+
 rh:
   import:
     bulk:
       # Taille maximale d'un import bulk de dossiers employés (POST /api/dossier-employe/bulk).
       max-size: 1000
-
-app:
-  frontend:
-    # URL publique de l'application : sert à construire les liens des e-mails de
-    # notification. Vide ⇒ les mails partent sans bouton d'accès direct.
-    base-url: ${APP_FRONTEND_BASE_URL:http://localhost:4200}
-  conges:
-    # Jours de congé acquis par année pleine, en jours ouvrés (week-ends exclus).
-    jours-acquis-par-an: ${CONGES_JOURS_ACQUIS_PAR_AN:22}
+  pointage:
+    # Tolérance de retard (minutes) sur le pointage centralisé RH : un retard n'est marqué
+    # (statut RETARD + comptage dans resume.retards) que si retardBrut > ce seuil. 15 pile
+    # = non retard. Ajustable sans recompilation (env RH_POINTAGE_TOLERANCE_RETARD_MINUTES).
+    tolerance-retard-minutes: 15
 
 
 logging:

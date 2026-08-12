@@ -58,7 +58,7 @@ class EmailServiceTest {
         assertEquals("test@example.com", sentMessage.getTo()[0]);
         assertEquals("Sujet X", sentMessage.getSubject());
         assertEquals("Hello World", sentMessage.getText());
-        // L'expéditeur suit le compte SMTP configuré, plus le placeholder codé en dur.
+        // Expéditeur = spring.mail.username, avec repli sur le compte Cleanic hors Spring.
         assertEquals(EXPEDITEUR, sentMessage.getFrom());
     }
 

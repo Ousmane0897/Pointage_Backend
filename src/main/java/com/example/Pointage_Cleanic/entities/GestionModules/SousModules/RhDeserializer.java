@@ -11,13 +11,13 @@ import java.io.IOException;
 /**
  * Désérialisation tolérante du champ {@code modulesAutorises.rh}.
  *
- * <p>Depuis le passage de {@code rh} booléen → objet de 19 sous-flags, un payload ou un
+ * <p>Depuis le passage de {@code rh} booléen → objet de 17 sous-flags, un payload ou un
  * token historique peut encore présenter {@code rh} sous forme de booléen. Plutôt que de
  * planter, on le réinterprète :
  * <ul>
- *   <li>{@code true}  ⇒ accès RH complet : les 19 sous-flags à {@code true} ;</li>
- *   <li>{@code false} ⇒ aucun accès : objet vide (19 sous-flags à {@code false}) ;</li>
- *   <li>objet JSON ⇒ mapping normal des 19 clés (champs absents = {@code false}).</li>
+ *   <li>{@code true}  ⇒ accès RH complet : les 17 sous-flags à {@code true} ;</li>
+ *   <li>{@code false} ⇒ aucun accès : objet vide (17 sous-flags à {@code false}) ;</li>
+ *   <li>objet JSON ⇒ mapping normal des 17 clés (champs absents = {@code false}).</li>
  * </ul>
  *
  * <p>Le mapping objet est fait à la main (via {@link JsonNode}) pour éviter la récursion
@@ -50,8 +50,6 @@ public class RhDeserializer extends JsonDeserializer<Rh> {
         rh.setDossierEmploye(value);
         rh.setContrats(value);
         rh.setOrganigramme(value);
-        rh.setPeriodeEssai(value);
-        rh.setTitularisations(value);
         rh.setDocuments(value);
         rh.setPointageCentralise(value);
         rh.setAbsences(value);
@@ -76,8 +74,6 @@ public class RhDeserializer extends JsonDeserializer<Rh> {
         rh.setDossierEmploye(node.path("dossierEmploye").asBoolean(false));
         rh.setContrats(node.path("contrats").asBoolean(false));
         rh.setOrganigramme(node.path("organigramme").asBoolean(false));
-        rh.setPeriodeEssai(node.path("periodeEssai").asBoolean(false));
-        rh.setTitularisations(node.path("titularisations").asBoolean(false));
         rh.setDocuments(node.path("documents").asBoolean(false));
         rh.setPointageCentralise(node.path("pointageCentralise").asBoolean(false));
         rh.setAbsences(node.path("absences").asBoolean(false));

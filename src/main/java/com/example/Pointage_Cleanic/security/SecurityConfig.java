@@ -1,6 +1,7 @@
 package com.example.Pointage_Cleanic.security;
 
 import com.example.Pointage_Cleanic.security.JwtRequestFilter;
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -114,6 +115,14 @@ public class SecurityConfig {
                         // Toutes les autres requêtes nécessitent authentification
                         .anyRequest().authenticated()
                 )
+                // Requête non authentifiée (aucun header Authorization) → 401, et non le 403 par
+                // défaut de Spring Security (Http403ForbiddenEntryPoint). Ce backend n'a aucune
+                // autorisation par rôle (pas de @PreAuthorize, tout est .authenticated()) : un 403
+                // de la couche sécurité signifiait donc toujours « pas authentifié ». On s'aligne
+                // ainsi sur JwtRequestFilter, qui renvoie déjà 401 sur token invalide/expiré.
+                .exceptionHandling(ex -> ex.authenticationEntryPoint(
+                        (request, response, authException) ->
+                                response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Authentification requise")))
                 .sessionManagement(sess -> sess.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authenticationProvider(authenticationProvider())
                 .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);

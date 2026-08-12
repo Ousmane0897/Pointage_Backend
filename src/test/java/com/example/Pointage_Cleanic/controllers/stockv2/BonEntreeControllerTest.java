@@ -9,6 +9,7 @@ import com.example.Pointage_Cleanic.security.JwtRequestFilter;
 import com.example.Pointage_Cleanic.security.JwtUtil;
 import com.example.Pointage_Cleanic.services.MyUserDetailsService;
 import com.example.Pointage_Cleanic.services.stockv2.BonEntreeService;
+import com.example.Pointage_Cleanic.services.stockv2.SuppressionDefinitiveService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -31,6 +32,7 @@ class BonEntreeControllerTest {
     @Autowired private MockMvc mockMvc;
 
     @MockBean private BonEntreeService service;
+    @MockBean private SuppressionDefinitiveService suppressionService;
     @MockBean private MyUserDetailsService myUserDetailsService;
     @MockBean private JwtUtil jwtUtil;
     @MockBean private JwtRequestFilter jwtRequestFilter;

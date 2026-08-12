@@ -16,9 +16,13 @@ public class EmailService {
 
     private final JavaMailSender mailSender;
 
-    /** Expéditeur réel : le compte SMTP configuré, et non un placeholder codé en dur. */
+    /**
+     * Expéditeur des messages : le compte SMTP configuré ({@code spring.mail.username}).
+     * La valeur d'initialisation sert de repli hors contexte Spring et en profil par défaut,
+     * où {@code spring.mail.username} n'est pas renseigné.
+     */
     @Value("${spring.mail.username:cleanicsarl24@gmail.com}")
-    private String expediteur;
+    private String expediteur = "cleanicsarl24@gmail.com";
 
     public void sendSimpleEmail(String to, String subject, String text) {
         SimpleMailMessage message = new SimpleMailMessage();

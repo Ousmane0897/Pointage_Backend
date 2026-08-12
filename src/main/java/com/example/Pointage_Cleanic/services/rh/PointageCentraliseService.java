@@ -4,13 +4,14 @@ import com.example.Pointage_Cleanic.Dto.rh.PointageCentraliseDto;
 import com.example.Pointage_Cleanic.Dto.ResumeJourneeDto;
 import com.example.Pointage_Cleanic.Enum.rh.StatutDemande;
 import com.example.Pointage_Cleanic.Enum.rh.StatutDossierEmploye;
+import com.example.Pointage_Cleanic.entities.rh.AffectationSite;
 import com.example.Pointage_Cleanic.entities.rh.DemandeConge;
 import com.example.Pointage_Cleanic.entities.rh.DossierEmploye;
 import com.example.Pointage_Cleanic.entities.Pointage;
 import com.example.Pointage_Cleanic.repositories.rh.DemandeCongeRepository;
 import com.example.Pointage_Cleanic.repositories.rh.DossierEmployeRepository;
 import com.example.Pointage_Cleanic.repositories.PointageRepository;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
@@ -22,8 +23,11 @@ import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.format.DateTimeParseException;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -38,14 +42,17 @@ import java.util.stream.Collectors;
  * <p>Périmètre = employés ACTIF ou EN_PERIODE_ESSAI. L'agrégation part de la liste des
  * employés attendus (LEFT JOIN sur les pointages) pour que les ABSENT remontent.
  *
- * <p><b>Retard non dérivé :</b> {@code DossierEmploye} ne porte pas d'heure de début et
- * les horaires sont hétérogènes d'un employé à l'autre. Le statut {@code RETARD} reste
- * dans le contrat (énum statut, {@code retardMinutes}, compteur {@code retards}) mais
- * vaut toujours {@code 0} / {@code PRESENT}. Hook à brancher quand un planning par
- * employé (heure de début) existera.
+ * <p><b>Retard dérivé (tolérance stricte) :</b> l'heure d'arrivée prévue est le
+ * {@code horaireDebut} de l'affectation ({@link AffectationSite}) dont le site est
+ * pointé (match par site sur {@code Pointage.site[]}, insensible à la casse ; si
+ * plusieurs sites pointés matchent, le {@code horaireDebut} le plus tôt est retenu).
+ * {@code retardMinutes} = retard brut ({@code heureArrivee - heurePrevue}, borné à
+ * {@code >= 0}) sans tolérance appliquée. Le statut {@code RETARD} n'est posé que si
+ * {@code retardBrut > toleranceRetardMinutes} (seuil strict : 15 min pile = non retard).
+ * Si aucune affectation ne matche ou que son {@code horaireDebut} est absent/illisible,
+ * l'heure prévue est indéterminée → {@code retardMinutes = 0} et statut {@code PRESENT}.
  */
 @Service
-@RequiredArgsConstructor
 public class PointageCentraliseService {
 
     private static final List<StatutDossierEmploye> STATUTS_ACTIFS =
@@ -54,6 +61,20 @@ public class PointageCentraliseService {
     private final DossierEmployeRepository dossierEmployeRepository;
     private final PointageRepository pointageRepository;
     private final DemandeCongeRepository demandeCongeRepository;
+
+    /** Seuil de tolérance de retard (minutes). Retard marqué seulement si retardBrut > seuil. */
+    private final int toleranceRetardMinutes;
+
+    public PointageCentraliseService(
+            DossierEmployeRepository dossierEmployeRepository,
+            PointageRepository pointageRepository,
+            DemandeCongeRepository demandeCongeRepository,
+            @Value("${rh.pointage.tolerance-retard-minutes:15}") int toleranceRetardMinutes) {
+        this.dossierEmployeRepository = dossierEmployeRepository;
+        this.pointageRepository = pointageRepository;
+        this.demandeCongeRepository = demandeCongeRepository;
+        this.toleranceRetardMinutes = toleranceRetardMinutes;
+    }
 
     public Page<PointageCentraliseDto> getPointages(
             LocalDate date, String departement, String site,
@@ -92,13 +113,17 @@ public class PointageCentraliseService {
         return paginate(result, page, size);
     }
 
-    /** Construit la vue centralisée d'un jour donné (filtres dép./site/q, sans statut ni pagination). */
+    /**
+     * Construit la vue centralisée d'un jour donné (filtres dép./site/q, sans statut ni
+     * pagination). <b>Une ligne par pointage</b> : un agent qui pointe sur plusieurs sites
+     * le même jour produit plusieurs lignes, chacune évaluée sur l'horaire de son site.
+     */
     private List<PointageCentraliseDto> buildForDate(
             LocalDate jour, List<DossierEmploye> employes, String departement, String site, String q) {
 
-        Map<String, Pointage> pointageParCode = pointageRepository.findAllByDate(jour).stream()
+        Map<String, List<Pointage>> pointagesParCode = pointageRepository.findAllByDate(jour).stream()
                 .filter(p -> p.getCodeSecret() != null)
-                .collect(Collectors.toMap(Pointage::getCodeSecret, p -> p, (a, b) -> a));
+                .collect(Collectors.groupingBy(Pointage::getCodeSecret));
 
         Map<String, DemandeConge> congeParEmploye = demandeCongeRepository
                 .findByStatutAndDateDebutLessThanEqualAndDateFinGreaterThanEqual(
@@ -107,7 +132,28 @@ public class PointageCentraliseService {
 
         return employes.stream()
                 .filter(e -> matchesFiltres(e, departement, site, q))
-                .map(e -> buildDto(e, jour, pointageParCode.get(e.getAgentId()), congeParEmploye.get(e.getId())))
+                .flatMap(e -> buildLignes(e, jour,
+                        pointagesParCode.getOrDefault(e.getAgentId(), List.of()),
+                        congeParEmploye.get(e.getId())).stream())
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Lignes de la vue pour un employé et un jour : une ligne {@code CONGE} si congé
+     * approuvé (prioritaire), sinon une ligne par pointage du jour (multi-sites → plusieurs
+     * lignes, chacune avec son retard propre calculé sur l'horaire de son site), sinon une
+     * seule ligne {@code ABSENT}.
+     */
+    private List<PointageCentraliseDto> buildLignes(DossierEmploye e, LocalDate jour,
+                                                    List<Pointage> pointages, DemandeConge conge) {
+        if (conge != null) {
+            return List.of(buildDto(e, jour, null, conge));
+        }
+        if (pointages.isEmpty()) {
+            return List.of(buildDto(e, jour, null, null));
+        }
+        return pointages.stream()
+                .map(p -> buildDto(e, jour, p, null))
                 .collect(Collectors.toList());
     }
 
@@ -143,22 +189,14 @@ public class PointageCentraliseService {
         LocalDate targetDate = date != null ? date : LocalDate.now();
 
         List<DossierEmploye> employes = dossierEmployeRepository.findByStatutIn(STATUTS_ACTIFS);
-        Map<String, Pointage> pointageParCode = pointageRepository.findAllByDate(targetDate).stream()
-                .filter(p -> p.getCodeSecret() != null)
-                .collect(Collectors.toMap(Pointage::getCodeSecret, p -> p, (a, b) -> a));
-
-        Map<String, DemandeConge> congeParEmploye = demandeCongeRepository
-                .findByStatutAndDateDebutLessThanEqualAndDateFinGreaterThanEqual(
-                        StatutDemande.APPROUVE, targetDate, targetDate).stream()
-                .collect(Collectors.toMap(DemandeConge::getEmployeId, c -> c, (a, b) -> a));
+        // Comptage par LIGNE de pointage (mêmes lignes que la liste, sans filtre) : un agent
+        // en retard sur 2 sites compte pour 2. presents/absents/retards/enConge portent donc
+        // sur les lignes, pas sur les employés — leur somme peut dépasser totalEmployes, qui
+        // reste le headcount d'employés actifs distincts.
+        List<PointageCentraliseDto> lignes = buildForDate(targetDate, employes, null, null, null);
 
         int presents = 0, absents = 0, retards = 0, enConge = 0;
-
-        for (DossierEmploye e : employes) {
-            PointageCentraliseDto dto = buildDto(e, targetDate,
-                    pointageParCode.get(e.getAgentId()), congeParEmploye.get(e.getId()));
-            // Un seul incrément par employé : presents + absents + retards + enConge == totalEmployes.
-            // (RETARD non dérivé pour l'instant — voir javadoc de classe.)
+        for (PointageCentraliseDto dto : lignes) {
             switch (dto.getStatut()) {
                 case "PRESENT" -> presents++;
                 case "RETARD"  -> retards++;
@@ -184,6 +222,7 @@ public class PointageCentraliseService {
         String heureArrivee = null;
         String heureDepart = null;
         String motif = null;
+        int retardMinutes = 0;
         String site = e.getSiteAffecte();
         String id = e.getId() + "-" + date;
 
@@ -198,7 +237,8 @@ public class PointageCentraliseService {
             heureDepart = pointage.getHeureDepart();
             dureeMinutes = computeDureeMinutes(heureArrivee, heureDepart);
             site = joinSites(pointage.getSite());
-            statutVal = "PRESENT";
+            retardMinutes = computeRetardMinutes(heureArrivee, resoudreHeurePrevue(e, pointage));
+            statutVal = retardMinutes > toleranceRetardMinutes ? "RETARD" : "PRESENT";
         } else {
             statutVal = "ABSENT";
         }
@@ -216,7 +256,7 @@ public class PointageCentraliseService {
                 .heureArrivee(heureArrivee)
                 .heureDepart(heureDepart)
                 .dureeMinutes(dureeMinutes)
-                .retardMinutes(0)
+                .retardMinutes(retardMinutes)
                 .statut(statutVal)
                 .motif(motif)
                 .build();
@@ -236,12 +276,71 @@ public class PointageCentraliseService {
      * {@code Pointage.duree} en texte "9h"/"8h30mn", non exploitable tel quel).
      */
     private Integer computeDureeMinutes(String heureArrive, String heureDepart) {
-        if (heureArrive == null || heureDepart == null) return null;
+        LocalTime arrivee = parseHeure(heureArrive);
+        LocalTime depart = parseHeure(heureDepart);
+        if (arrivee == null || depart == null) return null;
+        long minutes = Duration.between(arrivee, depart).toMinutes();
+        return minutes >= 0 ? (int) minutes : null;
+    }
+
+    /**
+     * Heure d'arrivée prévue de l'employé pour ce pointage, résolue par site (fallbacks ordonnés) :
+     * <ol>
+     *   <li>Pointage mono-site : {@code horaireDebut} de l'affectation de ce site précisément
+     *       (match insensible à la casse).</li>
+     *   <li>Pointage multi-sites (cas exceptionnel : un enregistrement porte plusieurs sites) :
+     *       {@code horaireDebut} le plus tôt parmi toutes les affectations de l'employé.</li>
+     *   <li>Sinon (site hors affectations, {@code horaireDebut} non renseigné/illisible, aucune
+     *       affectation) : {@code null} → on ne pénalise pas sur une donnée manquante.</li>
+     * </ol>
+     */
+    private LocalTime resoudreHeurePrevue(DossierEmploye e, Pointage pointage) {
+        List<AffectationSite> affectations = e.getAffectations();
+        if (affectations == null || affectations.isEmpty()
+                || pointage == null || pointage.getSite() == null) {
+            return null;
+        }
+        Set<String> sitesPointes = Arrays.stream(pointage.getSite())
+                .filter(s -> s != null && !s.isBlank())
+                .map(s -> s.trim().toLowerCase())
+                .collect(Collectors.toSet());
+        if (sitesPointes.isEmpty()) return null;
+
+        if (sitesPointes.size() == 1) {
+            // (1) mono-site : horaireDebut de l'affectation de ce site (min si doublons d'affectation).
+            return affectations.stream()
+                    .filter(a -> a.getSite() != null
+                            && sitesPointes.contains(a.getSite().trim().toLowerCase()))
+                    .map(a -> parseHeure(a.getHoraireDebut()))
+                    .filter(Objects::nonNull)
+                    .min(Comparator.naturalOrder())
+                    .orElse(null);
+        }
+        // (2) multi-sites dans un même enregistrement : horaireDebut le plus tôt parmi les affectations.
+        return affectations.stream()
+                .map(a -> parseHeure(a.getHoraireDebut()))
+                .filter(Objects::nonNull)
+                .min(Comparator.naturalOrder())
+                .orElse(null);
+    }
+
+    /**
+     * Retard brut en minutes = {@code heureArrivee - heurePrevue}, borné à {@code >= 0}
+     * (arrivée en avance → 0). {@code 0} si l'heure d'arrivée ou l'heure prévue est
+     * absente/illisible. La tolérance n'est PAS appliquée ici (le champ porte le brut).
+     */
+    private int computeRetardMinutes(String heureArrive, LocalTime heurePrevue) {
+        LocalTime arrivee = parseHeure(heureArrive);
+        if (arrivee == null || heurePrevue == null) return 0;
+        long minutes = Duration.between(heurePrevue, arrivee).toMinutes();
+        return minutes > 0 ? (int) minutes : 0;
+    }
+
+    /** Parse une heure "HH:mm" en {@link LocalTime}, {@code null} si absente/illisible. */
+    private LocalTime parseHeure(String hhmm) {
+        if (hhmm == null || hhmm.isBlank()) return null;
         try {
-            LocalTime arrivee = LocalTime.parse(heureArrive);
-            LocalTime depart = LocalTime.parse(heureDepart);
-            long minutes = Duration.between(arrivee, depart).toMinutes();
-            return minutes >= 0 ? (int) minutes : null;
+            return LocalTime.parse(hhmm.trim());
         } catch (DateTimeParseException ignored) {
             return null;
         }

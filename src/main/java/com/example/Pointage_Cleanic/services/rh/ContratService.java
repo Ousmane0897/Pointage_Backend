@@ -43,7 +43,6 @@ public class ContratService {
     private final DossierEmployeRepository dossierEmployeRepository;
     private final ContratMapper contratMapper;
     private final MongoTemplate mongoTemplate;
-    private final PeriodeEssaiService periodeEssaiService;
 
     public ContratDto create(ContratDto dto, MultipartFile fichier) throws IOException {
         DossierEmploye employe = dossierEmployeRepository.findById(dto.getEmployeId())
@@ -64,37 +63,7 @@ public class ContratService {
 
         Contrat saved = contratRepository.save(contrat);
 
-        Integer dureeEssaiMois = resoudreDureeEssaiMois(saved, employe);
-        if (dureeEssaiMois != null && dureeEssaiMois > 0) {
-            periodeEssaiService.seedFromContrat(saved, dureeEssaiMois);
-        }
-
         return toDto(saved);
-    }
-
-    /**
-     * Détermine la durée d'essai (en mois) à appliquer à la création d'un contrat.
-     * Priorité au champ explicite {@code Contrat.dureeEssaiMois} (si l'API
-     * cliente le fournit en override) ; sinon, dérivation depuis
-     * {@code DossierEmploye.dureeEssaiMois} quand l'employé est en
-     * {@code EN_PERIODE_ESSAI}. La conversion en jours calendaires
-     * (via {@code plusMonths}) est faite dans
-     * {@link PeriodeEssaiService#seedFromContrat}.
-     * Le frontend Angular {@code Contrat} n'expose pas {@code dureeEssaiMois}
-     * pour l'instant : c'est donc la branche dérivation qui est empruntée par
-     * défaut.
-     */
-    private Integer resoudreDureeEssaiMois(Contrat contrat, DossierEmploye employe) {
-        if (contrat.getDureeEssaiMois() != null && contrat.getDureeEssaiMois() > 0) {
-            return contrat.getDureeEssaiMois();
-        }
-        if (employe.getStatut() != com.example.Pointage_Cleanic.Enum.rh.StatutDossierEmploye.EN_PERIODE_ESSAI) {
-            return null;
-        }
-        if (employe.getDureeEssaiMois() == null || employe.getDureeEssaiMois() <= 0) {
-            return null;
-        }
-        return employe.getDureeEssaiMois();
     }
 
     public ContratDto getById(String id) {

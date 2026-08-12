@@ -14,6 +14,6 @@ public interface UtilisateurRepository extends MongoRepository<Utilisateur, Stri
 
     List<Utilisateur> findAllByEmail(String email);
 
-    // Destinataires des notifications par rôle (comptes actifs uniquement).
+    /** Comptes actifs portant un rôle donné (destinataires des notifications e-mail). */
     List<Utilisateur> findByRoleAndActiveTrue(RoleAdmin role);
 }

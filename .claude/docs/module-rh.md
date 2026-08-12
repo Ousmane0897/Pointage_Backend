@@ -14,7 +14,7 @@ Les 4 sous-modules RH sont livrés. Le frontend Angular (repo séparé) consomme
 
 | Sous-module | Collection(s) |
 | --- | --- |
-| 6.1 Personnel | `dossiers_employes` (source de vérité RH), `contrats`, `periodes_essai`, `demandes_validation_periode_essai`, `documents_employes`. `employes` + `employes_complet` restent pour le pointage mobile/legacy. |
+| 6.1 Personnel | `dossiers_employes` (source de vérité RH), `contrats`, `documents_employes`. `employes` + `employes_complet` restent pour le pointage mobile/legacy. |
 | 6.2 Temps & Présences | `rh_absences`, `conges`, `heures_supplementaires` (réutilise aussi `pointages` pré-RH) |
 | 6.3 Paie | `categories_professionnelles`, `bulletins_paie`, `declarations_sociales`, `parametres_paie` |
 | 6.4 Développement RH | `formations`, `sessions_formation`, `participations_formation`, `evaluations_formation`, `besoins_formation`, `grilles_evaluation`, `evaluations_periodiques`, `sanctions` |
@@ -23,7 +23,7 @@ Les 4 sous-modules RH sont livrés. Le frontend Angular (repo séparé) consomme
 
 | Sous-module | Services |
 | --- | --- |
-| 6.1 | `DossierEmployeService` (CRUD RH, source de vérité), `ContratService` (multipart + fichier PDF), `PeriodeEssaiService` + `DemandeValidationPeriodeEssaiService` (workflow Manager → RH → Confirmation), `DocumentEmployeService` (pièces administratives + workflow validation). `EmployeServices`, `EmployeCompletService`, `OrganigrammeService`, `RhEmployeService` subsistent pour le pointage mobile / legacy. |
+| 6.1 | `DossierEmployeService` (CRUD RH, source de vérité), `ContratService` (multipart + fichier PDF), `DocumentEmployeService` (pièces administratives + workflow validation). `EmployeServices`, `EmployeCompletService`, `OrganigrammeService`, `RhEmployeService` subsistent pour le pointage mobile / legacy. |
 | 6.2 | `PointageCentraliseService`, `RhAbsenceService`, `DemandeCongeService`, `HeureSupplementaireService`, `RecapitulatifMensuelService` |
 | 6.3 | `CategorieProfessionnelleService`, `BulletinPaieService`, `CalculPaieService` (moteur de paie : IPRES/CSS/AT-MP/TRIMF/IR), `DeclarationSocialeService`, `ParametresPaieService` |
 | 6.4 | `FormationService`, `EvaluationPeriodiqueService`, `SanctionService`, `BesoinFormationService`, `TableauBordRhService` |
@@ -60,8 +60,7 @@ Endpoints livrés :
   titularisation), contacts (tél, email, adresse), contactUrgence (sous-doc
   {nom, lienParente, telephone}), photo (byte[]). Champs paie techniques
   (categorieCode, numeroIpres, numeroCss, rib, banque) également portés sur l'entité.
-  Endpoints additionnels : `GET /{id}/photo` (permitAll), `PUT /{id}/statut`,
-  `PUT /{id}/titulariser`, `GET /alertes-essai`.
+  Endpoints additionnels : `GET /{id}/photo` (permitAll), `PUT /{id}/statut`.
 - **Import bulk de dossiers employés** : `POST /api/gestion-personnel/employes/bulk`
   (JSON pur, sans photos — le CRUD unitaire reste utilisé ensuite pour les photos).
   Remplace la boucle d'appels unitaires que faisait le frontend lors d'un import Excel.
@@ -104,47 +103,21 @@ Endpoints livrés :
   `ContratAlternanceMigrationRunner` (CommandLineRunner, `@Order(1000)`) migre
   les documents existants au démarrage via `mongoTemplate.updateMulti` — idempotent.
   Champ optionnel `dureeEssaiMois` (Integer, **convention RH en mois**) sur
-  `Contrat` / `ContratDto` : pris en compte s'il est > 0 (override explicite).
-  **Le modèle Angular `Contrat` n'expose pas ce champ pour l'instant** : à
-  défaut, `ContratService.resoudreDureeEssaiMois` dérive la durée depuis
-  `DossierEmploye.dureeEssaiMois` quand l'employé est en `EN_PERIODE_ESSAI`.
-  Si une durée résolue > 0 est trouvée,
-  `PeriodeEssaiService.seedFromContrat(contrat, mois)` crée automatiquement
-  une `PeriodeEssai` (statut EN_COURS, alertes par défaut à 30 / 15 / 7
-  jours). La conversion mois → jours pour `PeriodeEssai.dureeJours` se fait
-  via `dateDebut.plusMonths(mois)` (calendaire-correct, p.ex. 3 mois ≠ 90
-  jours fixes selon les mois traversés).
-- **Période d'essai (depuis 2026-04-29)** : nouvelle source de vérité dans la
-  collection `periodes_essai` (entité `PeriodeEssai`, **liée à un Contrat** via
-  `contratId`). 7 endpoints sous `/api/gestion-personnel/periodes-essai` (consommés
-  directement par le frontend `PeriodeEssaiService` Angular) :
-  - `GET /` (paginé, filtre `statut`), `GET /{id}`,
-    `PUT /{id}/prolonger {nouvelleDateFin, commentaire}` →
-    statut `PROLONGE`, recalcul des alertes, append d'une `DecisionPeriodeEssai`.
-  - `GET /alertes` : retourne les périodes EN_COURS / PROLONGE dont au moins une
-    alerte non envoyée a une `dateAlerte ≤ today`.
-  - `GET /validations?statut=`, `POST /{periodeEssaiId}/validations {commentaire}`,
-    `PUT /validations/{demandeId} {decision, commentaire}` —
-    workflow `EN_ATTENTE_MANAGER → VALIDEE_MANAGER → VALIDEE_RH → CONFIRMEE`,
-    ou `REFUSEE` à n'importe quelle étape (collection
-    `demandes_validation_periode_essai`). `ActionValidation` accepté :
-    `VALIDER`, `CONFIRMER`, `REFUSER`. Transitions illégales → 400
-    `VALIDATION_ERROR`. Doublon de demande active sur la même période → 409
-    `DEMANDE_VALIDATION_CONFLICT` (nouvelle exception
-    `DemandeValidationConflictException`).
-    À l'étape `CONFIRMEE`, `applyTitularisation` bascule
-    `PeriodeEssai.statut → TITULARISE` (avec `DecisionPeriodeEssai` de trace) et
-    `DossierEmploye.statut → ACTIF`, `dureeEssaiMois → null`.
-  - **Pas d'endpoint POST direct sur `periodes-essai`** : la création est
-    déclenchée uniquement à la création d'un `Contrat` portant
-    `dureeEssaiJours > 0` (rétrocompat : un contrat sans ce champ ne crée pas de
-    période). Pas de seed rétroactif sur les contrats existants.
-  - `DossierEmploye.dureeEssaiMois` reste lisible en **lecture-only legacy** ;
-    la source de vérité pour la durée et la date de fin est désormais
-    `PeriodeEssai`. L'endpoint
-    `GET /api/gestion-personnel/employes/alertes-essai` (sur `DossierEmploye`)
-    subsiste pour rétrocompat — préférer
-    `GET /api/gestion-personnel/periodes-essai/alertes` côté frontend.
+  `Contrat` / `ContratDto` : conservé comme métadonnée du contrat (le modèle
+  Angular `Contrat` ne l'expose pas). Le statut `EN_PERIODE_ESSAI` et le champ
+  `dureeEssaiMois` de `DossierEmploye` restent gérés par le CRUD employé.
+- **Module « Période d'essai / Titularisation » retiré (2026-07-14)** : les 2
+  écrans dédiés côté frontend ayant été supprimés, le module backend
+  correspondant (`PeriodeEssai`, `DemandeValidationPeriodeEssai`, leurs services /
+  repositories / DTOs / mappers, l'enum `StatutPeriodeEssai`, le
+  `PeriodeEssaiController` sous `/api/gestion-personnel/periodes-essai`, les
+  endpoints employé `PUT /{id}/titulariser` + `GET /alertes-essai`, et
+  l'exception `DemandeValidationConflictException`) a été supprimé. Les
+  collections `periodes_essai` et `demandes_validation_periode_essai` sont
+  droppées au démarrage par `PeriodeEssaiDropRunner`. **Conservés** : le statut
+  employé `EN_PERIODE_ESSAI` et le champ `DossierEmploye.dureeEssaiMois`
+  (toujours pilotés via `PUT /api/gestion-personnel/employes/{id}/statut` et
+  l'import Excel).
 - **Documents employé (depuis 2026-04-29)** : nouvelle collection
   `documents_employes` portant toutes les pièces administratives génériques
   (CNI, diplôme, certificat, attestation, contrat scanné, autre) attachées à
@@ -180,9 +153,7 @@ Endpoints livrés :
 - **Legacy / coexistence** : CRUD `/api/employe-complet` (EmployeComplet, photo + contrat PDF),
   `/api/employes` et `/api/rh-employes` (RhEmployeController sur EmployeComplet),
   `/api/gestion-personnel/organigramme` reste en fonction pour le pointage mobile et les flux
-  legacy. **`/api/periodes-essai` (ancien `PeriodeEssaiController` sur
-  `EmployeComplet`) a été supprimé** au profit de
-  `/api/gestion-personnel/periodes-essai`.
+  legacy.
 
 ### 6.2 Temps & Présences — ✅ Terminé
 

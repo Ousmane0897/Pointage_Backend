@@ -1,13 +1,18 @@
 package com.example.Pointage_Cleanic.services.stockv2;
 
+import com.example.Pointage_Cleanic.Dto.stockv2.BonEntreeDto;
+import com.example.Pointage_Cleanic.Dto.stockv2.BonEntreePayload;
 import com.example.Pointage_Cleanic.Dto.stockv2.ComptagePayload;
 import com.example.Pointage_Cleanic.Dto.stockv2.InventaireDto;
 import com.example.Pointage_Cleanic.Dto.stockv2.InventairePlanifPayload;
+import com.example.Pointage_Cleanic.Dto.stockv2.LignePayload;
 import com.example.Pointage_Cleanic.Enum.stockv2.PerimetreInventaire;
 import com.example.Pointage_Cleanic.Enum.stockv2.StatutInventaire;
+import com.example.Pointage_Cleanic.Enum.stockv2.TypeEntree;
 import com.example.Pointage_Cleanic.Enum.stockv2.TypeProduit;
 import com.example.Pointage_Cleanic.Enum.stockv2.UniteStock;
 import com.example.Pointage_Cleanic.config.MongoTestContainer;
+import com.example.Pointage_Cleanic.entities.stockv2.BonEntree;
 import com.example.Pointage_Cleanic.entities.stockv2.Inventaire;
 import com.example.Pointage_Cleanic.entities.stockv2.MouvementStock;
 import com.example.Pointage_Cleanic.entities.stockv2.ProduitStock;
@@ -27,6 +32,7 @@ import org.springframework.data.mongodb.core.query.Query;
 import java.time.LocalDate;
 import java.util.List;
 
+import static com.example.Pointage_Cleanic.services.stockv2.StockBalanceService.ENTREPOT;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -38,6 +44,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class InventaireWorkflowServiceIT extends MongoTestContainer {
 
     @Autowired private InventaireService inventaireService;
+    @Autowired private BonEntreeService bonEntreeService;
     @Autowired private StockBalanceService balanceService;
     @Autowired private ProduitStockRepository produitRepository;
     @Autowired private MouvementStockRepository mouvementRepository;
@@ -49,6 +56,7 @@ class InventaireWorkflowServiceIT extends MongoTestContainer {
     @BeforeEach
     void setup() {
         mongoTemplate.remove(new Query(), Inventaire.class);
+        mongoTemplate.remove(new Query(), BonEntree.class);
         mongoTemplate.remove(new Query(), MouvementStock.class);
         mongoTemplate.remove(new Query(), StockParSite.class);
         mongoTemplate.remove(new Query(), ProduitStock.class);
@@ -114,6 +122,46 @@ class InventaireWorkflowServiceIT extends MongoTestContainer {
         assertThat(balanceService.quantite(produitId, SITE_A)).isEqualTo(15.0);
         // un mouvement d'ajustement créé
         assertThat(mouvementRepository.count()).isEqualTo(mvtsAvant + 1);
+    }
+
+    /**
+     * Scénario du bug corrigé : le stock entre par un bon d'entrée qui documente un site de
+     * destination, puis un inventaire GLOBAL (sans site) est clôturé à la baisse. Avant le
+     * correctif, l'entrée créditait le site et l'écart était imputé au seul solde de
+     * l'entrepôt, qui devenait négatif.
+     */
+    @Test
+    void cloture_inventaire_global_apres_entree_par_bon_ne_rend_pas_le_solde_negatif() {
+        // Repartir d'un stock issu uniquement du bon d'entrée.
+        mongoTemplate.remove(new Query(), StockParSite.class);
+        BonEntreeDto bon = bonEntreeService.creer(BonEntreePayload.builder()
+                .type(TypeEntree.ACHAT_FOURNISSEUR)
+                .siteDestinationId(SITE_A)
+                .fournisseur("Fournisseur X")
+                .lignes(List.of(LignePayload.builder().produitId(produitId).quantite(20).build()))
+                .build());
+        bonEntreeService.soumettre(bon.getId());
+        bonEntreeService.valider(bon.getId(), null);
+
+        assertThat(balanceService.quantite(produitId, ENTREPOT)).isEqualTo(20.0);
+        assertThat(balanceService.quantite(produitId, SITE_A)).isZero();
+
+        // Inventaire global : aucun site, tout le stock de l'entrepôt.
+        InventaireDto inv = inventaireService.create(InventairePlanifPayload.builder()
+                .libelle("Inventaire global").datePlanifiee(LocalDate.now())
+                .perimetre(PerimetreInventaire.SELECTION).produitIds(List.of(produitId))
+                .seuilEcartJustification(2).build());
+        InventaireDto enComptage = inventaireService.demarrerComptage(inv.getId());
+        assertThat(enComptage.getLignes().get(0).getQteTheorique()).isEqualTo(20.0);
+
+        saisir(inv.getId(), 15.0, "Casse constatée");
+        inventaireService.valider(inv.getId());
+        inventaireService.cloturer(inv.getId());
+
+        // Un seul solde, corrigé et positif.
+        assertThat(balanceService.soldesDuProduit(produitId)).hasSize(1);
+        assertThat(balanceService.quantite(produitId, ENTREPOT)).isEqualTo(15.0);
+        assertThat(balanceService.quantiteTotale(produitId)).isEqualTo(15.0);
     }
 
     @Test

@@ -14,7 +14,7 @@ import org.springframework.stereotype.Component;
 import java.util.List;
 
 /**
- * Migration : {@code modulesAutorises.rh} passe de booléen à objet de 19 sous-flags
+ * Migration : {@code modulesAutorises.rh} passe de booléen à objet de 17 sous-flags
  * (cf. {@link com.example.Pointage_Cleanic.entities.GestionModules.SousModules.Rh}).
  *
  * <p>Les documents existants stockent {@code rh} comme booléen BSON. Une fois le champ typé
@@ -22,8 +22,8 @@ import java.util.List;
  * réécrit donc, en BSON brut (jamais de lecture typée {@code Utilisateur}), tout {@code rh}
  * booléen restant :
  * <ul>
- *   <li>{@code rh: true}  ⇒ objet aux 19 sous-flags à {@code true} (accès RH complet conservé) ;</li>
- *   <li>{@code rh: false} ⇒ objet aux 19 sous-flags à {@code false} ;</li>
+ *   <li>{@code rh: true}  ⇒ objet aux 17 sous-flags à {@code true} (accès RH complet conservé) ;</li>
+ *   <li>{@code rh: false} ⇒ objet aux 17 sous-flags à {@code false} ;</li>
  *   <li>{@code rh} absent ⇒ laissé absent ({@code null} = pas d'accès RH, omis du claim).</li>
  * </ul>
  *
@@ -40,10 +40,10 @@ public class RhModuleMigrationRunner implements CommandLineRunner {
     private static final String COLLECTION = "utilisateur";
     private static final String CHAMP_RH = "modulesAutorises.rh";
 
-    /** Les 21 clés camelCase du contrat front (cf. {@code Rh}). */
+    /** Les 19 clés camelCase du contrat front (cf. {@code Rh}). */
     private static final List<String> SOUS_FLAGS = List.of(
             // 6.1 Gestion du Personnel
-            "dossierEmploye", "contrats", "organigramme", "periodeEssai", "titularisations", "documents",
+            "dossierEmploye", "contrats", "organigramme", "documents",
             // 6.2 Temps & Présences
             "pointageCentralise", "absences", "conges", "congesValidation", "congesMesDemandes",
             "heuresSupplementaires", "recapitulatif",
@@ -60,6 +60,7 @@ public class RhModuleMigrationRunner implements CommandLineRunner {
         long versFalse = migrer(false);
 
         if (versTrue > 0 || versFalse > 0) {
+            // Nombre de flags tiré de SOUS_FLAGS, pour qu'il ne dérive pas à chaque ajout.
             log.info("Migration modulesAutorises.rh booléen→objet : {} doc(s) rh=true → {} flags true, "
                     + "{} doc(s) rh=false → {} flags false",
                     versTrue, SOUS_FLAGS.size(), versFalse, SOUS_FLAGS.size());

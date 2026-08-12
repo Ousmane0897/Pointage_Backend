@@ -1,6 +1,7 @@
 package com.example.Pointage_Cleanic.controllers.terrain;
 
 import com.example.Pointage_Cleanic.Dto.terrain.AffectationAgentDto;
+import com.example.Pointage_Cleanic.Dto.terrain.AnnulationAffectationRequest;
 import com.example.Pointage_Cleanic.Dto.terrain.ConflitAffectation;
 import com.example.Pointage_Cleanic.Enum.terrain.StatutAffectation;
 import com.example.Pointage_Cleanic.services.terrain.PlanningService;
@@ -13,6 +14,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/terrain/planning")
@@ -50,6 +52,13 @@ public class PlanningController {
         return service.conflits(dateDebut, dateFin);
     }
 
+    @GetMapping("/affectations/stats")
+    public Map<StatutAffectation, Long> stats(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateDebut,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateFin) {
+        return service.stats(dateDebut, dateFin);
+    }
+
     @GetMapping("/affectations/{id}")
     public AffectationAgentDto getById(@PathVariable String id) {
         return service.getById(id);
@@ -65,9 +74,15 @@ public class PlanningController {
         return service.update(id, dto);
     }
 
-    @DeleteMapping("/affectations/{id}")
-    public ResponseEntity<Void> delete(@PathVariable String id) {
-        service.delete(id);
-        return ResponseEntity.noContent().build();
+    /**
+     * Annulation motivée : conserve la ligne en historique (statut ANNULEE + qui/quand/pourquoi).
+     *
+     * <p>Remplace l'ancien {@code DELETE /affectations/{id}}, supprimé le 2026-07-21 : une
+     * affectation ne se supprime pas, elle s'annule — sinon la traçabilité serait contournable.
+     */
+    @PostMapping("/affectations/{id}/annuler")
+    public AffectationAgentDto annuler(@PathVariable String id,
+                                       @RequestBody(required = false) AnnulationAffectationRequest body) {
+        return service.annuler(id, body == null ? null : body.motif());
     }
 }

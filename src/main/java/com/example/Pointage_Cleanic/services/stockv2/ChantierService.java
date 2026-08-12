@@ -37,12 +37,15 @@ import java.util.regex.Pattern;
 @RequiredArgsConstructor
 public class ChantierService {
 
+    private static final String PREFIXE_REFERENCE = "CH";
+
     private final ChantierRepository repository;
     private final ChantierMapper mapper;
     private final MouvementStockRepository mouvementRepository;
     private final ReferentielSiteService referentielSite;
     private final AnalyseSupport support;
     private final MongoTemplate mongoTemplate;
+    private final CompteurStockService compteurService;
 
     public PageResponse<ChantierDto> list(int page, int size, String q, StatutChantier statut,
                                           String siteId, LocalDate dateDebut, LocalDate dateFin) {
@@ -71,6 +74,11 @@ public class ChantierService {
 
     public List<ChantierDto> actifs() {
         return repository.findByStatut(StatutChantier.EN_COURS).stream().map(this::toDtoEnrichi).toList();
+    }
+
+    /** Aperçu (indicatif) de la prochaine référence CH-yyyy-NNN de l'année en cours. */
+    public String prochaineReference() {
+        return compteurService.apercuReferenceAnnuelle(PREFIXE_REFERENCE);
     }
 
     public DetailChantierDto detail(String id) {
@@ -118,12 +126,9 @@ public class ChantierService {
 
     public ChantierDto creer(ChantierPayload payload) {
         validerPayload(payload);
-        if (repository.existsByReference(payload.getReference().trim())) {
-            throw new StockConflitException("Référence de chantier déjà utilisée : " + payload.getReference());
-        }
         LocalDateTime now = LocalDateTime.now();
         Chantier chantier = Chantier.builder()
-                .reference(payload.getReference().trim())
+                .reference(compteurService.genererReferenceAnnuelle(PREFIXE_REFERENCE))
                 .nom(payload.getNom().trim())
                 .siteId(siteId(payload))
                 .siteNom(siteNom(payload))
@@ -141,11 +146,7 @@ public class ChantierService {
         Chantier chantier = loadOrThrow(id);
         exigerEnCours(chantier, "modifié");
         validerPayload(payload);
-        String nouvelleRef = payload.getReference().trim();
-        if (!nouvelleRef.equals(chantier.getReference()) && repository.existsByReference(nouvelleRef)) {
-            throw new StockConflitException("Référence de chantier déjà utilisée : " + nouvelleRef);
-        }
-        chantier.setReference(nouvelleRef);
+        // La référence est immuable après création (générée serveur) — non modifiable ici.
         chantier.setNom(payload.getNom().trim());
         chantier.setSiteId(siteId(payload));
         chantier.setSiteNom(siteNom(payload));
@@ -176,10 +177,8 @@ public class ChantierService {
     // ---------- internes ----------
 
     private void validerPayload(ChantierPayload payload) {
-        if (payload == null || !AnalyseSupport.notBlank(payload.getReference())) {
-            throw new IllegalArgumentException("La référence du chantier est obligatoire");
-        }
-        if (!AnalyseSupport.notBlank(payload.getNom())) {
+        // La référence est générée serveur (CH-yyyy-NNN) — non exigée dans le payload.
+        if (payload == null || !AnalyseSupport.notBlank(payload.getNom())) {
             throw new IllegalArgumentException("Le nom du chantier est obligatoire");
         }
         if (payload.getDateDebut() == null) {
