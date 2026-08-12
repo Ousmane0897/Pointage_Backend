@@ -2,6 +2,7 @@ package com.example.Pointage_Cleanic.services.rh;
 
 import com.example.Pointage_Cleanic.Dto.rh.SoldeCongeDto;
 import com.example.Pointage_Cleanic.Enum.rh.StatutDemande;
+import com.example.Pointage_Cleanic.Enum.rh.TypeConge;
 import com.example.Pointage_Cleanic.entities.rh.DemandeConge;
 import com.example.Pointage_Cleanic.entities.rh.DossierEmploye;
 import com.example.Pointage_Cleanic.repositories.rh.DemandeCongeRepository;
@@ -37,23 +38,32 @@ class DemandeCongeServiceSoldeTest {
     @Mock private DemandeCongeRepository demandeCongeRepository;
     @Mock private DossierEmployeRepository dossierEmployeRepository;
     @Mock private CongeWorkflowService workflowService;
+    @Mock private CongeIdentiteService identite;
 
     private DemandeCongeService service;
 
     @BeforeEach
     void setUp() {
         service = new DemandeCongeService(demandeCongeRepository, dossierEmployeRepository,
-                new CongeMapper(), workflowService);
+                new CongeMapper(), workflowService, identite);
         ReflectionTestUtils.setField(service, "joursAcquisParAn", 22);
+        // Le périmètre de lecture est testé à part (DemandeCongeServiceScopeTest) : ici on
+        // se place en RH pour ne mesurer que le calcul du solde.
+        when(identite.perimetreLecture()).thenReturn(PerimetreConges.tout());
 
         when(dossierEmployeRepository.findById(EMPLOYE)).thenReturn(Optional.of(
                 DossierEmploye.builder().id(EMPLOYE).matricule("M-1").nom("Fall").build()));
     }
 
     private DemandeConge conge(StatutDemande statut, int jours) {
+        return conge(statut, jours, TypeConge.ANNUEL);
+    }
+
+    private DemandeConge conge(StatutDemande statut, int jours, TypeConge type) {
         return DemandeConge.builder()
                 .employeId(EMPLOYE)
                 .statut(statut)
+                .type(type)
                 .nombreJours(jours)
                 .dateDebut(LocalDate.now())
                 .dateFin(LocalDate.now().plusDays(jours))
@@ -111,6 +121,56 @@ class DemandeCongeServiceSoldeTest {
         assertThat(solde.getPris()).isZero();
         assertThat(solde.getEnCours()).isZero();
         assertThat(solde.getSolde()).isEqualTo(22);
+    }
+
+    // ─── Décompte par type ────────────────────────────────────────────────────
+
+    @Test
+    void le_repos_medical_n_ampute_pas_le_solde() {
+        congesEnBase(
+                conge(StatutDemande.APPROUVE, 5, TypeConge.ANNUEL),
+                conge(StatutDemande.APPROUVE, 10, TypeConge.REPOS_MEDICAL));
+
+        SoldeCongeDto solde = service.getSolde(EMPLOYE);
+
+        assertThat(solde.getPris()).isEqualTo(5);
+        assertThat(solde.getSolde()).isEqualTo(17);
+    }
+
+    @Test
+    void l_absence_non_justifiee_ne_reserve_pas_de_jours() {
+        congesEnBase(
+                conge(StatutDemande.EN_ATTENTE_SUPERIEUR, 3, TypeConge.ANNUEL),
+                conge(StatutDemande.EN_ATTENTE_RH, 4, TypeConge.ABSENCE_NON_JUSTIFIEE));
+
+        SoldeCongeDto solde = service.getSolde(EMPLOYE);
+
+        assertThat(solde.getEnCours()).isEqualTo(3);
+        assertThat(solde.getSolde()).isEqualTo(19);
+    }
+
+    @Test
+    void maternite_paternite_et_sans_solde_n_amputent_plus_le_solde() {
+        // Correction d'une anomalie préexistante : ces types se retranchaient des congés payés.
+        congesEnBase(
+                conge(StatutDemande.APPROUVE, 90, TypeConge.MATERNITE),
+                conge(StatutDemande.APPROUVE, 3, TypeConge.PATERNITE),
+                conge(StatutDemande.APPROUVE, 8, TypeConge.SANS_SOLDE),
+                conge(StatutDemande.APPROUVE, 2, TypeConge.EXCEPTIONNEL));
+
+        SoldeCongeDto solde = service.getSolde(EMPLOYE);
+
+        assertThat(solde.getPris()).isZero();
+        assertThat(solde.getSolde()).isEqualTo(22);
+    }
+
+    @Test
+    void une_demande_sans_type_reste_decomptee() {
+        // Données historiques : le DTO n'a jamais porté de @NotNull sur le type. On préfère
+        // sous-estimer un solde que d'en créditer à tort.
+        congesEnBase(conge(StatutDemande.APPROUVE, 6, null));
+
+        assertThat(service.getSolde(EMPLOYE).getPris()).isEqualTo(6);
     }
 
     @Test

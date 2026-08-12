@@ -100,7 +100,7 @@ class PointageCentraliseServiceTest {
 
         PointageCentraliseDto conge = byEmp.get("emp2");
         assertThat(conge.getStatut()).isEqualTo("CONGE");
-        assertThat(conge.getMotif()).isEqualTo("ANNUEL");
+        assertThat(conge.getMotif()).isEqualTo("Annuel");   // libellé, pas le nom de l'enum
         assertThat(conge.getHeureArrivee()).isNull();
 
         PointageCentraliseDto absent = byEmp.get("emp3");

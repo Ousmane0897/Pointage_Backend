@@ -7,6 +7,7 @@ import com.example.Pointage_Cleanic.Enum.rh.TypeAbsence;
 import com.example.Pointage_Cleanic.entities.rh.DossierEmploye;
 import com.example.Pointage_Cleanic.entities.rh.PieceJustificative;
 import com.example.Pointage_Cleanic.entities.rh.RhAbsence;
+import com.example.Pointage_Cleanic.exception.CongeAccesRefuseException;
 import com.example.Pointage_Cleanic.exception.ResourceNotFoundException;
 import com.example.Pointage_Cleanic.repositories.rh.DossierEmployeRepository;
 import com.example.Pointage_Cleanic.repositories.rh.RhAbsenceRepository;
@@ -32,8 +33,10 @@ public class RhAbsenceService {
 
     private final RhAbsenceRepository rhAbsenceRepository;
     private final DossierEmployeRepository dossierEmployeRepository;
+    private final CongeIdentiteService identite;
 
     public RhAbsenceDto create(RhAbsenceDto dto) {
+        exigerVisibilite(dto.getEmployeId());
         DossierEmploye employe = dossierEmployeRepository.findById(dto.getEmployeId())
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Dossier employé introuvable : " + dto.getEmployeId()));
@@ -59,10 +62,14 @@ public class RhAbsenceService {
     }
 
     public List<RhAbsenceDto> getAll() {
-        return rhAbsenceRepository.findAll().stream().map(this::toDto).collect(Collectors.toList());
+        PerimetreConges perimetre = identite.perimetreLecture();
+        return rhAbsenceRepository.findAll().stream()
+                .filter(e -> perimetre.voitEmploye(e.getEmployeId()))
+                .map(this::toDto).collect(Collectors.toList());
     }
 
     public List<RhAbsenceDto> getByEmployeId(String employeId) {
+        exigerVisibilite(employeId);
         return rhAbsenceRepository.findByEmployeId(employeId).stream()
                 .map(this::toDto).collect(Collectors.toList());
     }
@@ -70,13 +77,24 @@ public class RhAbsenceService {
     /**
      * Liste filtrée + paginée pour la façade /api/temps-presences. Filtrage en
      * mémoire (volumes RH modestes) ; intervalle [dateDebut, dateFin] = chevauchement.
+     *
+     * <p>Le périmètre de lecture s'applique en tête de chaîne, avant le mapping DTO et la
+     * pagination, pour que {@code totalElements} reflète ce que l'appelant a le droit de
+     * voir. Sans cela, la restriction posée sur les demandes de congé serait contournable
+     * en un clic depuis l'onglet « Déclarations » de la même rubrique.
      */
     public Page<RhAbsenceDto> search(
             String employeId, String type, String statut,
             LocalDate dateDebut, LocalDate dateFin, String departement, String q,
             int page, int size) {
 
+        PerimetreConges perimetre = identite.perimetreLecture();
+        if (perimetre.estVide()) {
+            return paginate(List.of(), page, size);
+        }
+
         List<RhAbsenceDto> filtered = rhAbsenceRepository.findAll().stream()
+                .filter(e -> perimetre.voitEmploye(e.getEmployeId()))
                 .map(this::toDto)
                 .filter(d -> employeId == null || employeId.isBlank() || employeId.equals(d.getEmployeId()))
                 .filter(d -> blankOrEnum(type, d.getType()))
@@ -164,9 +182,27 @@ public class RhAbsenceService {
         return absence.getPieceJustificative().getData();
     }
 
+    /**
+     * Charge une absence <b>dans le périmètre de l'appelant</b>. Toutes les opérations
+     * unitaires (consultation, modification, suppression, justificatif) passent par ici :
+     * une seule garde, impossible d'en oublier une.
+     */
     private RhAbsence requireById(String id) {
-        return rhAbsenceRepository.findById(id)
+        RhAbsence absence = rhAbsenceRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Absence introuvable : " + id));
+        if (!identite.perimetreLecture().voitEmploye(absence.getEmployeId())) {
+            throw new CongeAccesRefuseException(
+                    "Vous n'êtes pas autorisé à accéder à cette déclaration.");
+        }
+        return absence;
+    }
+
+    /** Garde de périmètre par employé, avant tout accès au dossier ou à ses absences. */
+    private void exigerVisibilite(String employeId) {
+        if (!identite.perimetreLecture().voitEmploye(employeId)) {
+            throw new CongeAccesRefuseException(
+                    "Vous n'êtes pas autorisé à accéder aux déclarations de cet employé.");
+        }
     }
 
     /**

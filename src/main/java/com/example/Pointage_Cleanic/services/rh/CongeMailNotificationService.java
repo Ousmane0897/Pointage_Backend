@@ -216,7 +216,9 @@ public class CongeMailNotificationService {
         recap.put("Employé", nomComplet(d));
         recap.put("Matricule", valeur(d.getMatricule()));
         recap.put("Département", valeur(d.getDepartement()));
-        recap.put("Type de congé", libelleEnum(d.getType() == null ? null : d.getType().name()));
+        // Libellé porté par l'enum : `libelleEnum` désaccentue (« Repos medical ») et ne
+        // rendrait pas « Absence non justifiée » correctement.
+        recap.put("Type de congé", d.getType() == null ? "—" : d.getType().getLibelle());
         recap.put("Période", "%s → %s".formatted(date(d.getDateDebut()), date(d.getDateFin())));
         recap.put("Nombre de jours ouvrés", d.getNombreJours() == null ? "—" : String.valueOf(d.getNombreJours()));
         recap.put("Motif de la demande", valeur(d.getMotif()));

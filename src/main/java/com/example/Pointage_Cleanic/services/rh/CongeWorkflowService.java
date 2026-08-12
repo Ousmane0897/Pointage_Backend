@@ -343,9 +343,21 @@ public class CongeWorkflowService {
         return CompteursAValiderDto.builder().total(total).parNiveau(parNiveau).build();
     }
 
-    /** Fiche d'une demande, décorée pour l'appelant (historique + peutValiderParMoi). */
+    /**
+     * Fiche d'une demande, décorée pour l'appelant (historique + peutValiderParMoi).
+     *
+     * <p>La lecture est soumise au périmètre : demandeur, supérieur hiérarchique (actuel ou
+     * figé sur la demande), RH et super-admin. Toute autre personne obtient un 403 — y
+     * compris en suivant un lien d'e-mail qui lui aurait été transféré.
+     */
     public DemandeCongeDto getPourAppelant(String id) {
-        return decorer(mapper.toDto(charger(id)));
+        DemandeConge demande = charger(id);
+        if (!identite.perimetreLecture()
+                .voitDemande(demande.getEmployeId(), demande.getSuperieurHierarchiqueId())) {
+            throw new CongeAccesRefuseException(
+                    "Vous n'êtes pas autorisé à consulter cette demande de congé.");
+        }
+        return decorer(mapper.toDto(demande));
     }
 
     /** Renseigne {@code peutValiderParMoi} — autorité unique du front pour ses boutons. */

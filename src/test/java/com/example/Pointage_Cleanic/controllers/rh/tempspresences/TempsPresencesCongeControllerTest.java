@@ -283,4 +283,26 @@ class TempsPresencesCongeControllerTest {
                 .andExpect(jsonPath("$.error").value("CONGE_INVALIDE"))
                 .andExpect(jsonPath("$.message").value("Motif trop court"));
     }
+
+    // ─── Périmètre de visibilité ──────────────────────────────────────────────
+
+    @Test
+    void consulter_une_demande_hors_perimetre_renvoie_403() throws Exception {
+        when(congeWorkflowService.getPourAppelant("cg-1"))
+                .thenThrow(new CongeAccesRefuseException("Consultation non autorisée"));
+
+        mockMvc.perform(get("/api/temps-presences/conges/demandes/cg-1"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error").value("CONGE_ACCES_REFUSE"));
+    }
+
+    @Test
+    void consulter_le_solde_d_un_employe_hors_perimetre_renvoie_403() throws Exception {
+        when(demandeCongeService.getSolde("emp-tiers"))
+                .thenThrow(new CongeAccesRefuseException("Consultation non autorisée"));
+
+        mockMvc.perform(get("/api/temps-presences/conges/soldes/emp-tiers"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error").value("CONGE_ACCES_REFUSE"));
+    }
 }

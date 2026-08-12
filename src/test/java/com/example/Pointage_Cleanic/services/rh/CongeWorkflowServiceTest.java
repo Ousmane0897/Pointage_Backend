@@ -63,6 +63,9 @@ class CongeWorkflowServiceTest {
                 .thenAnswer(inv -> inv.getArgument(0));
         when(identite.idUtilisateurCourant()).thenReturn("usr-1");
         when(identite.nomCourant()).thenReturn("Awa Ndiaye");
+        // Le périmètre ne gouverne que la consultation : on l'ouvre par défaut pour que les
+        // tests de transition ne portent que sur les habilitations de décision.
+        when(identite.perimetreLecture()).thenReturn(PerimetreConges.tout());
     }
 
     // ─── Fixtures ─────────────────────────────────────────────────────────────
@@ -443,6 +446,60 @@ class CongeWorkflowServiceTest {
             DemandeCongeDto dto = DemandeCongeDto.builder().statut(StatutDemande.APPROUVE).build();
 
             assertThat(service.decorer(dto).getPeutValiderParMoi()).isFalse();
+        }
+    }
+
+    // ─── Périmètre de lecture ─────────────────────────────────────────────────
+
+    @Nested
+    @DisplayName("Lecture d'une demande")
+    class Lecture {
+
+        @Test
+        void le_demandeur_ouvre_sa_propre_demande() {
+            chargeable(demande(StatutDemande.EN_ATTENTE_SUPERIEUR));
+            when(identite.perimetreLecture())
+                    .thenReturn(new PerimetreConges(false, SUBORDONNE, java.util.Set.of(SUBORDONNE)));
+
+            assertThat(service.getPourAppelant("cg-1").getEmployeId()).isEqualTo(SUBORDONNE);
+        }
+
+        @Test
+        void le_superieur_ouvre_la_demande_de_son_subordonne() {
+            chargeable(demande(StatutDemande.EN_ATTENTE_SUPERIEUR));
+            when(identite.perimetreLecture())
+                    .thenReturn(new PerimetreConges(false, MOI, java.util.Set.of(MOI, SUBORDONNE)));
+
+            assertThat(service.getPourAppelant("cg-1")).isNotNull();
+        }
+
+        @Test
+        void le_validateur_fige_ouvre_la_demande_meme_apres_une_reorg() {
+            // Le demandeur n'est plus dans l'équipe, mais la demande en vol lui reste
+            // rattachée : le lien reçu par e-mail doit continuer de fonctionner.
+            chargeable(demande(StatutDemande.EN_ATTENTE_SUPERIEUR));
+            when(identite.perimetreLecture())
+                    .thenReturn(new PerimetreConges(false, MOI, java.util.Set.of(MOI)));
+
+            assertThat(service.getPourAppelant("cg-1")).isNotNull();
+        }
+
+        @Test
+        void un_tiers_obtient_un_403() {
+            chargeable(demande(StatutDemande.EN_ATTENTE_SUPERIEUR));
+            when(identite.perimetreLecture())
+                    .thenReturn(new PerimetreConges(false, "emp-curieux", java.util.Set.of("emp-curieux")));
+
+            assertThatThrownBy(() -> service.getPourAppelant("cg-1"))
+                    .isInstanceOf(CongeAccesRefuseException.class);
+        }
+
+        @Test
+        void la_rh_ouvre_n_importe_quelle_demande() {
+            chargeable(demande(StatutDemande.EN_ATTENTE_RH));
+            when(identite.perimetreLecture()).thenReturn(PerimetreConges.tout());
+
+            assertThat(service.getPourAppelant("cg-1")).isNotNull();
         }
     }
 }

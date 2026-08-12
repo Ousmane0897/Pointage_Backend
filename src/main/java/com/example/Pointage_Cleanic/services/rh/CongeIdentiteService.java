@@ -10,8 +10,10 @@ import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * Résout l'identité métier de l'appelant pour le circuit de validation des congés.
@@ -122,5 +124,33 @@ public class CongeIdentiteService {
             niveaux.add(NiveauValidationConge.RH);
         }
         return niveaux;
+    }
+
+    // ─── Périmètre de lecture ─────────────────────────────────────────────────
+
+    /**
+     * Périmètre de lecture des congés de l'appelant, résolu en <b>une seule passe</b>.
+     *
+     * <p>⚠ Perf : {@code currentRole()} et {@code employeCourant()} coûtent chacun une à
+     * deux lectures Mongo. On les appelle ici une fois et on fait circuler le résultat —
+     * ne jamais rappeler {@code estRh()} / {@code estSuperAdmin()} depuis un stream de
+     * filtrage. Règle : <b>un {@code perimetreLecture()} par méthode publique</b>.
+     */
+    public PerimetreConges perimetreLecture() {
+        String role = currentUserProvider.currentRole();
+        if (ROLE_RH.equals(role) || ROLE_SUPERADMIN.equals(role)) {
+            return PerimetreConges.tout();
+        }
+
+        String moi = employeIdCourant();
+        if (moi == null) {
+            return PerimetreConges.vide();
+        }
+
+        Set<String> visibles = new HashSet<>();
+        visibles.add(moi);
+        dossierEmployeRepository.findBySuperieurHierarchiqueId(moi)
+                .forEach(subordonne -> visibles.add(subordonne.getId()));
+        return new PerimetreConges(false, moi, Set.copyOf(visibles));
     }
 }
