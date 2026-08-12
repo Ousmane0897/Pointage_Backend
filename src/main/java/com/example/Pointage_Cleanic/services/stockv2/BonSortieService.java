@@ -132,6 +132,7 @@ public class BonSortieService {
     public BonSortieDto modifier(String id, BonSortiePayload payload) {
         BonSortie bon = loadOrThrow(id);
         exigerBrouillon(bon, "modifié");
+        exigerCreateurOuControleur(bon);
         if (payload.getType() == null) {
             throw new IllegalArgumentException("Le type de sortie est obligatoire");
         }
@@ -164,6 +165,7 @@ public class BonSortieService {
     public void supprimer(String id) {
         BonSortie bon = loadOrThrow(id);
         exigerBrouillon(bon, "supprimé");
+        exigerCreateurOuControleur(bon);
         repository.deleteById(id);
     }
 
@@ -172,6 +174,9 @@ public class BonSortieService {
         if (bon.getStatut() != StatutBon.BROUILLON) {
             throw new StockConflitException("Seul un bon en BROUILLON peut être soumis (statut actuel : " + bon.getStatut() + ")");
         }
+        // Le créateur soumet ses propres bons : sans cela, il corrigerait un bon repris après refus
+        // sans pouvoir le renvoyer dans le circuit.
+        exigerCreateurOuControleur(bon);
         bon.setStatut(StatutBon.SOUMIS);
         bon.setUpdatedAt(LocalDateTime.now());
         bon.getHistorique().add(support.historique(ActionWorkflow.SOUMISSION, null));
@@ -186,6 +191,8 @@ public class BonSortieService {
         if (bon.getStatut() != StatutBon.SOUMIS) {
             throw new StockConflitException("Seul un bon SOUMIS peut être validé (statut actuel : " + bon.getStatut() + ")");
         }
+        // Décision qui engage le stock : super-administrateur seul.
+        exigerSuperAdmin("Validation");
         String commentaire = decision == null ? null : decision.getCommentaire();
 
         // 7.5 : un bon DISTRIBUTION_CHANTIER ne peut être validé vers un chantier clôturé.
@@ -221,6 +228,7 @@ public class BonSortieService {
         if (bon.getStatut() != StatutBon.SOUMIS) {
             throw new StockConflitException("Seul un bon SOUMIS peut être refusé (statut actuel : " + bon.getStatut() + ")");
         }
+        exigerSuperAdmin("Refus");
         if (decision == null || decision.getCommentaire() == null || decision.getCommentaire().isBlank()) {
             throw new IllegalArgumentException("Le commentaire de refus est obligatoire");
         }
@@ -272,6 +280,18 @@ public class BonSortieService {
      * champ est nul et la propriété est considérée comme acquise — sinon d'anciens bons refusés
      * seraient définitivement bloqués. À retirer quand le parc sera renouvelé.
      */
+    /**
+     * Décisions du circuit (valider / refuser) : super-administrateur seul.
+     *
+     * <p>Aucun repli ici, contrairement à la propriété : le rôle est porté par le JWT, il est
+     * toujours connu.
+     */
+    private void exigerSuperAdmin(String action) {
+        if (!ROLE_SUPERADMIN.equals(support.currentRole())) {
+            throw new StockAccesRefuseException(action + " réservé au super-administrateur");
+        }
+    }
+
     private void exigerCreateurOuControleur(BonSortie bon) {
         String role = support.currentRole();
         if (ROLE_SUPERADMIN.equals(role) || ROLE_CONTROLEUR_STOCK.equals(role)) {

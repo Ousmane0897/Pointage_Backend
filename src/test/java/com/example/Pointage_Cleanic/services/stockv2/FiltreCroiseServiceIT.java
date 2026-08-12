@@ -10,6 +10,7 @@ import com.example.Pointage_Cleanic.Enum.stockv2.TypeDestinataire;
 import com.example.Pointage_Cleanic.Enum.stockv2.TypeProduit;
 import com.example.Pointage_Cleanic.Enum.stockv2.TypeSortie;
 import com.example.Pointage_Cleanic.Enum.stockv2.UniteStock;
+import com.example.Pointage_Cleanic.config.AuthentificationTest;
 import com.example.Pointage_Cleanic.config.MongoTestContainer;
 import com.example.Pointage_Cleanic.entities.stockv2.BonSortie;
 import com.example.Pointage_Cleanic.entities.stockv2.MouvementStock;
@@ -64,6 +65,15 @@ class FiltreCroiseServiceIT extends MongoTestContainer {
                 .unite(UniteStock.L).seuilAlerte(5).prixUnitaire(2000L).actif(true).build()).getId();
         mongoTemplate.save(StockParSite.builder().produitId(produit1).siteId(SITE_A).quantite(1000).build());
         mongoTemplate.save(StockParSite.builder().produitId(produit2).siteId(SITE_A).quantite(1000).build());
+
+        // Les décisions du circuit sont réservées au super-administrateur : sans session,
+        // valider/refuser renverraient 403 et ce test ne pourrait plus préparer ses données.
+        AuthentificationTest.connecterSuperAdmin(mongoTemplate);
+    }
+
+    @org.junit.jupiter.api.AfterEach
+    void deconnecter() {
+        AuthentificationTest.deconnecter();
     }
 
     private void sortie(String produitId, double qte, LocalDate date) {

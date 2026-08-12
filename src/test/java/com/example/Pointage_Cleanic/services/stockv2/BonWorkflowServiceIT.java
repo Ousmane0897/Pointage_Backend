@@ -15,6 +15,7 @@ import com.example.Pointage_Cleanic.Enum.stockv2.TypeMouvement;
 import com.example.Pointage_Cleanic.Enum.stockv2.TypeProduit;
 import com.example.Pointage_Cleanic.Enum.stockv2.TypeSortie;
 import com.example.Pointage_Cleanic.Enum.stockv2.UniteStock;
+import com.example.Pointage_Cleanic.config.AuthentificationTest;
 import com.example.Pointage_Cleanic.config.MongoTestContainer;
 import com.example.Pointage_Cleanic.entities.stockv2.BonEntree;
 import com.example.Pointage_Cleanic.entities.stockv2.BonSortie;
@@ -22,6 +23,7 @@ import com.example.Pointage_Cleanic.entities.stockv2.MouvementStock;
 import com.example.Pointage_Cleanic.entities.stockv2.ProduitStock;
 import com.example.Pointage_Cleanic.entities.stockv2.StockParSite;
 import com.example.Pointage_Cleanic.entities.terrain.SiteClient;
+import com.example.Pointage_Cleanic.exception.StockAccesRefuseException;
 import com.example.Pointage_Cleanic.exception.StockConflitException;
 import com.example.Pointage_Cleanic.exception.StockOperationException;
 import com.example.Pointage_Cleanic.repositories.stockv2.MouvementStockRepository;
@@ -69,6 +71,15 @@ class BonWorkflowServiceIT extends MongoTestContainer {
         produitId = produitRepository.save(ProduitStock.builder()
                 .code("P1").libelle("Savon").typeProduit(TypeProduit.CONSOMMABLE)
                 .unite(UniteStock.PIECE).seuilAlerte(5).prixUnitaire(1000L).actif(true).build()).getId();
+
+        // Les décisions du circuit sont réservées au super-administrateur : sans session,
+        // valider/refuser renverraient 403 et ce test ne pourrait plus préparer ses données.
+        AuthentificationTest.connecterSuperAdmin(mongoTemplate);
+    }
+
+    @org.junit.jupiter.api.AfterEach
+    void deconnecter() {
+        AuthentificationTest.deconnecter();
     }
 
     private BonEntreePayload entreePayload(double qte) {
@@ -216,6 +227,62 @@ class BonWorkflowServiceIT extends MongoTestContainer {
         bonSortieService.soumettre(sortie.getId());
         assertThatThrownBy(() -> bonSortieService.reprendre(sortie.getId()))
                 .isInstanceOf(StockConflitException.class);
+    }
+
+    // --- Habilitations (bons de sortie) ---------------------------------------
+
+    /**
+     * Valider engage le stock : super-administrateur seul. Le front masque le bouton, mais l'API
+     * restait ouverte à tout compte authentifié.
+     */
+    @Test
+    void decision_par_un_profil_non_superadmin_403_sans_effet() {
+        BonEntreeDto entree = bonEntreeService.creer(entreePayload(20));
+        bonEntreeService.soumettre(entree.getId());
+        bonEntreeService.valider(entree.getId(), null);
+        BonSortieDto sortie = bonSortieService.creer(sortiePayload(5));
+        bonSortieService.soumettre(sortie.getId());
+
+        AuthentificationTest.connecter(mongoTemplate, "magasinier@cleanic.sn",
+                AuthentificationTest.CONTROLEUR_STOCK);
+
+        assertThatThrownBy(() -> bonSortieService.valider(sortie.getId(), null))
+                .isInstanceOf(StockAccesRefuseException.class);
+        assertThatThrownBy(() -> bonSortieService.refuser(sortie.getId(), new DecisionPayload("non conforme")))
+                .isInstanceOf(StockAccesRefuseException.class);
+
+        // Rien n'a bougé : statut inchangé, stock intact.
+        assertThat(bonSortieService.getById(sortie.getId()).getStatut()).isEqualTo(StatutBon.SOUMIS);
+        assertThat(balanceService.quantite(produitId, ENTREPOT)).isEqualTo(20.0);
+    }
+
+    /** Modifier, supprimer et soumettre restent au créateur (ou au contrôleur / super-admin). */
+    @Test
+    void brouillon_d_un_autre_utilisateur_403_en_modification_suppression_et_soumission() {
+        BonSortieDto sortie = bonSortieService.creer(sortiePayload(3));
+
+        AuthentificationTest.connecter(mongoTemplate, "tiers@cleanic.sn", "MAGASINIER");
+
+        assertThatThrownBy(() -> bonSortieService.modifier(sortie.getId(), sortiePayload(4)))
+                .isInstanceOf(StockAccesRefuseException.class);
+        assertThatThrownBy(() -> bonSortieService.supprimer(sortie.getId()))
+                .isInstanceOf(StockAccesRefuseException.class);
+        assertThatThrownBy(() -> bonSortieService.soumettre(sortie.getId()))
+                .isInstanceOf(StockAccesRefuseException.class);
+
+        assertThat(bonSortieService.getById(sortie.getId()).getStatut()).isEqualTo(StatutBon.BROUILLON);
+    }
+
+    /** Le créateur soumet son propre bon sans détenir de rôle particulier. */
+    @Test
+    void createur_sans_role_particulier_peut_soumettre_son_bon() {
+        AuthentificationTest.connecter(mongoTemplate, "agent@cleanic.sn", "MAGASINIER");
+        BonSortieDto sortie = bonSortieService.creer(sortiePayload(3));
+
+        BonSortieDto soumis = bonSortieService.soumettre(sortie.getId());
+
+        assertThat(soumis.getStatut()).isEqualTo(StatutBon.SOUMIS);
+        assertThat(soumis.getCreeParEmail()).isEqualTo("agent@cleanic.sn");
     }
 
     @Test
