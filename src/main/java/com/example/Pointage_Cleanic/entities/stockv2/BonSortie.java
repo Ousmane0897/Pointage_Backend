@@ -58,6 +58,16 @@ public class BonSortie {
     private String validateurId;
     private String validateurNom;
 
+    /**
+     * Auteur du bon, renseigné <b>serveur</b> depuis le JWT à la création et jamais accepté du
+     * client (absent de {@code BonSortiePayload}). Distinct du {@code demandeurId}, qui est choisi
+     * dans le formulaire : c'est l'auteur qui gouverne les habilitations (reprise après refus,
+     * édition, suppression d'un brouillon), pas le demandeur.
+     */
+    private String creeParId;
+    private String creeParEmail;
+    private String creeParNom;
+
     private String commentaire;
     private String motifRefus;
 

@@ -84,6 +84,16 @@ public class BonSortieController {
         return ResponseEntity.ok(service.soumettre(id));
     }
 
+    /**
+     * Reprise d'un bon refusé : il repasse en BROUILLON pour correction, l'historique du cycle
+     * refusé et le motif de refus étant conservés. 409 hors statut REFUSE, 403 hors créateur /
+     * contrôleur de stock / super-administrateur.
+     */
+    @PostMapping("/{id}/reprendre")
+    public ResponseEntity<BonSortieDto> reprendre(@PathVariable String id) {
+        return ResponseEntity.ok(service.reprendre(id));
+    }
+
     @PostMapping("/{id}/valider")
     public ResponseEntity<BonSortieDto> valider(@PathVariable String id,
                                                 @RequestBody(required = false) DecisionPayload decision) {

@@ -7,6 +7,7 @@ import com.example.Pointage_Cleanic.Dto.stockv2.BonSortiePayload;
 import com.example.Pointage_Cleanic.Dto.stockv2.DecisionPayload;
 import com.example.Pointage_Cleanic.Dto.stockv2.DestinatairePayload;
 import com.example.Pointage_Cleanic.Dto.stockv2.LignePayload;
+import com.example.Pointage_Cleanic.Enum.stockv2.ActionWorkflow;
 import com.example.Pointage_Cleanic.Enum.stockv2.StatutBon;
 import com.example.Pointage_Cleanic.Enum.stockv2.TypeDestinataire;
 import com.example.Pointage_Cleanic.Enum.stockv2.TypeEntree;
@@ -163,6 +164,58 @@ class BonWorkflowServiceIT extends MongoTestContainer {
         bonEntreeService.soumettre(cree.getId());
         assertThatThrownBy(() -> bonEntreeService.refuser(cree.getId(), new DecisionPayload(" ")))
                 .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    // --- Reprise après refus (bons de sortie uniquement) -----------------------
+
+    /**
+     * REFUSE n'est pas un cul-de-sac : le bon revient en BROUILLON, l'historique du cycle refusé
+     * est <b>conservé</b> et enrichi d'une entrée REPRISE, et le motif de refus subsiste — c'est en
+     * corrigeant que le créateur en a besoin.
+     */
+    @Test
+    void reprise_d_un_bon_refuse_le_ramene_en_brouillon_en_conservant_historique_et_motif() {
+        BonSortieDto sortie = bonSortieService.creer(sortiePayload(3));
+        bonSortieService.soumettre(sortie.getId());
+        bonSortieService.refuser(sortie.getId(), new DecisionPayload("Quantité erronée"));
+        int historiqueAvant = bonSortieService.getById(sortie.getId()).getHistorique().size();
+
+        BonSortieDto repris = bonSortieService.reprendre(sortie.getId());
+
+        assertThat(repris.getStatut()).isEqualTo(StatutBon.BROUILLON);
+        assertThat(repris.getMotifRefus()).isEqualTo("Quantité erronée");
+        assertThat(repris.getHistorique()).hasSize(historiqueAvant + 1);
+        assertThat(repris.getHistorique().get(historiqueAvant).getAction()).isEqualTo(ActionWorkflow.REPRISE);
+        // Le cycle refusé reste lisible.
+        assertThat(repris.getHistorique()).anyMatch(h -> h.getAction() == ActionWorkflow.REFUS);
+    }
+
+    @Test
+    void bon_repris_peut_etre_modifie_puis_resoumis() {
+        BonSortieDto sortie = bonSortieService.creer(sortiePayload(3));
+        bonSortieService.soumettre(sortie.getId());
+        bonSortieService.refuser(sortie.getId(), new DecisionPayload("Quantité erronée"));
+        bonSortieService.reprendre(sortie.getId());
+
+        bonSortieService.modifier(sortie.getId(), sortiePayload(2));
+        BonSortieDto resoumis = bonSortieService.soumettre(sortie.getId());
+
+        assertThat(resoumis.getStatut()).isEqualTo(StatutBon.SOUMIS);
+        assertThat(resoumis.getLignes().get(0).getQuantite()).isEqualTo(2.0);
+    }
+
+    @Test
+    void reprise_hors_statut_refuse_409() {
+        BonSortieDto sortie = bonSortieService.creer(sortiePayload(3));
+
+        // BROUILLON
+        assertThatThrownBy(() -> bonSortieService.reprendre(sortie.getId()))
+                .isInstanceOf(StockConflitException.class);
+
+        // SOUMIS
+        bonSortieService.soumettre(sortie.getId());
+        assertThatThrownBy(() -> bonSortieService.reprendre(sortie.getId()))
+                .isInstanceOf(StockConflitException.class);
     }
 
     @Test

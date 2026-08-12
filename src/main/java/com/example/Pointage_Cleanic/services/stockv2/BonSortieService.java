@@ -15,10 +15,14 @@ import com.example.Pointage_Cleanic.entities.stockv2.Chantier;
 import com.example.Pointage_Cleanic.entities.stockv2.DestinataireBon;
 import com.example.Pointage_Cleanic.entities.stockv2.LigneBon;
 import com.example.Pointage_Cleanic.exception.ResourceNotFoundException;
+import com.example.Pointage_Cleanic.exception.StockAccesRefuseException;
 import com.example.Pointage_Cleanic.exception.StockConflitException;
 import com.example.Pointage_Cleanic.repositories.stockv2.BonSortieRepository;
 import com.example.Pointage_Cleanic.repositories.stockv2.ChantierRepository;
 import com.example.Pointage_Cleanic.services.stockv2.BonSupportService.DemandeurRef;
+
+import static com.example.Pointage_Cleanic.services.stockv2.BonSupportService.ROLE_CONTROLEUR_STOCK;
+import static com.example.Pointage_Cleanic.services.stockv2.BonSupportService.ROLE_SUPERADMIN;
 import com.example.Pointage_Cleanic.util.PageResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
@@ -109,6 +113,11 @@ public class BonSortieService {
                 .statut(StatutBon.BROUILLON)
                 .demandeurId(demandeur.id())
                 .demandeurNom(demandeur.nom())
+                // Auteur déduit du JWT, jamais accepté du client : c'est lui qui gouverne les
+                // habilitations, contrairement au demandeur choisi dans le formulaire.
+                .creeParId(support.currentUserId())
+                .creeParEmail(support.currentUserEmail())
+                .creeParNom(support.currentUserNom())
                 .commentaire(payload.getCommentaire())
                 .montantTotal(support.montantTotal(lignes))
                 .createdAt(now)
@@ -226,6 +235,57 @@ public class BonSortieService {
         notificationService.diffuser(notification("BON_REFUSE", saved, "Bon de sortie refusé",
                 "Le bon " + saved.getReference() + " a été refusé : " + motif));
         return mapper.toDto(saved);
+    }
+
+    /**
+     * Reprise d'un bon refusé : il repasse en BROUILLON pour que son créateur le corrige, puis le
+     * renvoie dans le circuit. {@code REFUSE} cesse ainsi d'être un cul-de-sac.
+     *
+     * <p>Action explicite plutôt qu'un bon refusé rendu modifiable en place : sans elle, la colonne
+     * <i>Refusé</i> du Kanban mélangerait refus définitifs et corrections en cours.
+     *
+     * <p>⚠ L'historique est <b>augmenté</b> d'une entrée {@code REPRISE}, jamais réinitialisé, et
+     * {@code motifRefus} est <b>conservé</b> — écrasé seulement au refus suivant : c'est au moment de
+     * corriger que le créateur en a le plus besoin. Le front l'affiche alors en bandeau orange.
+     */
+    public BonSortieDto reprendre(String id) {
+        BonSortie bon = loadOrThrow(id);
+        if (bon.getStatut() != StatutBon.REFUSE) {
+            throw new StockConflitException(
+                    "Seul un bon REFUSE peut être repris (statut actuel : " + bon.getStatut() + ")");
+        }
+        exigerCreateurOuControleur(bon);
+
+        bon.setStatut(StatutBon.BROUILLON);
+        bon.setUpdatedAt(LocalDateTime.now());
+        bon.getHistorique().add(support.historique(ActionWorkflow.REPRISE, null));
+        BonSortie saved = repository.save(bon);
+        notificationService.diffuser(notification("BON_REPRIS", saved, "Bon de sortie repris",
+                "Le bon " + saved.getReference() + " est repassé en brouillon pour correction."));
+        return mapper.toDto(saved);
+    }
+
+    /**
+     * Le créateur du bon, le contrôleur de stock et le super-admin, personne d'autre.
+     *
+     * <p>⚠ Repli transitoire : sur les bons créés <b>avant</b> l'ajout de {@code creeParEmail}, le
+     * champ est nul et la propriété est considérée comme acquise — sinon d'anciens bons refusés
+     * seraient définitivement bloqués. À retirer quand le parc sera renouvelé.
+     */
+    private void exigerCreateurOuControleur(BonSortie bon) {
+        String role = support.currentRole();
+        if (ROLE_SUPERADMIN.equals(role) || ROLE_CONTROLEUR_STOCK.equals(role)) {
+            return;
+        }
+        String auteur = bon.getCreeParEmail();
+        if (auteur == null || auteur.isBlank()) {
+            return;
+        }
+        String courant = support.currentUserEmail();
+        if (courant == null || !auteur.trim().equalsIgnoreCase(courant.trim())) {
+            throw new StockAccesRefuseException(
+                    "Reprise réservée au créateur du bon, au contrôleur de stock et au super-administrateur");
+        }
     }
 
     /** Valide et résout les champs propres au type de sortie (don / chantier). */
