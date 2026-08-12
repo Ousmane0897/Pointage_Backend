@@ -17,4 +17,8 @@ public interface LoginRepository extends MongoRepository<User, Integer> {
 
     List<User> findAllByEmail(String email);
 
+    // Destinataires des notifications par rôle — SUPERADMIN (= Direction générale)
+    // n'existe que dans cette collection.
+    List<User> findByRoleIgnoreCase(String role);
+
 }

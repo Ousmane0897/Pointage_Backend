@@ -15,12 +15,22 @@ import java.util.Optional;
  * Source de vérité unique partagée par le catalogue (stock initial),
  * les mouvements et la clôture d'inventaire.
  * <p>
- * Un {@code siteId} null représente le bucket « non affecté » (ex: stock initial d'import
- * sans site). Il compte dans le solde consolidé du produit.
+ * Le métier ne gère qu'un seul lieu de stockage : un {@code siteId} null désigne
+ * l'{@link #ENTREPOT}, où entre et d'où sort tout le stock. Les sites sont des
+ * destinataires de sorties, pas des emplacements. Des soldes rattachés à un site
+ * peuvent subsister sur des données historiques (avant la bascule vers l'entrepôt
+ * unique) : ils comptent dans le solde consolidé du produit, et les sorties savent
+ * les consommer via {@link #debiterAvecRepli}.
  */
 @Service
 @RequiredArgsConstructor
 public class StockBalanceService {
+
+    /**
+     * Le lieu de stockage unique. Tout ce qui entre en stock y est crédité, quel que
+     * soit le site de destination documenté sur le bon d'entrée.
+     */
+    public static final String ENTREPOT = null;
 
     private final StockParSiteRepository repository;
 

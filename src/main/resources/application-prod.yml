@@ -15,8 +15,21 @@ spring:
 jwt:
   secret: ${JWT_SECRET}
 
+app:
+  frontend:
+    # URL publique de l'application (celle que les utilisateurs ouvrent dans leur navigateur),
+    # utilisée pour le lien « Ouvrir le bon » des e-mails de notification. À distinguer de
+    # l'API, servie depuis une origine séparée (api.pointic-cleanic.com).
+    # Valeur alignée sur les origines autorisées par le CORS de SecurityConfig ; surchargeable
+    # par la variable d'environnement APP_FRONTEND_BASE_URL.
+    base-url: ${APP_FRONTEND_BASE_URL:https://pointic-cleanic.com}
+  conges:
+    # Jours de congé acquis par année pleine, en jours ouvrés (week-ends exclus).
+    jours-acquis-par-an: ${CONGES_JOURS_ACQUIS_PAR_AN:22}
+
 
 google:
   maps:
     api:
       key: "AIzaSyAijDeBFgsJUYLqS6Nn3EQfi56cPPMtN_Q"
+

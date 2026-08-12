@@ -12,6 +12,7 @@ import com.example.Pointage_Cleanic.security.JwtRequestFilter;
 import com.example.Pointage_Cleanic.security.JwtUtil;
 import com.example.Pointage_Cleanic.services.LoginService;
 import com.example.Pointage_Cleanic.services.MyUserDetailsService;
+import com.example.Pointage_Cleanic.services.rh.CongeModuleEnricher;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -49,6 +50,8 @@ class LoginControllerTest {
     @MockBean private UserRepository userRepository;
     @MockBean private UtilisateurRepository utilisateurRepository;
     @MockBean private PasswordEncoder passwordEncoder;
+    // Enrichit modules.rh.conges* à l'émission du token (droits de validation des congés).
+    @MockBean private CongeModuleEnricher congeModuleEnricher;
 
     // ✅ Sécurité
     @MockBean private MyUserDetailsService myUserDetailsService;

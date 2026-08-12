@@ -1,6 +1,8 @@
 package com.example.Pointage_Cleanic.controllers.rh.tempspresences;
 
 import com.example.Pointage_Cleanic.Dto.rh.RhAbsenceDto;
+import com.example.Pointage_Cleanic.exception.CongeAccesRefuseException;
+import com.example.Pointage_Cleanic.exception.GlobalExceptionHandler;
 import com.example.Pointage_Cleanic.security.JwtRequestFilter;
 import com.example.Pointage_Cleanic.security.JwtUtil;
 import com.example.Pointage_Cleanic.services.MyUserDetailsService;
@@ -11,6 +13,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.context.annotation.Import;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.mock.web.MockMultipartFile;
@@ -27,6 +30,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @WebMvcTest(TempsPresencesAbsenceController.class)
 @AutoConfigureMockMvc(addFilters = false)
+@Import(GlobalExceptionHandler.class)
 class TempsPresencesAbsenceControllerTest {
 
     @Autowired private MockMvc mockMvc;
@@ -108,5 +112,27 @@ class TempsPresencesAbsenceControllerTest {
         mockMvc.perform(get("/api/temps-presences/absences/abs-1/justificatif"))
                 .andExpect(status().isOk())
                 .andExpect(content().bytes("pdf-bytes".getBytes()));
+    }
+
+    // ─── Périmètre de visibilité ──────────────────────────────────────────────
+
+    @Test
+    void consulter_une_declaration_hors_perimetre_renvoie_403() throws Exception {
+        when(rhAbsenceService.getById("abs-1"))
+                .thenThrow(new CongeAccesRefuseException("Consultation non autorisée"));
+
+        mockMvc.perform(get("/api/temps-presences/absences/abs-1"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error").value("CONGE_ACCES_REFUSE"));
+    }
+
+    @Test
+    void lister_les_declarations_d_un_tiers_renvoie_403() throws Exception {
+        when(rhAbsenceService.getByEmployeId("emp-tiers"))
+                .thenThrow(new CongeAccesRefuseException("Consultation non autorisée"));
+
+        mockMvc.perform(get("/api/temps-presences/absences/employe/emp-tiers"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error").value("CONGE_ACCES_REFUSE"));
     }
 }

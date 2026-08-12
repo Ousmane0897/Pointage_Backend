@@ -1,6 +1,9 @@
 package com.example.Pointage_Cleanic.services.terrain;
 
+import com.example.Pointage_Cleanic.entities.User;
 import com.example.Pointage_Cleanic.entities.Utilisateur;
+import com.example.Pointage_Cleanic.Enum.RoleAdmin;
+import com.example.Pointage_Cleanic.repositories.LoginRepository;
 import com.example.Pointage_Cleanic.repositories.UtilisateurRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.Authentication;
@@ -20,6 +23,7 @@ import org.springframework.stereotype.Component;
 public class CurrentUserProvider {
 
     private final UtilisateurRepository utilisateurRepository;
+    private final LoginRepository loginRepository;
 
     private Authentication auth() {
         return SecurityContextHolder.getContext().getAuthentication();
@@ -56,5 +60,26 @@ public class CurrentUserProvider {
                     return complet.isBlank() ? email : complet;
                 })
                 .orElse(email);
+    }
+
+    /**
+     * Rôle de l'utilisateur courant, ou {@code null}.
+     *
+     * <p>Le rôle vit dans <b>deux collections</b> : {@code utilisateur} (enum {@link RoleAdmin})
+     * et {@code login} (chaîne libre — c'est le seul endroit où {@code SUPERADMIN} existe).
+     * On interroge la première, puis la seconde en repli. La valeur est renvoyée en majuscules
+     * et sans espaces pour permettre une comparaison directe.
+     */
+    public String currentRole() {
+        String email = currentEmail();
+        if (email == null) {
+            return null;
+        }
+        return utilisateurRepository.findByEmail(email)
+                .map(Utilisateur::getRole)
+                .map(Enum::name)
+                .or(() -> loginRepository.findByEmail(email).map(User::getRole))
+                .map(r -> r.trim().toUpperCase())
+                .orElse(null);
     }
 }

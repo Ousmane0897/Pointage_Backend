@@ -36,11 +36,22 @@ public class PlanningService {
     private static final List<StatutAffectation> STATUTS_ACTIFS =
             List.of(StatutAffectation.PLANIFIEE, StatutAffectation.EN_COURS, StatutAffectation.EFFECTUEE);
 
+    /** Seuls ces statuts peuvent être annulés : EFFECTUEE / ANNULEE / REMPLACEE sont terminaux. */
+    private static final List<StatutAffectation> STATUTS_ANNULABLES =
+            List.of(StatutAffectation.PLANIFIEE, StatutAffectation.EN_COURS);
+
+    /** Seuls ces statuts peuvent être modifiés : une prestation terminée/annulée/remplacée est figée. */
+    private static final List<StatutAffectation> STATUTS_MODIFIABLES =
+            List.of(StatutAffectation.PLANIFIEE, StatutAffectation.EN_COURS);
+
+    private static final int LONGUEUR_MIN_MOTIF_ANNULATION = 5;
+
     private final AffectationAgentRepository repository;
     private final AffectationAgentMapper mapper;
     private final MongoTemplate mongoTemplate;
     private final ReferentielRhService referentielRh;
     private final SiteClientService siteService;
+    private final CurrentUserProvider currentUser;
 
     // ───────────────────────── Lecture ─────────────────────────
 
@@ -60,6 +71,21 @@ public class PlanningService {
         Query query = new Query().with(Sort.by("dateDebut").ascending());
         appliquerFiltres(query, dateDebut, dateFin, employeId, siteId, statut);
         return mongoTemplate.find(query, AffectationAgent.class).stream().map(mapper::toDto).toList();
+    }
+
+    /**
+     * Compteurs d'affectations par statut, même sémantique de filtrage que {@link #list}.
+     * Les 5 clés de l'enum sont toujours présentes (0 inclus) et dans l'ordre de déclaration :
+     * le front alimente ses onglets à compteurs avec ce seul appel.
+     */
+    public Map<StatutAffectation, Long> stats(LocalDate dateDebut, LocalDate dateFin) {
+        Map<StatutAffectation, Long> resultat = new LinkedHashMap<>();
+        for (StatutAffectation statut : StatutAffectation.values()) {
+            Query query = new Query();
+            appliquerFiltres(query, dateDebut, dateFin, null, null, statut);
+            resultat.put(statut, mongoTemplate.count(query, AffectationAgent.class));
+        }
+        return resultat;
     }
 
     private void appliquerFiltres(Query query, LocalDate dateDebut, LocalDate dateFin,
@@ -125,6 +151,12 @@ public class PlanningService {
 
     public AffectationAgentDto update(String id, AffectationAgentDto dto) {
         AffectationAgent entity = loadOrThrow(id);
+        // Garde de statut : une affectation figée (EFFECTUEE / ANNULEE / REMPLACEE) ne se modifie plus.
+        // On teste le statut STOCKÉ (avant mapping du DTO), pas celui du corps de la requête.
+        if (!STATUTS_MODIFIABLES.contains(entity.getStatut())) {
+            throw new TerrainConflitException(
+                    "Modification impossible : l'affectation est au statut " + entity.getStatut());
+        }
         mapper.updateEntityFromDto(dto, entity);
         // Le mapper ignore les valeurs nulles : `dateFin` étant optionnelle, on la
         // réaffecte explicitement pour permettre le retour à une durée indéterminée.
@@ -135,8 +167,45 @@ public class PlanningService {
         return mapper.toDto(repository.save(entity));
     }
 
-    public void delete(String id) {
-        repository.delete(loadOrThrow(id));
+    // Pas de delete() : une affectation ne se supprime pas, elle s'annule (voir annuler()).
+    // Le hard delete a été retiré le 2026-07-21 — il permettait d'effacer une ligne sans
+    // laisser de trace, contournant la traçabilité exigée par le métier.
+
+    /**
+     * Annule une affectation en la conservant dans l'historique (statut {@code ANNULEE} + traçabilité).
+     * Motif obligatoire, 5 caractères minimum après {@code trim} → 400 sinon ; affectation introuvable
+     * → 404 ; statut terminal (EFFECTUEE / ANNULEE / REMPLACEE) → 409.
+     *
+     * <p>L'auteur est déduit du JWT via {@link CurrentUserProvider}, jamais du corps de la requête.
+     * Rejouer l'appel sur une affectation déjà annulée retombe sur la garde de statut (409).
+     *
+     * <p><b>Course avec {@link AffectationStatutScheduler} — assumée, ne pas assouplir la garde.</b>
+     * Le job bascule une affectation en {@code EFFECTUEE} dès que {@code dateFin} est franchie.
+     * Si cela se produit entre le chargement de la page et le clic « Annuler », l'utilisateur
+     * reçoit un 409 (« Cette affectation n'est plus annulable »). C'est le comportement correct :
+     * on n'annule pas rétroactivement une prestation terminée. Ajouter {@code EFFECTUEE} aux
+     * {@code STATUTS_ANNULABLES} pour « corriger » ce 409 rouvrirait précisément ce trou.
+     */
+    public AffectationAgentDto annuler(String id, String motif) {
+        String motifNet = motif == null ? "" : motif.trim();
+        if (motifNet.length() < LONGUEUR_MIN_MOTIF_ANNULATION) {
+            throw new IllegalArgumentException(
+                    "Le motif d'annulation est obligatoire (" + LONGUEUR_MIN_MOTIF_ANNULATION + " caractères minimum)");
+        }
+
+        AffectationAgent entity = loadOrThrow(id);
+        if (!STATUTS_ANNULABLES.contains(entity.getStatut())) {
+            throw new TerrainConflitException(
+                    "Annulation impossible : l'affectation est au statut " + entity.getStatut());
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        entity.setStatut(StatutAffectation.ANNULEE);
+        entity.setMotifAnnulation(motifNet);
+        entity.setDateAnnulation(now);
+        entity.setAnnuleParNom(currentUser.currentUserNom());
+        entity.setUpdatedAt(now);
+        return mapper.toDto(repository.save(entity));
     }
 
     private void validerEtDenormaliser(AffectationAgent entity) {

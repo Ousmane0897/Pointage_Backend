@@ -1,6 +1,5 @@
 package com.example.Pointage_Cleanic.controllers.rh.gestionpersonnel;
 
-import com.example.Pointage_Cleanic.Dto.rh.AlertePeriodeEssaiDossierDto;
 import com.example.Pointage_Cleanic.Dto.rh.DossierEmployeDto;
 import com.example.Pointage_Cleanic.Enum.rh.GenreEmploye;
 import com.example.Pointage_Cleanic.Enum.rh.StatutDossierEmploye;
@@ -99,35 +98,11 @@ class DossierEmployeControllerTest {
     }
 
     @Test
-    void titulariser_ok() throws Exception {
-        DossierEmployeDto updated = DossierEmployeDto.builder()
-                .id("1").matricule("M001").statut(StatutDossierEmploye.ACTIF)
-                .build();
-        Mockito.when(service.titulariser("1")).thenReturn(updated);
-
-        mockMvc.perform(put("/api/gestion-personnel/employes/1/titulariser"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.statut").value("ACTIF"));
-    }
-
-    @Test
     void get_photo_not_found_ok() throws Exception {
         Mockito.when(service.getPhoto("1")).thenReturn(null);
 
         mockMvc.perform(get("/api/gestion-personnel/employes/1/photo"))
                 .andExpect(status().isNotFound());
-    }
-
-    @Test
-    void get_alertes_essai_ok() throws Exception {
-        AlertePeriodeEssaiDossierDto alerte = AlertePeriodeEssaiDossierDto.builder()
-                .id("1").matricule("M001").dureeEssaiMois(3).joursRestants(10).statut("EN_ESSAI")
-                .build();
-        Mockito.when(service.getAlertesPeriodeEssai()).thenReturn(List.of(alerte));
-
-        mockMvc.perform(get("/api/gestion-personnel/employes/alertes-essai"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].joursRestants").value(10));
     }
 
     @Test

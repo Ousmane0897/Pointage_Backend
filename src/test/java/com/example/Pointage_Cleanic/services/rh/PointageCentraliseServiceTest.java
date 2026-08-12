@@ -6,6 +6,7 @@ import com.example.Pointage_Cleanic.Enum.rh.StatutDemande;
 import com.example.Pointage_Cleanic.Enum.rh.StatutDossierEmploye;
 import com.example.Pointage_Cleanic.Enum.rh.TypeConge;
 import com.example.Pointage_Cleanic.entities.Pointage;
+import com.example.Pointage_Cleanic.entities.rh.AffectationSite;
 import com.example.Pointage_Cleanic.entities.rh.DemandeConge;
 import com.example.Pointage_Cleanic.entities.rh.DossierEmploye;
 import com.example.Pointage_Cleanic.repositories.PointageRepository;
@@ -13,6 +14,8 @@ import com.example.Pointage_Cleanic.repositories.rh.DemandeCongeRepository;
 import com.example.Pointage_Cleanic.repositories.rh.DossierEmployeRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.data.domain.Page;
 
 import java.time.LocalDate;
@@ -56,7 +59,7 @@ class PointageCentraliseServiceTest {
         pointageRepository = mock(PointageRepository.class);
         demandeCongeRepository = mock(DemandeCongeRepository.class);
         service = new PointageCentraliseService(
-                dossierEmployeRepository, pointageRepository, demandeCongeRepository);
+                dossierEmployeRepository, pointageRepository, demandeCongeRepository, 15);
 
         when(dossierEmployeRepository.findByStatutIn(any()))
                 .thenReturn(List.of(emp1, emp2, emp3));
@@ -100,7 +103,7 @@ class PointageCentraliseServiceTest {
 
         PointageCentraliseDto conge = byEmp.get("emp2");
         assertThat(conge.getStatut()).isEqualTo("CONGE");
-        assertThat(conge.getMotif()).isEqualTo("ANNUEL");
+        assertThat(conge.getMotif()).isEqualTo("Annuel");   // libellé, pas le nom de l'enum
         assertThat(conge.getHeureArrivee()).isNull();
 
         PointageCentraliseDto absent = byEmp.get("emp3");
@@ -173,5 +176,200 @@ class PointageCentraliseServiceTest {
                 JOUR, JOUR.minusDays(1), null, null, null, null, 0, 20))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("dateFin");
+    }
+
+    // ---- Tolérance de retard (heure prévue 09:00, seuil strict 15 min) -----------------
+
+    /** Construit un employé mono-affectation (site « Alpha », horaireDebut donné) + son pointage. */
+    private DossierEmploye employeAvecHoraire(String horaireDebut) {
+        return DossierEmploye.builder()
+                .id("empR").agentId("9001").matricule("R001").nom("Sow").prenom("Test")
+                .departement("Exploitation").siteAffecte("Alpha").poste("Agent")
+                .statut(StatutDossierEmploye.ACTIF)
+                .affectations(List.of(AffectationSite.builder()
+                        .site("Alpha").horaireDebut(horaireDebut).horaireFin("17:00").build()))
+                .build();
+    }
+
+    /** Re-stub les repos pour un seul employé + un pointage arrivant à l'heure donnée. */
+    private void stubEmployeUniqueAvecArrivee(DossierEmploye emp, String site, String heureArrivee) {
+        when(dossierEmployeRepository.findByStatutIn(any())).thenReturn(List.of(emp));
+        Pointage p = Pointage.builder().id("pr").codeSecret(emp.getAgentId())
+                .site(new String[]{site}).date(JOUR).heureArrive(heureArrivee).build();
+        when(pointageRepository.findAllByDate(JOUR)).thenReturn(List.of(p));
+        when(demandeCongeRepository.findByStatutAndDateDebutLessThanEqualAndDateFinGreaterThanEqual(
+                eq(StatutDemande.APPROUVE), eq(JOUR), eq(JOUR))).thenReturn(List.of());
+    }
+
+    private PointageCentraliseDto ligneUnique() {
+        return service.getPointages(JOUR, null, null, null, null, 0, 20).getContent().get(0);
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+            "09:10, 10, PRESENT",
+            "09:13, 13, PRESENT",
+            "09:15, 15, PRESENT",   // seuil strict : 15 pile = PAS en retard
+            "09:16, 16, RETARD",
+            "09:30, 30, RETARD"
+    })
+    void retard_seuil_strict_15min(String arrivee, int retardAttendu, String statutAttendu) {
+        stubEmployeUniqueAvecArrivee(employeAvecHoraire("09:00"), "Alpha", arrivee);
+
+        PointageCentraliseDto ligne = ligneUnique();
+
+        assertThat(ligne.getRetardMinutes()).isEqualTo(retardAttendu);
+        assertThat(ligne.getStatut()).isEqualTo(statutAttendu);
+    }
+
+    @Test
+    void resume_compte_uniquement_les_retards_stricts() {
+        DossierEmploye enRetard = employeAvecHoraire("09:00");                 // arrive 09:16 -> RETARD
+        DossierEmploye aLheure = DossierEmploye.builder()
+                .id("empP").agentId("9002").matricule("P001").nom("Ba").prenom("Ok")
+                .departement("Exploitation").siteAffecte("Alpha").poste("Agent")
+                .statut(StatutDossierEmploye.ACTIF)
+                .affectations(List.of(AffectationSite.builder()
+                        .site("Alpha").horaireDebut("09:00").horaireFin("17:00").build()))
+                .build();
+
+        when(dossierEmployeRepository.findByStatutIn(any()))
+                .thenReturn(List.of(enRetard, aLheure));
+        Pointage pRetard = Pointage.builder().id("pR").codeSecret("9001")
+                .site(new String[]{"Alpha"}).date(JOUR).heureArrive("09:16").build();
+        Pointage pOk = Pointage.builder().id("pOk").codeSecret("9002")
+                .site(new String[]{"Alpha"}).date(JOUR).heureArrive("09:10").build();
+        when(pointageRepository.findAllByDate(JOUR)).thenReturn(List.of(pRetard, pOk));
+        when(demandeCongeRepository.findByStatutAndDateDebutLessThanEqualAndDateFinGreaterThanEqual(
+                eq(StatutDemande.APPROUVE), eq(JOUR), eq(JOUR))).thenReturn(List.of());
+
+        ResumeJourneeDto resume = service.getResume(JOUR);
+
+        assertThat(resume.getTotalEmployes()).isEqualTo(2);
+        assertThat(resume.getRetards()).isEqualTo(1);   // seul le +16 compte, pas le +10
+        assertThat(resume.getPresents()).isEqualTo(1);
+        assertThat(resume.getPresents() + resume.getAbsents()
+                + resume.getRetards() + resume.getEnConge())
+                .isEqualTo(resume.getTotalEmployes());
+    }
+
+    @Test
+    void absent_pas_de_retard() {
+        when(dossierEmployeRepository.findByStatutIn(any()))
+                .thenReturn(List.of(employeAvecHoraire("09:00")));
+        when(pointageRepository.findAllByDate(JOUR)).thenReturn(List.of());   // n'a pas pointé
+        when(demandeCongeRepository.findByStatutAndDateDebutLessThanEqualAndDateFinGreaterThanEqual(
+                eq(StatutDemande.APPROUVE), eq(JOUR), eq(JOUR))).thenReturn(List.of());
+
+        PointageCentraliseDto ligne = ligneUnique();
+
+        assertThat(ligne.getStatut()).isEqualTo("ABSENT");
+        assertThat(ligne.getRetardMinutes()).isZero();
+    }
+
+    @Test
+    void sans_affectation_aucun_retard_meme_en_retard() {
+        DossierEmploye sansAffectation = DossierEmploye.builder()
+                .id("empR").agentId("9001").matricule("R001").nom("Sow").prenom("Test")
+                .departement("Exploitation").siteAffecte("Alpha").poste("Agent")
+                .statut(StatutDossierEmploye.ACTIF).build();   // pas d'affectations
+        stubEmployeUniqueAvecArrivee(sansAffectation, "Alpha", "10:30");
+
+        PointageCentraliseDto ligne = ligneUnique();
+
+        assertThat(ligne.getRetardMinutes()).isZero();
+        assertThat(ligne.getStatut()).isEqualTo("PRESENT");
+    }
+
+    @Test
+    void site_pointe_different_du_site_affecte_aucun_retard() {
+        // Affectation « Alpha » 09:00, mais l'agent pointe sur « Beta » -> pas de match -> pas de retard.
+        stubEmployeUniqueAvecArrivee(employeAvecHoraire("09:00"), "Beta", "10:30");
+
+        PointageCentraliseDto ligne = ligneUnique();
+
+        assertThat(ligne.getRetardMinutes()).isZero();
+        assertThat(ligne.getStatut()).isEqualTo("PRESENT");
+    }
+
+    @Test
+    void horaire_debut_null_aucun_retard() {
+        stubEmployeUniqueAvecArrivee(employeAvecHoraire(null), "Alpha", "10:30");
+
+        PointageCentraliseDto ligne = ligneUnique();
+
+        assertThat(ligne.getRetardMinutes()).isZero();
+        assertThat(ligne.getStatut()).isEqualTo("PRESENT");
+    }
+
+    // ---- Multi-sites : une ligne par pointage, retard propre à chaque site ---------------
+
+    /** Employé bi-affecté : Site A (06:00) + Site B (10:00). */
+    private DossierEmploye employeBiSite() {
+        return DossierEmploye.builder()
+                .id("empMS").agentId("9100").matricule("MS01").nom("Kane").prenom("Multi")
+                .departement("Exploitation").siteAffecte("A - B").poste("Agent")
+                .statut(StatutDossierEmploye.ACTIF)
+                .affectations(List.of(
+                        AffectationSite.builder().site("A").horaireDebut("06:00").horaireFin("14:00").build(),
+                        AffectationSite.builder().site("B").horaireDebut("10:00").horaireFin("18:00").build()))
+                .build();
+    }
+
+    @Test
+    void multi_pointages_meme_jour_produisent_une_ligne_par_pointage() {
+        when(dossierEmployeRepository.findByStatutIn(any())).thenReturn(List.of(employeBiSite()));
+        // 4 pointages du même agent le même jour (table de test multi-sites)
+        Pointage p1 = Pointage.builder().id("p1").codeSecret("9100")
+                .site(new String[]{"A"}).date(JOUR).heureArrive("06:12").build(); // +12 -> PRESENT
+        Pointage p2 = Pointage.builder().id("p2").codeSecret("9100")
+                .site(new String[]{"B"}).date(JOUR).heureArrive("10:20").build(); // +20 -> RETARD
+        Pointage p3 = Pointage.builder().id("p3").codeSecret("9100")
+                .site(new String[]{"A"}).date(JOUR).heureArrive("06:40").build(); // +40 -> RETARD
+        Pointage p4 = Pointage.builder().id("p4").codeSecret("9100")
+                .site(new String[]{"C"}).date(JOUR).heureArrive("08:00").build(); // site sans horaire -> 0
+        when(pointageRepository.findAllByDate(JOUR)).thenReturn(List.of(p1, p2, p3, p4));
+        when(demandeCongeRepository.findByStatutAndDateDebutLessThanEqualAndDateFinGreaterThanEqual(
+                eq(StatutDemande.APPROUVE), eq(JOUR), eq(JOUR))).thenReturn(List.of());
+
+        Map<String, PointageCentraliseDto> parId = service
+                .getPointages(JOUR, null, null, null, null, 0, 20).getContent().stream()
+                .collect(Collectors.toMap(PointageCentraliseDto::getId, d -> d));
+
+        assertThat(parId).hasSize(4);
+        assertThat(parId.get("p1").getRetardMinutes()).isEqualTo(12);
+        assertThat(parId.get("p1").getStatut()).isEqualTo("PRESENT");
+        assertThat(parId.get("p2").getRetardMinutes()).isEqualTo(20);
+        assertThat(parId.get("p2").getStatut()).isEqualTo("RETARD");
+        assertThat(parId.get("p3").getRetardMinutes()).isEqualTo(40);
+        assertThat(parId.get("p3").getStatut()).isEqualTo("RETARD");
+        assertThat(parId.get("p4").getRetardMinutes()).isZero();
+        assertThat(parId.get("p4").getStatut()).isEqualTo("PRESENT");
+
+        // resume : comptage par ligne -> 2 retards pour 1 seul employé
+        ResumeJourneeDto resume = service.getResume(JOUR);
+        assertThat(resume.getTotalEmployes()).isEqualTo(1);
+        assertThat(resume.getRetards()).isEqualTo(2);
+        assertThat(resume.getPresents()).isEqualTo(2);
+        assertThat(resume.getAbsents()).isZero();
+        assertThat(resume.getEnConge()).isZero();
+    }
+
+    @Test
+    void pointage_multi_sites_dans_un_record_prend_horaire_le_plus_tot() {
+        // Un seul enregistrement portant 2 sites -> fallback : horaire le plus tôt (06:00).
+        // Arrivée 06:20 -> retard 20 (si 10:00 avait été retenu, l'arrivée serait "en avance" -> 0).
+        DossierEmploye emp = employeBiSite();
+        when(dossierEmployeRepository.findByStatutIn(any())).thenReturn(List.of(emp));
+        Pointage p = Pointage.builder().id("pMS").codeSecret("9100")
+                .site(new String[]{"A", "B"}).date(JOUR).heureArrive("06:20").build();
+        when(pointageRepository.findAllByDate(JOUR)).thenReturn(List.of(p));
+        when(demandeCongeRepository.findByStatutAndDateDebutLessThanEqualAndDateFinGreaterThanEqual(
+                eq(StatutDemande.APPROUVE), eq(JOUR), eq(JOUR))).thenReturn(List.of());
+
+        PointageCentraliseDto ligne = ligneUnique();
+
+        assertThat(ligne.getRetardMinutes()).isEqualTo(20);
+        assertThat(ligne.getStatut()).isEqualTo("RETARD");
     }
 }

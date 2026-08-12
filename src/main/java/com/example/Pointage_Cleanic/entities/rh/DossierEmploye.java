@@ -10,6 +10,7 @@ import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.time.LocalDate;
+import java.util.List;
 
 @Getter
 @Setter
@@ -47,7 +48,13 @@ public class DossierEmploye {
     // Poste
     private String poste;
     private String departement;
+    // Chaîne « source de vérité » historique des sites, dérivée de affectations
+    // (noms joints par " - "). Conservée pour la rétro-compatibilité de tous
+    // les consommateurs (pointage centralisé, filtres, KPI RH).
     private String siteAffecte;
+    // Affectations multi-sites avec tranche horaire optionnelle. Remplacées
+    // intégralement à chaque écriture ; siteAffecte en est dérivé côté serveur.
+    private List<AffectationSite> affectations;
 
     @JsonFormat(pattern = "yyyy-MM-dd")
     private LocalDate dateEntree;
@@ -57,8 +64,17 @@ public class DossierEmploye {
     private String superieurHierarchiqueNom;
     private Integer dureeEssaiMois;
 
+    // Rythme de travail hebdomadaire : une des valeurs de l'enum JoursTravail
+    // (LUN_VEN, LUN_SAM, LUN_DIM). Nullable — les dossiers historiques ne le
+    // portent pas ; le défaut (LUN_VEN) est appliqué côté frontend, pas ici.
+    private String joursTravail;
+
     // Contacts
     private String telephone;
+
+    // Indexé (non unique) : sert de jointure entre le compte de connexion
+    // — l'email est le subject du JWT — et le dossier employé, cf. CongeIdentiteService.
+    @Indexed
     private String email;
     private String adresse;
 

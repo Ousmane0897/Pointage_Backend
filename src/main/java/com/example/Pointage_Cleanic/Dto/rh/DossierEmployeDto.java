@@ -8,6 +8,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import lombok.*;
 
 import java.time.LocalDate;
+import java.util.List;
 
 @Getter
 @Setter
@@ -40,7 +41,11 @@ public class DossierEmployeDto {
     // Poste
     private String poste;
     private String departement;
+    // Dérivé serveur (noms de affectations joints par " - "). Renvoyé en lecture ;
+    // en écriture, recalculé depuis affectations si celles-ci sont présentes.
     private String siteAffecte;
+    // Multi-sites avec tranche horaire optionnelle ("HH:mm", null autorisé).
+    private List<AffectationSiteDto> affectations;
 
     @JsonFormat(pattern = "yyyy-MM-dd")
     private LocalDate dateEntree;
@@ -49,6 +54,10 @@ public class DossierEmployeDto {
     private String superieurHierarchiqueId;
     private String superieurHierarchiqueNom;
     private Integer dureeEssaiMois;
+
+    // Rythme de travail hebdomadaire (LUN_VEN, LUN_SAM, LUN_DIM), validé côté
+    // service contre l'enum JoursTravail. Nullable / optionnel (rétro-compat).
+    private String joursTravail;
 
     // Contacts
     private String telephone;

@@ -27,14 +27,20 @@ public class Rh {
     private boolean dossierEmploye;
     private boolean contrats;
     private boolean organigramme;
-    private boolean periodeEssai;
-    private boolean titularisations;
     private boolean documents;
 
     // --- 6.2 Temps & Présences ---
     private boolean pointageCentralise;
     private boolean absences;
     private boolean conges;
+    /**
+     * File de validation des congés. Posé automatiquement à l'émission du JWT pour tout
+     * employé encadrant au moins un subordonné (cf. {@code LoginController}) : un manager
+     * n'a pas besoin qu'on lui coche un droit RH pour valider les congés de son équipe.
+     */
+    private boolean congesValidation;
+    /** Écran « Mes demandes de congé » (auto-service du collaborateur). */
+    private boolean congesMesDemandes;
     private boolean heuresSupplementaires;
     private boolean recapitulatif;
 

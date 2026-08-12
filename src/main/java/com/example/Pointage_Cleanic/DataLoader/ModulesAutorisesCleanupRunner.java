@@ -32,7 +32,10 @@ public class ModulesAutorisesCleanupRunner implements CommandLineRunner {
     private static final List<String> CHAMPS_MORTS = List.of(
             "StatistiquesAgences", "Planifications", "Calendrier", "JourFeries",
             "Employes", "Agences",
-            "CollecteLivraison", "Absences", "Pointages", "Stock");
+            "CollecteLivraison", "Absences", "Pointages", "Stock",
+            // Sous-flags RH retirés avec la suppression du module « Période d'essai /
+            // Titularisation » (6.1) : scrub des documents déjà migrés en objet rh.
+            "rh.periodeEssai", "rh.titularisations");
 
     private final MongoTemplate mongoTemplate;
 

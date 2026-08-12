@@ -14,6 +14,7 @@ import com.example.Pointage_Cleanic.Enum.stockv2.UniteStock;
 import com.example.Pointage_Cleanic.config.MongoTestContainer;
 import com.example.Pointage_Cleanic.entities.stockv2.BonSortie;
 import com.example.Pointage_Cleanic.entities.stockv2.Chantier;
+import com.example.Pointage_Cleanic.entities.stockv2.CompteurStock;
 import com.example.Pointage_Cleanic.entities.stockv2.MouvementStock;
 import com.example.Pointage_Cleanic.entities.stockv2.ProduitStock;
 import com.example.Pointage_Cleanic.entities.stockv2.StockParSite;
@@ -29,6 +30,7 @@ import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Query;
 
 import java.time.LocalDate;
+import java.time.Year;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -53,6 +55,7 @@ class ChantierServiceIT extends MongoTestContainer {
     @BeforeEach
     void setup() {
         mongoTemplate.remove(new Query(), Chantier.class);
+        mongoTemplate.remove(new Query(), CompteurStock.class);
         mongoTemplate.remove(new Query(), BonSortie.class);
         mongoTemplate.remove(new Query(), MouvementStock.class);
         mongoTemplate.remove(new Query(), StockParSite.class);
@@ -111,10 +114,25 @@ class ChantierServiceIT extends MongoTestContainer {
     }
 
     @Test
-    void reference_dupliquee_rejetee_409() {
-        chantierService.creer(chantierPayload("CH-003"));
-        assertThatThrownBy(() -> chantierService.creer(chantierPayload("CH-003")))
-                .isInstanceOf(StockConflitException.class);
+    void references_generees_automatiquement_et_sequentielles() {
+        int annee = Year.now().getValue();
+        ChantierDto premier = chantierService.creer(chantierPayload("ignore-1"));
+        ChantierDto second = chantierService.creer(chantierPayload("ignore-2"));
+
+        assertThat(premier.getReference()).isEqualTo(String.format("CH-%d-001", annee));
+        assertThat(second.getReference()).isEqualTo(String.format("CH-%d-002", annee));
+    }
+
+    @Test
+    void prochaine_reference_previsualise_sans_consommer_la_sequence() {
+        int annee = Year.now().getValue();
+        assertThat(chantierService.prochaineReference()).isEqualTo(String.format("CH-%d-001", annee));
+        // L'aperçu ne doit PAS incrémenter : deux appels renvoient la même valeur.
+        assertThat(chantierService.prochaineReference()).isEqualTo(String.format("CH-%d-001", annee));
+
+        ChantierDto cree = chantierService.creer(chantierPayload("ignore"));
+        assertThat(cree.getReference()).isEqualTo(String.format("CH-%d-001", annee));
+        assertThat(chantierService.prochaineReference()).isEqualTo(String.format("CH-%d-002", annee));
     }
 
     @Test
@@ -125,7 +143,7 @@ class ChantierServiceIT extends MongoTestContainer {
         List<MouvementStock> mvts = mouvementRepository.findByChantierId(chantier.getId());
         assertThat(mvts).hasSize(1);
         assertThat(mvts.get(0).getChantierId()).isEqualTo(chantier.getId());
-        assertThat(mvts.get(0).getChantierReference()).isEqualTo("CH-004");
+        assertThat(mvts.get(0).getChantierReference()).isEqualTo(chantier.getReference());
 
         DetailChantierDto detail = chantierService.detail(chantier.getId());
         assertThat(detail.getCoutTotal()).isEqualTo(8_000L);   // 8 × 1000 FCFA
