@@ -41,6 +41,7 @@ public class BonEntreeService {
     private final StockNotificationService notificationService;
     private final BonMailNotificationService mailNotificationService;
     private final CompteurStockService compteurService;
+    private final HabilitationStock habilitation;
     private final MongoTemplate mongoTemplate;
 
     public PageResponse<BonEntreeDto> list(int page, int size, String q, StatutBon statut, TypeEntree type,
@@ -95,6 +96,10 @@ public class BonEntreeService {
                 .statut(StatutBon.BROUILLON)
                 .demandeurId(demandeur.id())
                 .demandeurNom(demandeur.nom())
+                // Auteur déduit du JWT, jamais accepté du client.
+                .creeParId(support.currentUserId())
+                .creeParEmail(support.currentUserEmail())
+                .creeParNom(support.currentUserNom())
                 .commentaire(payload.getCommentaire())
                 .montantTotal(support.montantTotal(lignes))
                 .createdAt(now)
@@ -109,6 +114,7 @@ public class BonEntreeService {
     public BonEntreeDto modifier(String id, BonEntreePayload payload) {
         BonEntree bon = loadOrThrow(id);
         exigerBrouillon(bon, "modifié");
+        habilitation.exigerCreateurOuControleur(bon.getCreeParEmail(), "Cette action");
         if (payload.getType() == null) {
             throw new IllegalArgumentException("Le type d'entrée est obligatoire");
         }
@@ -135,6 +141,7 @@ public class BonEntreeService {
     public void supprimer(String id) {
         BonEntree bon = loadOrThrow(id);
         exigerBrouillon(bon, "supprimé");
+        habilitation.exigerCreateurOuControleur(bon.getCreeParEmail(), "Cette action");
         repository.deleteById(id);
     }
 
@@ -143,6 +150,7 @@ public class BonEntreeService {
         if (bon.getStatut() != StatutBon.BROUILLON) {
             throw new StockConflitException("Seul un bon en BROUILLON peut être soumis (statut actuel : " + bon.getStatut() + ")");
         }
+        habilitation.exigerCreateurOuControleur(bon.getCreeParEmail(), "Cette action");
         bon.setStatut(StatutBon.SOUMIS);
         bon.setUpdatedAt(LocalDateTime.now());
         bon.getHistorique().add(support.historique(ActionWorkflow.SOUMISSION, null));
@@ -157,6 +165,8 @@ public class BonEntreeService {
         if (bon.getStatut() != StatutBon.SOUMIS) {
             throw new StockConflitException("Seul un bon SOUMIS peut être validé (statut actuel : " + bon.getStatut() + ")");
         }
+        // Décision qui engage le stock : super-administrateur seul, comme pour les sorties.
+        habilitation.exigerSuperAdmin("Validation");
         String commentaire = decision == null ? null : decision.getCommentaire();
 
         // Génère les mouvements AVANT toute mutation persistée (pas de transaction Mongo).
@@ -182,6 +192,7 @@ public class BonEntreeService {
         if (bon.getStatut() != StatutBon.SOUMIS) {
             throw new StockConflitException("Seul un bon SOUMIS peut être refusé (statut actuel : " + bon.getStatut() + ")");
         }
+        habilitation.exigerSuperAdmin("Refus");
         if (decision == null || decision.getCommentaire() == null || decision.getCommentaire().isBlank()) {
             throw new IllegalArgumentException("Le commentaire de refus est obligatoire");
         }

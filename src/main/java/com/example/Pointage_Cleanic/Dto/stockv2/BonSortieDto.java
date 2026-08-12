@@ -43,6 +43,16 @@ public class BonSortieDto {
     private String demandeurNom;
     private String validateurId;
     private String validateurNom;
+
+    /**
+     * Auteur du bon, déduit du JWT à la création. Le front compare {@code creeParEmail} à l'adresse
+     * de connexion pour décider des actions réservées au créateur — le JWT ne portant ni id ni
+     * username, l'e-mail est le seul point de comparaison disponible.
+     */
+    private String creeParId;
+    private String creeParEmail;
+    private String creeParNom;
+
     private String commentaire;
     private String motifRefus;
     private List<HistoriqueDto> historique;

@@ -46,6 +46,15 @@ public class BonEntree {
 
     private String demandeurId;
     private String demandeurNom;
+
+    /**
+     * Auteur du bon, renseigné <b>serveur</b> depuis le JWT à la création et jamais accepté du
+     * client. Gouverne les habilitations (modifier / supprimer / soumettre), contrairement au
+     * demandeur, choisi dans le formulaire.
+     */
+    private String creeParId;
+    private String creeParEmail;
+    private String creeParNom;
     private String validateurId;
     private String validateurNom;
 

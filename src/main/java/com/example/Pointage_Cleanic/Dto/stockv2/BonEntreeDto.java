@@ -34,6 +34,11 @@ public class BonEntreeDto {
     private StatutBon statut;
     private String demandeurId;
     private String demandeurNom;
+
+    /** Auteur du bon, déduit du JWT à la création (comparé à l'adresse de connexion par le front). */
+    private String creeParId;
+    private String creeParEmail;
+    private String creeParNom;
     private String validateurId;
     private String validateurNom;
     private String commentaire;

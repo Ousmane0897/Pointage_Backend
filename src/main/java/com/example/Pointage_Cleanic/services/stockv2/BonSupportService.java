@@ -88,4 +88,14 @@ public class BonSupportService {
     public String currentUserNom() {
         return currentUser.currentUserNom();
     }
+
+    /** Adresse de connexion (subject du JWT) : seul point de comparaison de la propriété d'un bon. */
+    public String currentUserEmail() {
+        return currentUser.currentEmail();
+    }
+
+    /** Rôle courant, en majuscules — voir {@code CurrentUserProvider.currentRole()}. */
+    public String currentRole() {
+        return currentUser.currentRole();
+    }
 }

@@ -7,6 +7,7 @@ import com.example.Pointage_Cleanic.Dto.stockv2.BonSortiePayload;
 import com.example.Pointage_Cleanic.Dto.stockv2.DecisionPayload;
 import com.example.Pointage_Cleanic.Dto.stockv2.DestinatairePayload;
 import com.example.Pointage_Cleanic.Dto.stockv2.LignePayload;
+import com.example.Pointage_Cleanic.Enum.stockv2.ActionWorkflow;
 import com.example.Pointage_Cleanic.Enum.stockv2.StatutBon;
 import com.example.Pointage_Cleanic.Enum.stockv2.TypeDestinataire;
 import com.example.Pointage_Cleanic.Enum.stockv2.TypeEntree;
@@ -14,6 +15,7 @@ import com.example.Pointage_Cleanic.Enum.stockv2.TypeMouvement;
 import com.example.Pointage_Cleanic.Enum.stockv2.TypeProduit;
 import com.example.Pointage_Cleanic.Enum.stockv2.TypeSortie;
 import com.example.Pointage_Cleanic.Enum.stockv2.UniteStock;
+import com.example.Pointage_Cleanic.config.AuthentificationTest;
 import com.example.Pointage_Cleanic.config.MongoTestContainer;
 import com.example.Pointage_Cleanic.entities.stockv2.BonEntree;
 import com.example.Pointage_Cleanic.entities.stockv2.BonSortie;
@@ -21,6 +23,7 @@ import com.example.Pointage_Cleanic.entities.stockv2.MouvementStock;
 import com.example.Pointage_Cleanic.entities.stockv2.ProduitStock;
 import com.example.Pointage_Cleanic.entities.stockv2.StockParSite;
 import com.example.Pointage_Cleanic.entities.terrain.SiteClient;
+import com.example.Pointage_Cleanic.exception.StockAccesRefuseException;
 import com.example.Pointage_Cleanic.exception.StockConflitException;
 import com.example.Pointage_Cleanic.exception.StockOperationException;
 import com.example.Pointage_Cleanic.repositories.stockv2.MouvementStockRepository;
@@ -68,6 +71,15 @@ class BonWorkflowServiceIT extends MongoTestContainer {
         produitId = produitRepository.save(ProduitStock.builder()
                 .code("P1").libelle("Savon").typeProduit(TypeProduit.CONSOMMABLE)
                 .unite(UniteStock.PIECE).seuilAlerte(5).prixUnitaire(1000L).actif(true).build()).getId();
+
+        // Les décisions du circuit sont réservées au super-administrateur : sans session,
+        // valider/refuser renverraient 403 et ce test ne pourrait plus préparer ses données.
+        AuthentificationTest.connecterSuperAdmin(mongoTemplate);
+    }
+
+    @org.junit.jupiter.api.AfterEach
+    void deconnecter() {
+        AuthentificationTest.deconnecter();
     }
 
     private BonEntreePayload entreePayload(double qte) {
@@ -163,6 +175,132 @@ class BonWorkflowServiceIT extends MongoTestContainer {
         bonEntreeService.soumettre(cree.getId());
         assertThatThrownBy(() -> bonEntreeService.refuser(cree.getId(), new DecisionPayload(" ")))
                 .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    // --- Reprise après refus (bons de sortie uniquement) -----------------------
+
+    /**
+     * REFUSE n'est pas un cul-de-sac : le bon revient en BROUILLON, l'historique du cycle refusé
+     * est <b>conservé</b> et enrichi d'une entrée REPRISE, et le motif de refus subsiste — c'est en
+     * corrigeant que le créateur en a besoin.
+     */
+    @Test
+    void reprise_d_un_bon_refuse_le_ramene_en_brouillon_en_conservant_historique_et_motif() {
+        BonSortieDto sortie = bonSortieService.creer(sortiePayload(3));
+        bonSortieService.soumettre(sortie.getId());
+        bonSortieService.refuser(sortie.getId(), new DecisionPayload("Quantité erronée"));
+        int historiqueAvant = bonSortieService.getById(sortie.getId()).getHistorique().size();
+
+        BonSortieDto repris = bonSortieService.reprendre(sortie.getId());
+
+        assertThat(repris.getStatut()).isEqualTo(StatutBon.BROUILLON);
+        assertThat(repris.getMotifRefus()).isEqualTo("Quantité erronée");
+        assertThat(repris.getHistorique()).hasSize(historiqueAvant + 1);
+        assertThat(repris.getHistorique().get(historiqueAvant).getAction()).isEqualTo(ActionWorkflow.REPRISE);
+        // Le cycle refusé reste lisible.
+        assertThat(repris.getHistorique()).anyMatch(h -> h.getAction() == ActionWorkflow.REFUS);
+    }
+
+    @Test
+    void bon_repris_peut_etre_modifie_puis_resoumis() {
+        BonSortieDto sortie = bonSortieService.creer(sortiePayload(3));
+        bonSortieService.soumettre(sortie.getId());
+        bonSortieService.refuser(sortie.getId(), new DecisionPayload("Quantité erronée"));
+        bonSortieService.reprendre(sortie.getId());
+
+        bonSortieService.modifier(sortie.getId(), sortiePayload(2));
+        BonSortieDto resoumis = bonSortieService.soumettre(sortie.getId());
+
+        assertThat(resoumis.getStatut()).isEqualTo(StatutBon.SOUMIS);
+        assertThat(resoumis.getLignes().get(0).getQuantite()).isEqualTo(2.0);
+    }
+
+    @Test
+    void reprise_hors_statut_refuse_409() {
+        BonSortieDto sortie = bonSortieService.creer(sortiePayload(3));
+
+        // BROUILLON
+        assertThatThrownBy(() -> bonSortieService.reprendre(sortie.getId()))
+                .isInstanceOf(StockConflitException.class);
+
+        // SOUMIS
+        bonSortieService.soumettre(sortie.getId());
+        assertThatThrownBy(() -> bonSortieService.reprendre(sortie.getId()))
+                .isInstanceOf(StockConflitException.class);
+    }
+
+    // --- Habilitations (bons de sortie) ---------------------------------------
+
+    /**
+     * Valider engage le stock : super-administrateur seul. Le front masque le bouton, mais l'API
+     * restait ouverte à tout compte authentifié.
+     */
+    @Test
+    void decision_par_un_profil_non_superadmin_403_sans_effet() {
+        BonEntreeDto entree = bonEntreeService.creer(entreePayload(20));
+        bonEntreeService.soumettre(entree.getId());
+        bonEntreeService.valider(entree.getId(), null);
+        BonSortieDto sortie = bonSortieService.creer(sortiePayload(5));
+        bonSortieService.soumettre(sortie.getId());
+
+        AuthentificationTest.connecter(mongoTemplate, "magasinier@cleanic.sn",
+                AuthentificationTest.CONTROLEUR_STOCK);
+
+        assertThatThrownBy(() -> bonSortieService.valider(sortie.getId(), null))
+                .isInstanceOf(StockAccesRefuseException.class);
+        assertThatThrownBy(() -> bonSortieService.refuser(sortie.getId(), new DecisionPayload("non conforme")))
+                .isInstanceOf(StockAccesRefuseException.class);
+
+        // Rien n'a bougé : statut inchangé, stock intact.
+        assertThat(bonSortieService.getById(sortie.getId()).getStatut()).isEqualTo(StatutBon.SOUMIS);
+        assertThat(balanceService.quantite(produitId, ENTREPOT)).isEqualTo(20.0);
+    }
+
+    /** Modifier, supprimer et soumettre restent au créateur (ou au contrôleur / super-admin). */
+    @Test
+    void brouillon_d_un_autre_utilisateur_403_en_modification_suppression_et_soumission() {
+        BonSortieDto sortie = bonSortieService.creer(sortiePayload(3));
+
+        AuthentificationTest.connecter(mongoTemplate, "tiers@cleanic.sn", "MAGASINIER");
+
+        assertThatThrownBy(() -> bonSortieService.modifier(sortie.getId(), sortiePayload(4)))
+                .isInstanceOf(StockAccesRefuseException.class);
+        assertThatThrownBy(() -> bonSortieService.supprimer(sortie.getId()))
+                .isInstanceOf(StockAccesRefuseException.class);
+        assertThatThrownBy(() -> bonSortieService.soumettre(sortie.getId()))
+                .isInstanceOf(StockAccesRefuseException.class);
+
+        assertThat(bonSortieService.getById(sortie.getId()).getStatut()).isEqualTo(StatutBon.BROUILLON);
+    }
+
+    /** Le créateur soumet son propre bon sans détenir de rôle particulier. */
+    @Test
+    void createur_sans_role_particulier_peut_soumettre_son_bon() {
+        AuthentificationTest.connecter(mongoTemplate, "agent@cleanic.sn", "MAGASINIER");
+        BonSortieDto sortie = bonSortieService.creer(sortiePayload(3));
+
+        BonSortieDto soumis = bonSortieService.soumettre(sortie.getId());
+
+        assertThat(soumis.getStatut()).isEqualTo(StatutBon.SOUMIS);
+        assertThat(soumis.getCreeParEmail()).isEqualTo("agent@cleanic.sn");
+    }
+
+    /** Les bons d'entrée suivent désormais les mêmes règles que les sorties. */
+    @Test
+    void decision_sur_un_bon_d_entree_par_un_non_superadmin_403() {
+        BonEntreeDto entree = bonEntreeService.creer(entreePayload(10));
+        bonEntreeService.soumettre(entree.getId());
+        assertThat(bonEntreeService.getById(entree.getId()).getCreeParEmail())
+                .isEqualTo(AuthentificationTest.EMAIL_SUPERADMIN);
+
+        AuthentificationTest.connecter(mongoTemplate, "magasinier@cleanic.sn",
+                AuthentificationTest.CONTROLEUR_STOCK);
+
+        assertThatThrownBy(() -> bonEntreeService.valider(entree.getId(), null))
+                .isInstanceOf(StockAccesRefuseException.class);
+
+        assertThat(bonEntreeService.getById(entree.getId()).getStatut()).isEqualTo(StatutBon.SOUMIS);
+        assertThat(balanceService.quantite(produitId, ENTREPOT)).isZero();
     }
 
     @Test

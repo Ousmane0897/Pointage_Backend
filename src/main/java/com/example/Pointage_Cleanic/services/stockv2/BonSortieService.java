@@ -15,10 +15,12 @@ import com.example.Pointage_Cleanic.entities.stockv2.Chantier;
 import com.example.Pointage_Cleanic.entities.stockv2.DestinataireBon;
 import com.example.Pointage_Cleanic.entities.stockv2.LigneBon;
 import com.example.Pointage_Cleanic.exception.ResourceNotFoundException;
+import com.example.Pointage_Cleanic.exception.StockAccesRefuseException;
 import com.example.Pointage_Cleanic.exception.StockConflitException;
 import com.example.Pointage_Cleanic.repositories.stockv2.BonSortieRepository;
 import com.example.Pointage_Cleanic.repositories.stockv2.ChantierRepository;
 import com.example.Pointage_Cleanic.services.stockv2.BonSupportService.DemandeurRef;
+
 import com.example.Pointage_Cleanic.util.PageResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
@@ -49,6 +51,7 @@ public class BonSortieService {
     private final CompteurStockService compteurService;
     private final ChantierRepository chantierRepository;
     private final MongoTemplate mongoTemplate;
+    private final HabilitationStock habilitation;
 
     public PageResponse<BonSortieDto> list(int page, int size, String q, StatutBon statut, TypeSortie type,
                                            String siteId, LocalDate dateDebut, LocalDate dateFin) {
@@ -109,6 +112,11 @@ public class BonSortieService {
                 .statut(StatutBon.BROUILLON)
                 .demandeurId(demandeur.id())
                 .demandeurNom(demandeur.nom())
+                // Auteur déduit du JWT, jamais accepté du client : c'est lui qui gouverne les
+                // habilitations, contrairement au demandeur choisi dans le formulaire.
+                .creeParId(support.currentUserId())
+                .creeParEmail(support.currentUserEmail())
+                .creeParNom(support.currentUserNom())
                 .commentaire(payload.getCommentaire())
                 .montantTotal(support.montantTotal(lignes))
                 .createdAt(now)
@@ -123,6 +131,7 @@ public class BonSortieService {
     public BonSortieDto modifier(String id, BonSortiePayload payload) {
         BonSortie bon = loadOrThrow(id);
         exigerBrouillon(bon, "modifié");
+        habilitation.exigerCreateurOuControleur(bon.getCreeParEmail(), "Cette action");
         if (payload.getType() == null) {
             throw new IllegalArgumentException("Le type de sortie est obligatoire");
         }
@@ -155,6 +164,7 @@ public class BonSortieService {
     public void supprimer(String id) {
         BonSortie bon = loadOrThrow(id);
         exigerBrouillon(bon, "supprimé");
+        habilitation.exigerCreateurOuControleur(bon.getCreeParEmail(), "Cette action");
         repository.deleteById(id);
     }
 
@@ -163,6 +173,9 @@ public class BonSortieService {
         if (bon.getStatut() != StatutBon.BROUILLON) {
             throw new StockConflitException("Seul un bon en BROUILLON peut être soumis (statut actuel : " + bon.getStatut() + ")");
         }
+        // Le créateur soumet ses propres bons : sans cela, il corrigerait un bon repris après refus
+        // sans pouvoir le renvoyer dans le circuit.
+        habilitation.exigerCreateurOuControleur(bon.getCreeParEmail(), "Cette action");
         bon.setStatut(StatutBon.SOUMIS);
         bon.setUpdatedAt(LocalDateTime.now());
         bon.getHistorique().add(support.historique(ActionWorkflow.SOUMISSION, null));
@@ -177,6 +190,8 @@ public class BonSortieService {
         if (bon.getStatut() != StatutBon.SOUMIS) {
             throw new StockConflitException("Seul un bon SOUMIS peut être validé (statut actuel : " + bon.getStatut() + ")");
         }
+        // Décision qui engage le stock : super-administrateur seul.
+        habilitation.exigerSuperAdmin("Validation");
         String commentaire = decision == null ? null : decision.getCommentaire();
 
         // 7.5 : un bon DISTRIBUTION_CHANTIER ne peut être validé vers un chantier clôturé.
@@ -212,6 +227,7 @@ public class BonSortieService {
         if (bon.getStatut() != StatutBon.SOUMIS) {
             throw new StockConflitException("Seul un bon SOUMIS peut être refusé (statut actuel : " + bon.getStatut() + ")");
         }
+        habilitation.exigerSuperAdmin("Refus");
         if (decision == null || decision.getCommentaire() == null || decision.getCommentaire().isBlank()) {
             throw new IllegalArgumentException("Le commentaire de refus est obligatoire");
         }
@@ -227,6 +243,35 @@ public class BonSortieService {
                 "Le bon " + saved.getReference() + " a été refusé : " + motif));
         return mapper.toDto(saved);
     }
+
+    /**
+     * Reprise d'un bon refusé : il repasse en BROUILLON pour que son créateur le corrige, puis le
+     * renvoie dans le circuit. {@code REFUSE} cesse ainsi d'être un cul-de-sac.
+     *
+     * <p>Action explicite plutôt qu'un bon refusé rendu modifiable en place : sans elle, la colonne
+     * <i>Refusé</i> du Kanban mélangerait refus définitifs et corrections en cours.
+     *
+     * <p>⚠ L'historique est <b>augmenté</b> d'une entrée {@code REPRISE}, jamais réinitialisé, et
+     * {@code motifRefus} est <b>conservé</b> — écrasé seulement au refus suivant : c'est au moment de
+     * corriger que le créateur en a le plus besoin. Le front l'affiche alors en bandeau orange.
+     */
+    public BonSortieDto reprendre(String id) {
+        BonSortie bon = loadOrThrow(id);
+        if (bon.getStatut() != StatutBon.REFUSE) {
+            throw new StockConflitException(
+                    "Seul un bon REFUSE peut être repris (statut actuel : " + bon.getStatut() + ")");
+        }
+        habilitation.exigerCreateurOuControleur(bon.getCreeParEmail(), "Cette action");
+
+        bon.setStatut(StatutBon.BROUILLON);
+        bon.setUpdatedAt(LocalDateTime.now());
+        bon.getHistorique().add(support.historique(ActionWorkflow.REPRISE, null));
+        BonSortie saved = repository.save(bon);
+        notificationService.diffuser(notification("BON_REPRIS", saved, "Bon de sortie repris",
+                "Le bon " + saved.getReference() + " est repassé en brouillon pour correction."));
+        return mapper.toDto(saved);
+    }
+
 
     /** Valide et résout les champs propres au type de sortie (don / chantier). */
     private SpecificiteSortie resoudreSpecificite(BonSortiePayload payload) {

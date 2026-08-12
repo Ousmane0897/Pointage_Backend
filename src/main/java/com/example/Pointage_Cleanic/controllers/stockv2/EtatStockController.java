@@ -9,6 +9,7 @@ import com.example.Pointage_Cleanic.util.PageResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -34,6 +35,17 @@ public class EtatStockController {
             @RequestParam(required = false) Boolean parSite
     ) {
         return ResponseEntity.ok(service.list(page, size, q, categorieId, typeProduit, siteId, statut, parSite));
+    }
+
+    /**
+     * État de stock d'un seul produit — sert les colonnes de stock des bons (7.4) : « Reste » sur
+     * un bon de sortie, « Stock actuel » sur un bon d'entrée. {@code siteId} absent ⇒ solde
+     * consolidé tous sites.
+     */
+    @GetMapping("/produit/{produitId}")
+    public ResponseEntity<EtatStockDto> getParProduit(@PathVariable String produitId,
+                                                      @RequestParam(required = false) String siteId) {
+        return ResponseEntity.ok(service.getParProduit(produitId, siteId));
     }
 
     @PutMapping("/seuils")

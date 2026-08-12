@@ -20,6 +20,7 @@ import java.util.List;
 public class CategorieStockService {
 
     private final CategorieStockRepository repository;
+    private final HabilitationStock habilitation;
     private final ProduitStockRepository produitRepository;
     private final CategorieStockMapper mapper;
 
@@ -71,6 +72,8 @@ public class CategorieStockService {
     }
 
     public void delete(String id) {
+        // Suppression d'un référentiel : irréversible et visible de tous les écrans.
+        habilitation.exigerControleurOuSuperAdmin("La suppression d'une catégorie est");
         CategorieStock entity = loadOrThrow(id);
         long enfants = repository.countByParentId(id);
         long produits = produitRepository.countByCategorieId(id);

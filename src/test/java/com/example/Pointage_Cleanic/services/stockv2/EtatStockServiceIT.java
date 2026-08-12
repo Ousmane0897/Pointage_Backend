@@ -104,6 +104,58 @@ class EtatStockServiceIT extends MongoTestContainer {
         assertThat(recalc.getStatut()).isEqualTo(StatutStock.CRITIQUE);
     }
 
+    // --- Lecture ciblée d'un produit (colonnes de stock des bons, 7.4) ---------
+
+    @Test
+    void etat_par_produit_sur_un_site_renvoie_le_solde_du_site() {
+        entrer(10);
+
+        EtatStockDto etat = etatService.getParProduit(produitId, SITE_A);
+
+        assertThat(etat.getProduitCode()).isEqualTo("P1");
+        assertThat(etat.getSiteId()).isEqualTo(SITE_A);
+        assertThat(etat.getQuantite()).isEqualTo(10.0);
+        assertThat(etat.getSeuilAlerte()).isEqualTo(5.0);
+        assertThat(etat.getStatut()).isEqualTo(StatutStock.OK);
+    }
+
+    @Test
+    void etat_par_produit_sans_site_consolide_tous_les_sites() {
+        entrer(10);
+        balanceService.appliquerDelta(produitId, "siteB", 4);
+        balanceService.appliquerDelta(produitId, null, 6);   // entrepôt
+
+        EtatStockDto etat = etatService.getParProduit(produitId, null);
+
+        assertThat(etat.getSiteId()).isNull();
+        assertThat(etat.getQuantite()).isEqualTo(20.0);
+    }
+
+    /** Le seuil du site prime sur celui du produit, comme dans la liste. */
+    @Test
+    void etat_par_produit_respecte_l_override_de_seuil_du_site() {
+        entrer(10);
+        etatService.majSeuil(SeuilPayload.builder().produitId(produitId).siteId(SITE_A).seuilAlerte(50).build());
+
+        EtatStockDto etat = etatService.getParProduit(produitId, SITE_A);
+
+        assertThat(etat.getSeuilAlerte()).isEqualTo(50.0);
+        assertThat(etat.getStatut()).isEqualTo(StatutStock.CRITIQUE);
+    }
+
+    /**
+     * Produit jamais mouvementé sur ce site : quantité 0, pas une erreur — c'est le cas nominal d'un
+     * bon d'entrée qui réceptionne pour la première fois.
+     */
+    @Test
+    void etat_par_produit_sans_mouvement_renvoie_zero() {
+        EtatStockDto etat = etatService.getParProduit(produitId, SITE_A);
+
+        assertThat(etat.getQuantite()).isZero();
+        assertThat(etat.getSeuilAlerte()).isEqualTo(5.0);
+        assertThat(etat.getStatut()).isEqualTo(StatutStock.RUPTURE);
+    }
+
     // Les saisies directes étant consolidées, on alimente directement le solde de SITE_A pour tester l'état par site.
     private void entrer(double qte) {
         balanceService.appliquerDelta(produitId, SITE_A, qte);

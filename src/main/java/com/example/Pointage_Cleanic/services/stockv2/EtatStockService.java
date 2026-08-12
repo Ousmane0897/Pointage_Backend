@@ -78,6 +78,42 @@ public class EtatStockService {
         return new PageResponse<>(content, totalElements);
     }
 
+    /**
+     * État de stock d'un seul produit, consolidé ou raffiné par site.
+     *
+     * <p>Sert les colonnes de stock des bons (7.4) : « Reste » sur un bon de sortie, « Stock
+     * actuel » sur un bon d'entrée. Un {@code siteId} absent renvoie le solde tous sites confondus.
+     *
+     * <p>Un produit jamais mouvementé (sur ce site ou globalement) n'est pas une anomalie : la
+     * quantité vaut alors 0, et c'est au client de distinguer « 0 » de « inconnu ».
+     */
+    public EtatStockDto getParProduit(String produitId, String siteId) {
+        ProduitStock produit = produitRepository.findById(produitId)
+                .orElseThrow(() -> new ResourceNotFoundException("Produit introuvable : " + produitId));
+        Map<String, String> categories = libellesCategories(List.of(produit));
+        String site = (siteId == null || siteId.isBlank()) ? null : siteId;
+
+        if (site != null) {
+            return stockParSiteRepository.findByProduitIdAndSiteId(produitId, site)
+                    .map(solde -> ligne(produit, categories, site, solde.getQuantite(),
+                            seuilEffectif(solde, produit), solde.getDateMaj()))
+                    .orElseGet(() -> ligne(produit, categories, site, 0.0, produit.getSeuilAlerte(), null));
+        }
+
+        List<StockParSite> soldes = stockParSiteRepository.findByProduitId(produitId);
+        double quantite = soldes.stream().mapToDouble(StockParSite::getQuantite).sum();
+        LocalDateTime dateMaj = soldes.stream().map(StockParSite::getDateMaj)
+                .filter(d -> d != null).max(LocalDateTime::compareTo).orElse(null);
+        return ligne(produit, categories, null, quantite, produit.getSeuilAlerte(), dateMaj);
+    }
+
+    /** Le seuil du site prime s'il est défini, sinon celui du produit. */
+    private double seuilEffectif(StockParSite solde, ProduitStock produit) {
+        return solde.getSeuilAlerteOverride() != null
+                ? solde.getSeuilAlerteOverride()
+                : produit.getSeuilAlerte();
+    }
+
     public EtatStockDto majSeuil(SeuilPayload payload) {
         ProduitStock produit = produitRepository.findById(payload.getProduitId())
                 .orElseThrow(() -> new ResourceNotFoundException("Produit introuvable : " + payload.getProduitId()));

@@ -11,6 +11,7 @@ import com.example.Pointage_Cleanic.Enum.stockv2.StatutInventaire;
 import com.example.Pointage_Cleanic.Enum.stockv2.TypeEntree;
 import com.example.Pointage_Cleanic.Enum.stockv2.TypeProduit;
 import com.example.Pointage_Cleanic.Enum.stockv2.UniteStock;
+import com.example.Pointage_Cleanic.config.AuthentificationTest;
 import com.example.Pointage_Cleanic.config.MongoTestContainer;
 import com.example.Pointage_Cleanic.entities.stockv2.BonEntree;
 import com.example.Pointage_Cleanic.entities.stockv2.Inventaire;
@@ -67,6 +68,16 @@ class InventaireWorkflowServiceIT extends MongoTestContainer {
                 .unite(UniteStock.PIECE).seuilAlerte(5).prixUnitaire(1000L).actif(true).build()).getId();
         // stock système = 20 sur SITE_A (les saisies directes étant consolidées, on alimente le solde du site directement)
         balanceService.appliquerDelta(produitId, SITE_A, 20);
+
+        // Clôture d'inventaire, suppression de référentiel et décision sur un bon sont
+        // réservées au contrôleur de stock / super-administrateur depuis l'ajout des
+        // habilitations : sans session, ce test ne pourrait plus préparer ses données.
+        AuthentificationTest.connecterSuperAdmin(mongoTemplate);
+    }
+
+    @org.junit.jupiter.api.AfterEach
+    void deconnecter() {
+        AuthentificationTest.deconnecter();
     }
 
     private InventaireDto creerInventaire() {

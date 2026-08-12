@@ -50,6 +50,7 @@ public class InventaireService {
     private final ReferentielSiteService referentielSite;
     private final CurrentUserProvider currentUser;
     private final MongoTemplate mongoTemplate;
+    private final HabilitationStock habilitation;
 
     public PageResponse<InventaireDto> list(int page, int size, String q, StatutInventaire statut,
                                             String siteId, LocalDate dateDebut, LocalDate dateFin) {
@@ -201,6 +202,8 @@ public class InventaireService {
         if (inv.getStatut() != StatutInventaire.VALIDATION) {
             throw new StockConflitException("Clôture impossible depuis le statut " + inv.getStatut());
         }
+        // Seule étape irréversible du workflow : elle applique les écarts au stock réel.
+        habilitation.exigerControleurOuSuperAdmin("La clôture d'un inventaire est");
         String utilisateur = currentUser.currentUserNom();
         LocalDateTime now = LocalDateTime.now();
         List<String> mvtCrees = new ArrayList<>();
