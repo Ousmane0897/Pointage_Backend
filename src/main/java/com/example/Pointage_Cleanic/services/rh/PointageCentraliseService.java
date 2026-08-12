@@ -228,7 +228,9 @@ public class PointageCentraliseService {
 
         if (conge != null) {
             statutVal = "CONGE";
-            motif = conge.getType() != null ? conge.getType().name() : null;
+            // Libellé lisible plutôt que le nom brut de l'enum : le motif est affiché tel
+            // quel dans le tableau (« Absence non justifiée », pas « ABSENCE_NON_JUSTIFIEE »).
+            motif = conge.getType() != null ? conge.getType().getLibelle() : null;
         } else if (pointage != null) {
             id = pointage.getId();
             heureArrivee = pointage.getHeureArrive();

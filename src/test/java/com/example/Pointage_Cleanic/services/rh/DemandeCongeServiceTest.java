@@ -6,11 +6,12 @@ import com.example.Pointage_Cleanic.entities.rh.DemandeConge;
 import com.example.Pointage_Cleanic.entities.rh.DossierEmploye;
 import com.example.Pointage_Cleanic.repositories.rh.DemandeCongeRepository;
 import com.example.Pointage_Cleanic.repositories.rh.DossierEmployeRepository;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -30,8 +31,23 @@ class DemandeCongeServiceTest {
 
     @Mock private DemandeCongeRepository demandeCongeRepository;
     @Mock private DossierEmployeRepository dossierEmployeRepository;
+    @Mock private CongeWorkflowService workflowService;
+    @Mock private CongeIdentiteService identite;
 
-    @InjectMocks private DemandeCongeService service;
+    private DemandeCongeService service;
+
+    @BeforeEach
+    void setUp() {
+        // Le service a gagné deux dépendances avec le circuit de validation à 3 niveaux et le
+        // périmètre de lecture : @InjectMocks les laisserait nulles et getSolde partirait en NPE.
+        service = new DemandeCongeService(demandeCongeRepository, dossierEmployeRepository,
+                new CongeMapper(), workflowService, identite);
+        // L'acquis vient de @Value("${app.conges.jours-acquis-par-an:22}"), non résolu hors Spring.
+        ReflectionTestUtils.setField(service, "joursAcquisParAn", 22);
+        // Le périmètre est couvert par DemandeCongeServiceScopeTest : ici on se place en RH pour
+        // ne mesurer que le calcul du solde.
+        when(identite.perimetreLecture()).thenReturn(PerimetreConges.tout());
+    }
 
     private DossierEmploye employe(String id) {
         DossierEmploye e = new DossierEmploye();

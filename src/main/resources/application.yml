@@ -38,10 +38,13 @@ google:
 
 app:
   frontend:
-    # URL publique du front, utilisée pour le lien « Ouvrir le bon » des e-mails de
-    # notification (création d'un bon d'entrée / de sortie). Si vide, le mail part sans
-    # lien plutôt qu'avec un lien cassé.
+    # URL publique du front, utilisée pour construire les liens des e-mails de notification
+    # (« Ouvrir le bon » à la création d'un bon d'entrée / de sortie, « Ouvrir la demande »
+    # pour les congés). Si vide, le mail part sans lien plutôt qu'avec un lien cassé.
     base-url: ${APP_FRONTEND_BASE_URL:http://localhost:4200}
+  conges:
+    # Jours de congé acquis par année pleine, en jours ouvrés (week-ends exclus).
+    jours-acquis-par-an: ${CONGES_JOURS_ACQUIS_PAR_AN:22}
 
 rh:
   import:

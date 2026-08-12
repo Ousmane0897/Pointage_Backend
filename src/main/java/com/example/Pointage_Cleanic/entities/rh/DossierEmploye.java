@@ -71,6 +71,10 @@ public class DossierEmploye {
 
     // Contacts
     private String telephone;
+
+    // Indexé (non unique) : sert de jointure entre le compte de connexion
+    // — l'email est le subject du JWT — et le dossier employé, cf. CongeIdentiteService.
+    @Indexed
     private String email;
     private String adresse;
 

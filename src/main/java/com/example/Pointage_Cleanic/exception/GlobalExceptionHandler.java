@@ -59,6 +59,35 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(body);
     }
 
+    // ─── Circuit de validation des congés (RH 6.2) ──────────────────────────
+    // Le handler générique RuntimeException → 500 capture tout ce qui n'est pas
+    // déclaré ici : ces trois handlers sont donc indispensables.
+
+    @ExceptionHandler(CongeAccesRefuseException.class)
+    public ResponseEntity<Map<String, Object>> handleCongeAccesRefuse(CongeAccesRefuseException ex) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("error", "CONGE_ACCES_REFUSE");
+        body.put("message", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(body);
+    }
+
+    @ExceptionHandler(CongeTransitionInterditeException.class)
+    public ResponseEntity<Map<String, Object>> handleCongeTransitionInterdite(
+            CongeTransitionInterditeException ex) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("error", "CONGE_TRANSITION_INTERDITE");
+        body.put("message", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(body);
+    }
+
+    @ExceptionHandler(CongeInvalideException.class)
+    public ResponseEntity<Map<String, Object>> handleCongeInvalide(CongeInvalideException ex) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("error", "CONGE_INVALIDE");
+        body.put("message", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY).body(body);
+    }
+
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<Map<String, Object>> handleIllegalArgument(IllegalArgumentException ex) {
         Map<String, Object> body = new HashMap<>();

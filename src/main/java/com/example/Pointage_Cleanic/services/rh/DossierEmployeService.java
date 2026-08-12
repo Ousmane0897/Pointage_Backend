@@ -262,9 +262,9 @@ public class DossierEmployeService {
         if (d.getStatut() != StatutDossierEmploye.EN_PERIODE_ESSAI) {
             d.setDureeEssaiMois(null);
         }
-        if (d.getSituationMatrimoniale() != com.example.Pointage_Cleanic.Enum.rh.SituationMatrimoniale.MARIE) {
-            d.setNombreEnfants(null);
-        }
+        // nombreEnfants n'est PAS remis à null hors MARIE : un divorcé, un veuf ou un
+        // célibataire peuvent avoir des enfants. Seule la borne >= 0 est contrôlée
+        // (validerCoherenceNombreEnfants).
     }
 
     // =========================================================================

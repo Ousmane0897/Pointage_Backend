@@ -34,8 +34,17 @@ public interface DossierEmployeRepository extends MongoRepository<DossierEmploye
 
     List<DossierEmploye> findByStatutIn(List<StatutDossierEmploye> statuts);
 
-    // Subordonnés d'un employé donné (organigramme)
+    // Subordonnés d'un employé donné (organigramme, file de validation N1 des congés)
     List<DossierEmploye> findBySuperieurHierarchiqueId(String superieurHierarchiqueId);
+
+    boolean existsBySuperieurHierarchiqueId(String superieurHierarchiqueId);
+
+    /**
+     * Résolution du compte de connexion (email du JWT) vers le dossier employé.
+     * Renvoie une liste car le champ `email` n'est pas contraint unique en base :
+     * l'appelant tranche et journalise le doublon éventuel.
+     */
+    List<DossierEmploye> findByEmailIgnoreCase(String email);
 
     // Stock v2 7.4 : repérage du « Responsable Achats » (validateur des bons)
     List<DossierEmploye> findByPosteIgnoreCase(String poste);

@@ -24,13 +24,18 @@ class RhAbsenceServiceTest {
 
     private RhAbsenceRepository rhAbsenceRepository;
     private DossierEmployeRepository dossierEmployeRepository;
+    private CongeIdentiteService identite;
     private RhAbsenceService service;
 
     @BeforeEach
     void setup() {
         rhAbsenceRepository = mock(RhAbsenceRepository.class);
         dossierEmployeRepository = mock(DossierEmployeRepository.class);
-        service = new RhAbsenceService(rhAbsenceRepository, dossierEmployeRepository);
+        identite = mock(CongeIdentiteService.class);
+        service = new RhAbsenceService(rhAbsenceRepository, dossierEmployeRepository, identite);
+        // Le périmètre de visibilité est couvert par RhAbsenceServiceScopeTest : ici on se
+        // place en RH pour ne mesurer que les règles métier de la déclaration.
+        when(identite.perimetreLecture()).thenReturn(PerimetreConges.tout());
 
         when(dossierEmployeRepository.findById("emp1")).thenReturn(Optional.of(
                 DossierEmploye.builder().id("emp1").matricule("M001")

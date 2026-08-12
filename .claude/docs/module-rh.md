@@ -50,8 +50,11 @@ Endpoints livrés :
 - **Dossier employé RH (nouvelle source de vérité, depuis 2026-04)** :
   CRUD multipart `/api/gestion-personnel/employes` (part JSON `dossier` + `photo` optionnelle).
   Champs : matricule (unique), identité (nom, prénom, genre HOMME/FEMME, dateNaissance,
-  nationalité, numeroIdentification, situationMatrimoniale CELIBATAIRE/MARIE,
-  nombreEnfants conditionnel), poste, département, siteAffecte, dateEntrée,
+  nationalité, numeroIdentification, situationMatrimoniale
+  CELIBATAIRE/MARIE/DIVORCE/VEUF, nombreEnfants — **toujours conservé quelle que soit
+  la situation matrimoniale** (un divorcé, un veuf ou un célibataire peuvent avoir des
+  enfants ; seule la borne >= 0 est contrôlée). `nettoyerChampsOptionnels` ne le remet
+  plus à null hors MARIE), poste, département, siteAffecte, dateEntrée,
   statut `ACTIF | EN_PERIODE_ESSAI | SUSPENDU | SORTI`, superieurHierarchiqueId/Nom,
   dureeEssaiMois (stocké uniquement si statut=EN_PERIODE_ESSAI, remis à null à la
   titularisation), contacts (tél, email, adresse), contactUrgence (sous-doc
@@ -88,8 +91,9 @@ Endpoints livrés :
   l'instant l'endpoint tombe sous l'authentification JWT standard
   (`.anyRequest().authenticated()` dans `SecurityConfig`).
   Validation plus stricte qu'au CRUD unitaire sur un point : `situationMatrimoniale
-  = MARIE` exige `nombreEnfants` non null dans le bulk (alors que `create()` se
-  contente de nullifier `nombreEnfants` hors MARIE).
+  = MARIE` exige `nombreEnfants` non null dans le bulk (le CRUD unitaire, lui, ne
+  l'exige pas). Cette règle reste cantonnée à `MARIE` — elle n'est pas étendue à
+  `DIVORCE` ni `VEUF`.
 - **Contrats** : CRUD multipart `/api/gestion-personnel/contrats` (part JSON `contrat` + `fichier` optionnel).
   `Contrat.fichierContrat` (byte[]) + `fichierContratNom` + `fichierContratMimeType`.
   Nouveaux endpoints `GET /api/gestion-personnel/contrats/{id}/fichier` (télécharge le PDF),

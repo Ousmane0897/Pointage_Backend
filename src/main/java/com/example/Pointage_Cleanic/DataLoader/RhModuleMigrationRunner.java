@@ -40,12 +40,13 @@ public class RhModuleMigrationRunner implements CommandLineRunner {
     private static final String COLLECTION = "utilisateur";
     private static final String CHAMP_RH = "modulesAutorises.rh";
 
-    /** Les 17 clés camelCase du contrat front (cf. {@code Rh}). */
+    /** Les 19 clés camelCase du contrat front (cf. {@code Rh}). */
     private static final List<String> SOUS_FLAGS = List.of(
             // 6.1 Gestion du Personnel
             "dossierEmploye", "contrats", "organigramme", "documents",
             // 6.2 Temps & Présences
-            "pointageCentralise", "absences", "conges", "heuresSupplementaires", "recapitulatif",
+            "pointageCentralise", "absences", "conges", "congesValidation", "congesMesDemandes",
+            "heuresSupplementaires", "recapitulatif",
             // 6.3 Paie
             "grilleSalariale", "calculBulletin", "historiquePaies", "declarations",
             // 6.4 Développement RH
@@ -59,8 +60,10 @@ public class RhModuleMigrationRunner implements CommandLineRunner {
         long versFalse = migrer(false);
 
         if (versTrue > 0 || versFalse > 0) {
-            log.info("Migration modulesAutorises.rh booléen→objet : {} doc(s) rh=true → 17 flags true, "
-                    + "{} doc(s) rh=false → 17 flags false", versTrue, versFalse);
+            // Nombre de flags tiré de SOUS_FLAGS, pour qu'il ne dérive pas à chaque ajout.
+            log.info("Migration modulesAutorises.rh booléen→objet : {} doc(s) rh=true → {} flags true, "
+                    + "{} doc(s) rh=false → {} flags false",
+                    versTrue, SOUS_FLAGS.size(), versFalse, SOUS_FLAGS.size());
         }
     }
 
