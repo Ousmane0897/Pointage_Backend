@@ -32,6 +32,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
+import static com.example.Pointage_Cleanic.services.stockv2.StockBalanceService.ENTREPOT;
+
 /**
  * Suppression définitive d'un document de stock déjà engagé — <b>super-administrateur uniquement</b>.
  *
@@ -44,16 +46,20 @@ import java.util.Objects;
  * refusé, inventaire non clôturé) le contre-passement est un no-op — inutile de refuser en 409,
  * l'appelant est déjà super-administrateur.
  *
- * <p><b>Limites assumées</b> :
- * <ul>
- *   <li>la répartition site / bucket consolidé d'un débit de sortie n'est pas persistée
- *       ({@code RepartitionDebit} ne vit que le temps de {@link MouvementBonGenerator#genererPourSortie}) :
- *       le recrédit va intégralement sur le site source du mouvement. Le total consolidé du produit
- *       est exact, mais un reliquat prélevé sur le bucket {@code siteId = null} se retrouve sur le site ;</li>
- *   <li>le coût courant d'un produit (CUMP) n'est pas restauré lors de la suppression d'un bon
- *       d'entrée : {@link ValorisationSupport#compenserEntree} exige le {@code RecalcResult} de la
- *       transaction d'origine. Seuls les points d'historique de coût sont nettoyés.</li>
- * </ul>
+ * <p><b>Le contre-passement des bons vise l'{@link StockBalanceService#ENTREPOT}</b>, seul lieu de
+ * stockage du métier : {@link MouvementBonGenerator#genererPourEntree} y crédite tout ce qui entre
+ * (quel que soit le site de destination documenté sur le bon) et
+ * {@link MouvementBonGenerator#genererPourSortie} en sort tout via {@code debiterAvecRepli}, les
+ * soldes par site n'étant plus alimentés. Viser le site du mouvement créerait du stock fantôme sur
+ * un site tout en laissant l'entrepôt faux. Sur des données historiques dont le débit avait pu
+ * entamer un solde de site, le recrédit atterrit sur l'entrepôt : le total consolidé du produit
+ * reste exact, et c'est le sens de la consolidation opérée par
+ * {@code StockEntrepotUniqueMigrationRunner}.
+ *
+ * <p><b>Limite assumée</b> : le coût courant d'un produit (CUMP) n'est pas restauré lors de la
+ * suppression d'un bon d'entrée — {@link ValorisationSupport#compenserEntree} exige le
+ * {@code RecalcResult} de la transaction d'origine. Seuls les points d'historique de coût sont
+ * nettoyés.
  */
 @Service
 @RequiredArgsConstructor
@@ -93,6 +99,9 @@ public class SuppressionDefinitiveService {
             mouvements = mouvementsDeLInventaire(inv);
             // La source de vérité est le document lui-même : l'inverse exact de ce qu'a appliqué
             // InventaireService.cloturer (+ecart par ligne, sur le site de l'inventaire).
+            // ⚠ On lit le même inv.getSiteId() que la clôture, donc la symétrie tient quel que
+            // soit ce site — y compris si la clôture bascule un jour sur l'entrepôt unique, ce
+            // qu'elle n'a pas fait (seuls les bons y sont passés).
             for (LigneInventaire ligne : inv.getLignes()) {
                 double ecart = ligne.getEcart() == null ? 0.0 : ligne.getEcart();
                 if (ecart == 0.0) {
@@ -142,9 +151,10 @@ public class SuppressionDefinitiveService {
         if (bon.getStatut() == StatutBon.EFFECTIF) {
             mouvements = mouvementRepository.findByBonId(bon.getId());
             for (MouvementStock mvt : mouvements) {
-                // Recrédit du site source du mouvement (cf. limite documentée en tête de classe).
-                balanceService.appliquerDelta(mvt.getProduitId(), mvt.getSiteSourceId(), mvt.getQuantite());
-                contrePassees.add(ligneDe(mvt, mvt.getQuantite(), mvt.getSiteSourceId()));
+                // Recrédit de l'entrepôt : c'est lui que la validation a débité (cf. en-tête de classe),
+                // pas le site source, qui n'est qu'un point de départ documentaire.
+                balanceService.appliquerDelta(mvt.getProduitId(), ENTREPOT, mvt.getQuantite());
+                contrePassees.add(ligneDe(mvt, mvt.getQuantite(), ENTREPOT));
             }
             supprimerMouvements(mouvements);
         }
@@ -169,8 +179,10 @@ public class SuppressionDefinitiveService {
             mouvements = mouvementRepository.findByBonId(bon.getId());
             verifierRetraitPossible(mouvements);
             for (MouvementStock mvt : mouvements) {
-                balanceService.appliquerDelta(mvt.getProduitId(), mvt.getSiteDestinationId(), -mvt.getQuantite());
-                contrePassees.add(ligneDe(mvt, -mvt.getQuantite(), mvt.getSiteDestinationId()));
+                // Retrait de l'entrepôt, seul crédité à la réception — le site de destination du bon
+                // est documentaire et ne porte aucun solde.
+                balanceService.appliquerDelta(mvt.getProduitId(), ENTREPOT, -mvt.getQuantite());
+                contrePassees.add(ligneDe(mvt, -mvt.getQuantite(), ENTREPOT));
             }
             nettoyerHistoriqueCout(mouvements);
             supprimerMouvements(mouvements);
@@ -188,24 +200,23 @@ public class SuppressionDefinitiveService {
      * laisser l'application produire des quantités négatives.
      */
     private void verifierRetraitPossible(List<MouvementStock> mouvements) {
-        Map<String, Double> cumulParCouple = new LinkedHashMap<>();
+        // Cumul par produit — et non par couple (produit, site) : le retrait vise l'entrepôt, un
+        // même produit pouvant apparaître sur plusieurs lignes du bon.
+        Map<String, Double> cumulParProduit = new LinkedHashMap<>();
+        Map<String, String> codeParProduit = new LinkedHashMap<>();
         for (MouvementStock mvt : mouvements) {
-            cumulParCouple.merge(mvt.getProduitId() + "|" + mvt.getSiteDestinationId(), mvt.getQuantite(), Double::sum);
+            cumulParProduit.merge(mvt.getProduitId(), mvt.getQuantite(), Double::sum);
+            codeParProduit.putIfAbsent(mvt.getProduitId(), mvt.getProduitCode());
         }
-        for (MouvementStock mvt : mouvements) {
-            String cle = mvt.getProduitId() + "|" + mvt.getSiteDestinationId();
-            Double aRetirer = cumulParCouple.remove(cle);
-            if (aRetirer == null) {
-                continue;   // couple déjà vérifié
-            }
-            double disponible = balanceService.quantite(mvt.getProduitId(), mvt.getSiteDestinationId());
+        cumulParProduit.forEach((produitId, aRetirer) -> {
+            double disponible = balanceService.quantite(produitId, ENTREPOT);
             if (disponible < aRetirer) {
                 throw new StockOperationException(
-                        "Contre-passement impossible pour " + mvt.getProduitCode()
+                        "Contre-passement impossible pour " + codeParProduit.get(produitId)
                                 + " : la marchandise reçue a déjà été consommée (disponible " + disponible
                                 + ", à retirer " + aRetirer + "). Ajustez le stock avant de supprimer ce bon.");
             }
-        }
+        });
     }
 
     /** Supprime les points de coût 7.6 rattachés aux mouvements effacés (le CUMP reste en l'état). */
