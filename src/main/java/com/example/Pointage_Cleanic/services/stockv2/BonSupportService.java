@@ -20,16 +20,6 @@ import java.util.List;
 @RequiredArgsConstructor
 public class BonSupportService {
 
-    /**
-     * ⚠ Le super-administrateur est la chaîne {@code SUPERADMIN}, sans underscore : c'est la seule
-     * valeur réellement émise (collection {@code login}).
-     * <p>
-     * Les mêmes littéraux existent dans {@code BonMailNotificationService} et
-     * {@code SuppressionDefinitiveService} — à consolider ici lors d'un passage dédié.
-     */
-    public static final String ROLE_SUPERADMIN = "SUPERADMIN";
-    public static final String ROLE_CONTROLEUR_STOCK = "CONTROLEUR_STOCK";
-
     private final ProduitStockRepository produitRepository;
     private final ReferentielEmployeStockService referentielEmploye;
     private final CurrentUserProvider currentUser;

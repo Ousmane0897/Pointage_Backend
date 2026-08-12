@@ -65,13 +65,6 @@ import static com.example.Pointage_Cleanic.services.stockv2.StockBalanceService.
 @RequiredArgsConstructor
 public class SuppressionDefinitiveService {
 
-    /**
-     * ⚠ Le super-administrateur est la chaîne {@code SUPERADMIN}, sans underscore : c'est la seule
-     * valeur réellement émise (collection {@code login}). Constante locale à stockv2 pour ne pas
-     * dépendre du module RH.
-     */
-    public static final String ROLE_SUPERADMIN = "SUPERADMIN";
-
     /** Longueur minimale du motif, alignée sur le refus de congé. */
     public static final int MOTIF_MIN = 10;
 
@@ -83,6 +76,7 @@ public class SuppressionDefinitiveService {
     private final SuppressionStockLogRepository logRepository;
     private final StockBalanceService balanceService;
     private final CurrentUserProvider currentUser;
+    private final HabilitationStock habilitation;
 
     // ─── Inventaire ─────────────────────────────────────────────────────────
 
@@ -237,10 +231,7 @@ public class SuppressionDefinitiveService {
     // ─── Briques communes ───────────────────────────────────────────────────
 
     private void exigerSuperAdmin() {
-        if (!ROLE_SUPERADMIN.equals(currentUser.currentRole())) {
-            throw new StockAccesRefuseException(
-                    "Suppression définitive réservée au super-administrateur");
-        }
+        habilitation.exigerSuperAdmin("Suppression définitive");
     }
 
     private String exigerMotif(String motif) {

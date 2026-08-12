@@ -4,6 +4,7 @@ import com.example.Pointage_Cleanic.Dto.stockv2.CategoriePayload;
 import com.example.Pointage_Cleanic.Dto.stockv2.CategorieStockDto;
 import com.example.Pointage_Cleanic.Enum.stockv2.TypeProduit;
 import com.example.Pointage_Cleanic.Enum.stockv2.UniteStock;
+import com.example.Pointage_Cleanic.config.AuthentificationTest;
 import com.example.Pointage_Cleanic.config.MongoTestContainer;
 import com.example.Pointage_Cleanic.entities.stockv2.CategorieStock;
 import com.example.Pointage_Cleanic.entities.stockv2.ProduitStock;
@@ -36,6 +37,15 @@ class CategorieStockServiceIT extends MongoTestContainer {
     void clean() {
         mongoTemplate.remove(new Query(), CategorieStock.class);
         mongoTemplate.remove(new Query(), ProduitStock.class);
+
+        // La suppression d'une catégorie est réservée au contrôleur de stock /
+        // super-administrateur depuis l'ajout des habilitations.
+        AuthentificationTest.connecterSuperAdmin(mongoTemplate);
+    }
+
+    @org.junit.jupiter.api.AfterEach
+    void deconnecter() {
+        AuthentificationTest.deconnecter();
     }
 
     @Test

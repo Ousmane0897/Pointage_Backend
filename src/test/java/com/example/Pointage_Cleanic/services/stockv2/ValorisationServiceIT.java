@@ -12,6 +12,7 @@ import com.example.Pointage_Cleanic.Enum.stockv2.MethodeValorisation;
 import com.example.Pointage_Cleanic.Enum.stockv2.TypeEntree;
 import com.example.Pointage_Cleanic.Enum.stockv2.TypeProduit;
 import com.example.Pointage_Cleanic.Enum.stockv2.UniteStock;
+import com.example.Pointage_Cleanic.config.AuthentificationTest;
 import com.example.Pointage_Cleanic.config.MongoTestContainer;
 import com.example.Pointage_Cleanic.entities.stockv2.HistoriquePointCout;
 import com.example.Pointage_Cleanic.entities.stockv2.MouvementStock;
@@ -58,6 +59,16 @@ class ValorisationServiceIT extends MongoTestContainer {
         mongoTemplate.remove(new Query(), ParametrageValorisation.class);
         mongoTemplate.remove(new Query(), SiteClient.class);
         mongoTemplate.save(SiteClient.builder().id(SITE_A).code("A").nom("Dakar").ville("Dakar").actif(true).build());
+
+        // Clôture d'inventaire, suppression de référentiel et décision sur un bon sont
+        // réservées au contrôleur de stock / super-administrateur depuis l'ajout des
+        // habilitations : sans session, ce test ne pourrait plus préparer ses données.
+        AuthentificationTest.connecterSuperAdmin(mongoTemplate);
+    }
+
+    @org.junit.jupiter.api.AfterEach
+    void deconnecter() {
+        AuthentificationTest.deconnecter();
     }
 
     private String produit(String code, long prix, MethodeValorisation methode) {

@@ -45,6 +45,7 @@ import java.util.stream.Collectors;
 public class ProduitStockService {
 
     private final ProduitStockRepository repository;
+    private final HabilitationStock habilitation;
     private final ProduitStockMapper mapper;
     private final CategorieStockRepository categorieRepository;
     private final StockParSiteRepository stockParSiteRepository;
@@ -158,6 +159,8 @@ public class ProduitStockService {
     }
 
     public void delete(String id) {
+        // Suppression d'un référentiel : irréversible et visible de tous les écrans.
+        habilitation.exigerControleurOuSuperAdmin("La suppression d'un produit est");
         ProduitStock entity = loadOrThrow(id);
         repository.delete(entity);
     }

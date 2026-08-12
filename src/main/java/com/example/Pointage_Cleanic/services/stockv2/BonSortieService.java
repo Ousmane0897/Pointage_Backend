@@ -21,8 +21,6 @@ import com.example.Pointage_Cleanic.repositories.stockv2.BonSortieRepository;
 import com.example.Pointage_Cleanic.repositories.stockv2.ChantierRepository;
 import com.example.Pointage_Cleanic.services.stockv2.BonSupportService.DemandeurRef;
 
-import static com.example.Pointage_Cleanic.services.stockv2.BonSupportService.ROLE_CONTROLEUR_STOCK;
-import static com.example.Pointage_Cleanic.services.stockv2.BonSupportService.ROLE_SUPERADMIN;
 import com.example.Pointage_Cleanic.util.PageResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
@@ -53,6 +51,7 @@ public class BonSortieService {
     private final CompteurStockService compteurService;
     private final ChantierRepository chantierRepository;
     private final MongoTemplate mongoTemplate;
+    private final HabilitationStock habilitation;
 
     public PageResponse<BonSortieDto> list(int page, int size, String q, StatutBon statut, TypeSortie type,
                                            String siteId, LocalDate dateDebut, LocalDate dateFin) {
@@ -132,7 +131,7 @@ public class BonSortieService {
     public BonSortieDto modifier(String id, BonSortiePayload payload) {
         BonSortie bon = loadOrThrow(id);
         exigerBrouillon(bon, "modifié");
-        exigerCreateurOuControleur(bon);
+        habilitation.exigerCreateurOuControleur(bon.getCreeParEmail(), "Cette action");
         if (payload.getType() == null) {
             throw new IllegalArgumentException("Le type de sortie est obligatoire");
         }
@@ -165,7 +164,7 @@ public class BonSortieService {
     public void supprimer(String id) {
         BonSortie bon = loadOrThrow(id);
         exigerBrouillon(bon, "supprimé");
-        exigerCreateurOuControleur(bon);
+        habilitation.exigerCreateurOuControleur(bon.getCreeParEmail(), "Cette action");
         repository.deleteById(id);
     }
 
@@ -176,7 +175,7 @@ public class BonSortieService {
         }
         // Le créateur soumet ses propres bons : sans cela, il corrigerait un bon repris après refus
         // sans pouvoir le renvoyer dans le circuit.
-        exigerCreateurOuControleur(bon);
+        habilitation.exigerCreateurOuControleur(bon.getCreeParEmail(), "Cette action");
         bon.setStatut(StatutBon.SOUMIS);
         bon.setUpdatedAt(LocalDateTime.now());
         bon.getHistorique().add(support.historique(ActionWorkflow.SOUMISSION, null));
@@ -192,7 +191,7 @@ public class BonSortieService {
             throw new StockConflitException("Seul un bon SOUMIS peut être validé (statut actuel : " + bon.getStatut() + ")");
         }
         // Décision qui engage le stock : super-administrateur seul.
-        exigerSuperAdmin("Validation");
+        habilitation.exigerSuperAdmin("Validation");
         String commentaire = decision == null ? null : decision.getCommentaire();
 
         // 7.5 : un bon DISTRIBUTION_CHANTIER ne peut être validé vers un chantier clôturé.
@@ -228,7 +227,7 @@ public class BonSortieService {
         if (bon.getStatut() != StatutBon.SOUMIS) {
             throw new StockConflitException("Seul un bon SOUMIS peut être refusé (statut actuel : " + bon.getStatut() + ")");
         }
-        exigerSuperAdmin("Refus");
+        habilitation.exigerSuperAdmin("Refus");
         if (decision == null || decision.getCommentaire() == null || decision.getCommentaire().isBlank()) {
             throw new IllegalArgumentException("Le commentaire de refus est obligatoire");
         }
@@ -262,7 +261,7 @@ public class BonSortieService {
             throw new StockConflitException(
                     "Seul un bon REFUSE peut être repris (statut actuel : " + bon.getStatut() + ")");
         }
-        exigerCreateurOuControleur(bon);
+        habilitation.exigerCreateurOuControleur(bon.getCreeParEmail(), "Cette action");
 
         bon.setStatut(StatutBon.BROUILLON);
         bon.setUpdatedAt(LocalDateTime.now());
@@ -273,40 +272,6 @@ public class BonSortieService {
         return mapper.toDto(saved);
     }
 
-    /**
-     * Le créateur du bon, le contrôleur de stock et le super-admin, personne d'autre.
-     *
-     * <p>⚠ Repli transitoire : sur les bons créés <b>avant</b> l'ajout de {@code creeParEmail}, le
-     * champ est nul et la propriété est considérée comme acquise — sinon d'anciens bons refusés
-     * seraient définitivement bloqués. À retirer quand le parc sera renouvelé.
-     */
-    /**
-     * Décisions du circuit (valider / refuser) : super-administrateur seul.
-     *
-     * <p>Aucun repli ici, contrairement à la propriété : le rôle est porté par le JWT, il est
-     * toujours connu.
-     */
-    private void exigerSuperAdmin(String action) {
-        if (!ROLE_SUPERADMIN.equals(support.currentRole())) {
-            throw new StockAccesRefuseException(action + " réservé au super-administrateur");
-        }
-    }
-
-    private void exigerCreateurOuControleur(BonSortie bon) {
-        String role = support.currentRole();
-        if (ROLE_SUPERADMIN.equals(role) || ROLE_CONTROLEUR_STOCK.equals(role)) {
-            return;
-        }
-        String auteur = bon.getCreeParEmail();
-        if (auteur == null || auteur.isBlank()) {
-            return;
-        }
-        String courant = support.currentUserEmail();
-        if (courant == null || !auteur.trim().equalsIgnoreCase(courant.trim())) {
-            throw new StockAccesRefuseException(
-                    "Reprise réservée au créateur du bon, au contrôleur de stock et au super-administrateur");
-        }
-    }
 
     /** Valide et résout les champs propres au type de sortie (don / chantier). */
     private SpecificiteSortie resoudreSpecificite(BonSortiePayload payload) {

@@ -252,6 +252,34 @@ class SuppressionDefinitiveServiceIT extends MongoTestContainer {
                 .satisfies(l -> assertThat(l.getNbMouvementsContrePasses()).isZero());
     }
 
+    /**
+     * La clôture d'un inventaire applique les écarts au stock réel : contrôleur de stock ou
+     * super-administrateur, comme la suppression définitive.
+     */
+    @Test
+    void cloture_d_inventaire_refusee_403_hors_controleur_ou_superadmin() {
+        balanceService.appliquerDelta(produitId, SITE_A, 20);
+        InventaireDto inv = inventaireService.create(InventairePlanifPayload.builder()
+                .libelle("Inventaire mensuel").datePlanifiee(LocalDate.now()).siteId(SITE_A)
+                .perimetre(PerimetreInventaire.SELECTION).produitIds(List.of(produitId))
+                .seuilEcartJustification(2).build());
+        inventaireService.demarrerComptage(inv.getId());
+        inventaireService.enregistrerComptage(inv.getId(), ComptagePayload.builder()
+                .lignes(List.of(ComptagePayload.LigneComptage.builder()
+                        .produitId(produitId).qtePhysique(15.0).justification("Casse").build()))
+                .build());
+        inventaireService.valider(inv.getId());
+
+        SecurityContextHolder.clearContext();
+        seConnecter("agent@cleanic.sn", "MAGASINIER");
+
+        assertThatThrownBy(() -> inventaireService.cloturer(inv.getId()))
+                .isInstanceOf(StockAccesRefuseException.class);
+
+        // Aucun écart appliqué : le stock reste au théorique.
+        assertThat(balanceService.quantite(produitId, SITE_A)).isEqualTo(20.0);
+    }
+
     @Test
     void suppression_refusee_403_hors_superadmin() {
         InventaireDto inv = inventaireCloture();

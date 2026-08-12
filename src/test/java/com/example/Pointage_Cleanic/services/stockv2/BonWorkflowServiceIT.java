@@ -285,6 +285,24 @@ class BonWorkflowServiceIT extends MongoTestContainer {
         assertThat(soumis.getCreeParEmail()).isEqualTo("agent@cleanic.sn");
     }
 
+    /** Les bons d'entrée suivent désormais les mêmes règles que les sorties. */
+    @Test
+    void decision_sur_un_bon_d_entree_par_un_non_superadmin_403() {
+        BonEntreeDto entree = bonEntreeService.creer(entreePayload(10));
+        bonEntreeService.soumettre(entree.getId());
+        assertThat(bonEntreeService.getById(entree.getId()).getCreeParEmail())
+                .isEqualTo(AuthentificationTest.EMAIL_SUPERADMIN);
+
+        AuthentificationTest.connecter(mongoTemplate, "magasinier@cleanic.sn",
+                AuthentificationTest.CONTROLEUR_STOCK);
+
+        assertThatThrownBy(() -> bonEntreeService.valider(entree.getId(), null))
+                .isInstanceOf(StockAccesRefuseException.class);
+
+        assertThat(bonEntreeService.getById(entree.getId()).getStatut()).isEqualTo(StatutBon.SOUMIS);
+        assertThat(balanceService.quantite(produitId, ENTREPOT)).isZero();
+    }
+
     @Test
     void transitions_invalides_409() {
         BonEntreeDto cree = bonEntreeService.creer(entreePayload(10));
