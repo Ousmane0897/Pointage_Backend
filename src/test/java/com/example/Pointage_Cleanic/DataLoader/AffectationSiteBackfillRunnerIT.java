@@ -108,7 +108,7 @@ class AffectationSiteBackfillRunnerIT extends MongoTestContainer {
         // Dossier historique : siteAffecte renseigné, affectations absentes.
         DossierEmploye legacy = DossierEmploye.builder()
                 .matricule("MAT-LEG").agentId("1900").nom("Leg").prenom("Acy")
-                .dateEntree(LocalDate.of(2025, 1, 1)).statut(StatutDossierEmploye.ACTIF)
+                .dateEmbauche(LocalDate.of(2025, 1, 1)).statut(StatutDossierEmploye.ACTIF)
                 .siteAffecte("Sacré-Coeur / Point E")
                 .build();
         repository.save(legacy);
@@ -123,10 +123,10 @@ class AffectationSiteBackfillRunnerIT extends MongoTestContainer {
     }
 
     @Test
-    void backfill_est_idempotent_et_ne_touche_pas_les_dossiers_deja_pourvus() {
+    void backfill_ne_reconstruit_pas_la_liste_des_dossiers_deja_pourvus() {
         DossierEmploye dejaPourvu = DossierEmploye.builder()
                 .matricule("MAT-OK").agentId("1901").nom("Ok").prenom("Deja")
-                .dateEntree(LocalDate.of(2025, 1, 1)).statut(StatutDossierEmploye.ACTIF)
+                .dateEmbauche(LocalDate.of(2025, 1, 1)).statut(StatutDossierEmploye.ACTIF)
                 .siteAffecte("Site X - Site Y")
                 .affectations(List.of(
                         AffectationSite.builder().site("Site X").horaireDebut("07:00").horaireFin("15:00").build()))
@@ -137,15 +137,102 @@ class AffectationSiteBackfillRunnerIT extends MongoTestContainer {
         runner.run();
 
         DossierEmploye inchange = repository.findByMatricule("MAT-OK").orElseThrow();
-        // Non touché : la liste d'origine (1 seul site, avec horaires) est conservée.
+        // La liste d'origine (1 seul site, avec horaires) est conservée telle quelle : la
+        // passe 1 ne la reconstruit pas depuis siteAffecte, qui en annonce pourtant deux.
         assertThat(inchange.getAffectations()).hasSize(1);
         assertThat(inchange.getAffectations().get(0).getHoraireDebut()).isEqualTo("07:00");
+    }
+
+    // ---- Période et semaine ouvrée par site -------------------------------------------
+
+    @Test
+    void round_trip_des_champs_periode_et_jours_par_site() throws Exception {
+        DossierEmployeDto dto = baseDto("MAT-RT", "1010");
+        dto.setAffectations(List.of(AffectationSiteDto.builder()
+                .site("Yoff").horaireDebut("06:00").horaireFin("12:00")
+                .dateEntree(LocalDate.of(2026, 3, 1))
+                .dateSortie(LocalDate.of(2026, 12, 31))
+                .joursTravail("LUN_SAM")
+                .build()));
+
+        DossierEmployeDto recharge = service.getById(service.create(dto, null).getId());
+
+        AffectationSiteDto affectation = recharge.getAffectations().get(0);
+        assertThat(affectation.getDateEntree()).isEqualTo(LocalDate.of(2026, 3, 1));
+        assertThat(affectation.getDateSortie()).isEqualTo(LocalDate.of(2026, 12, 31));
+        assertThat(affectation.getJoursTravail()).isEqualTo("LUN_SAM");
+    }
+
+    @Test
+    void backfill_propage_le_rythme_de_l_employe_et_la_date_d_embauche_sur_chaque_site() {
+        DossierEmploye legacy = DossierEmploye.builder()
+                .matricule("MAT-PROP").agentId("1911").nom("Prop").prenom("Aga")
+                .dateEmbauche(LocalDate.of(2025, 4, 15)).statut(StatutDossierEmploye.ACTIF)
+                .joursTravail("LUN_SAM")
+                .siteAffecte("Site A - Site B")
+                .affectations(List.of(
+                        AffectationSite.builder().site("Site A").build(),
+                        AffectationSite.builder().site("Site B").build()))
+                .build();
+        repository.save(legacy);
+
+        runner.run();
+        runner.run();   // idempotent
+
+        DossierEmploye migre = repository.findByMatricule("MAT-PROP").orElseThrow();
+        assertThat(migre.getAffectations()).allSatisfy(a -> {
+            assertThat(a.getJoursTravail()).isEqualTo("LUN_SAM");
+            assertThat(a.getDateEntree()).isEqualTo(LocalDate.of(2025, 4, 15));
+            // « Toujours en poste » est le bon défaut : inventer une sortie ferait
+            // disparaître les lignes de pointage du site.
+            assertThat(a.getDateSortie()).isNull();
+        });
+    }
+
+    @Test
+    void backfill_n_ecrase_jamais_une_valeur_saisie() {
+        DossierEmploye saisi = DossierEmploye.builder()
+                .matricule("MAT-KEEP").agentId("1912").nom("Keep").prenom("Val")
+                .dateEmbauche(LocalDate.of(2025, 1, 1)).statut(StatutDossierEmploye.ACTIF)
+                .joursTravail("LUN_VEN")
+                .siteAffecte("Site Z")
+                .affectations(List.of(AffectationSite.builder()
+                        .site("Site Z").joursTravail("LUN_DIM")
+                        .dateEntree(LocalDate.of(2026, 6, 1)).build()))
+                .build();
+        repository.save(saisi);
+
+        runner.run();
+
+        AffectationSite affectation =
+                repository.findByMatricule("MAT-KEEP").orElseThrow().getAffectations().get(0);
+        assertThat(affectation.getJoursTravail()).isEqualTo("LUN_DIM");
+        assertThat(affectation.getDateEntree()).isEqualTo(LocalDate.of(2026, 6, 1));
+    }
+
+    /**
+     * {@code dateEmbauche} est mappé sur le champ Mongo historique {@code dateEntree} :
+     * un dossier écrit avant le renommage doit continuer à rendre sa date. Sans le
+     * {@code @Field}, la date d'embauche de tout le parc serait devenue nulle.
+     */
+    @Test
+    void dateEmbauche_relit_le_champ_mongo_historique_dateEntree() {
+        mongoTemplate.getCollection(COLLECTION).insertOne(new org.bson.Document()
+                .append("matricule", "MAT-OLD")
+                .append("agentId", "1913")
+                .append("nom", "Old").append("prenom", "Doc")
+                .append("statut", StatutDossierEmploye.ACTIF.name())
+                .append("dateEntree", "2024-02-29"));
+
+        DossierEmploye relu = repository.findByMatricule("MAT-OLD").orElseThrow();
+
+        assertThat(relu.getDateEmbauche()).isEqualTo(LocalDate.of(2024, 2, 29));
     }
 
     private DossierEmployeDto baseDto(String matricule, String agentId) {
         return DossierEmployeDto.builder()
                 .matricule(matricule).agentId(agentId).nom("X").prenom("Y").poste("Op")
-                .dateEntree(LocalDate.of(2026, 1, 1))
+                .dateEmbauche(LocalDate.of(2026, 1, 1))
                 .statut(StatutDossierEmploye.ACTIF)
                 .build();
     }

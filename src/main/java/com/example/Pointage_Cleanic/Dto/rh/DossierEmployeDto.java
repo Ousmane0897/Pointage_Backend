@@ -44,11 +44,13 @@ public class DossierEmployeDto {
     // Dérivé serveur (noms de affectations joints par " - "). Renvoyé en lecture ;
     // en écriture, recalculé depuis affectations si celles-ci sont présentes.
     private String siteAffecte;
-    // Multi-sites avec tranche horaire optionnelle ("HH:mm", null autorisé).
+    // Multi-sites : tranche horaire ("HH:mm"), période de présence et semaine ouvrée,
+    // toutes propres au site et toutes optionnelles.
     private List<AffectationSiteDto> affectations;
 
+    // Entrée dans l'ENTREPRISE (≠ AffectationSiteDto.dateEntree, l'arrivée sur un site).
     @JsonFormat(pattern = "yyyy-MM-dd")
-    private LocalDate dateEntree;
+    private LocalDate dateEmbauche;
 
     private StatutDossierEmploye statut;
     private String superieurHierarchiqueId;
@@ -56,7 +58,13 @@ public class DossierEmployeDto {
     private Integer dureeEssaiMois;
 
     // Rythme de travail hebdomadaire (LUN_VEN, LUN_SAM, LUN_DIM), validé côté
-    // service contre l'enum JoursTravail. Nullable / optionnel (rétro-compat).
+    // service contre l'enum JoursTravail. Nullable / optionnel.
+    //
+    // DÉPRÉCIÉ au profit de AffectationSiteDto.joursTravail, propre à chaque site :
+    // le front ne l'envoie plus. Conservé en lecture/écriture le temps que les
+    // dossiers en base soient tous migrés (AffectationSiteBackfillRunner le recopie
+    // sur chaque affectation), et parce qu'il reste le second échelon de repli des
+    // consommateurs quand une affectation ne porte pas encore le sien.
     private String joursTravail;
 
     // Contacts

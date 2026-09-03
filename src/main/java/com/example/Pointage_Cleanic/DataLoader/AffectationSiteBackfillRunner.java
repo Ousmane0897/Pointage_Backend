@@ -39,25 +39,76 @@ public class AffectationSiteBackfillRunner implements CommandLineRunner {
         if (tous.isEmpty()) return;
 
         int backfilled = 0;
+        int propages = 0;
         for (DossierEmploye dossier : tous) {
-            if (dossier.getAffectations() != null && !dossier.getAffectations().isEmpty()) {
-                continue;
+            boolean modifie = false;
+
+            // Passe 1 — dossiers sans aucune affectation : les dériver de siteAffecte.
+            if (dossier.getAffectations() == null || dossier.getAffectations().isEmpty()) {
+                if (dossier.getSiteAffecte() == null || dossier.getSiteAffecte().isBlank()) {
+                    continue;
+                }
+                List<AffectationSite> affectations =
+                        SiteAffecteUtils.affectationsDepuisSiteAffecte(dossier.getSiteAffecte());
+                if (affectations.isEmpty()) {
+                    continue;
+                }
+                dossier.setAffectations(affectations);
+                backfilled++;
+                modifie = true;
             }
-            if (dossier.getSiteAffecte() == null || dossier.getSiteAffecte().isBlank()) {
-                continue;
+
+            // Passe 2 — période et semaine ouvrée par site. Sans elle, les dossiers
+            // existants n'auraient ni dateEntree ni joursTravail sur leurs affectations,
+            // et le pointage centralisé retomberait sur son échelon le plus permissif
+            // (aucun filtrage de semaine ouvrée) pour tout le parc.
+            if (propagerPeriodeEtJours(dossier)) {
+                propages++;
+                modifie = true;
             }
-            List<AffectationSite> affectations =
-                    SiteAffecteUtils.affectationsDepuisSiteAffecte(dossier.getSiteAffecte());
-            if (affectations.isEmpty()) {
-                continue;
+
+            if (modifie) {
+                dossierEmployeRepository.save(dossier);
             }
-            dossier.setAffectations(affectations);
-            dossierEmployeRepository.save(dossier);
-            backfilled++;
         }
-        if (backfilled > 0) {
-            log.info("Backfill affectations : {} dossier(s) back-fillé(s) sur {} au total",
-                    backfilled, tous.size());
+        if (backfilled > 0 || propages > 0) {
+            log.info("Backfill affectations : {} dossier(s) back-fillé(s), {} enrichi(s) "
+                            + "(période/jours par site) sur {} au total",
+                    backfilled, propages, tous.size());
         }
+    }
+
+    /**
+     * Recopie sur chaque affectation les informations que le dossier ne portait
+     * jusqu'ici qu'au niveau de l'employé : la semaine ouvrée et, à défaut de mieux,
+     * la date d'embauche comme date d'arrivée sur le site.
+     * <p>
+     * <b>Idempotent et purement additif</b> : seuls les champs {@code null} sont
+     * renseignés, une valeur saisie par les RH n'est jamais écrasée. {@code dateSortie}
+     * reste nulle — « toujours en poste » est le bon défaut, et inventer une sortie
+     * ferait disparaître les lignes de pointage du site.
+     *
+     * @return {@code true} si au moins une affectation a été modifiée.
+     */
+    private boolean propagerPeriodeEtJours(DossierEmploye dossier) {
+        List<AffectationSite> affectations = dossier.getAffectations();
+        if (affectations == null || affectations.isEmpty()) {
+            return false;
+        }
+        boolean modifie = false;
+        for (AffectationSite affectation : affectations) {
+            if (affectation == null) continue;
+            if (affectation.getJoursTravail() == null && dossier.getJoursTravail() != null) {
+                affectation.setJoursTravail(dossier.getJoursTravail());
+                modifie = true;
+            }
+            // Une affectation ne peut pas précéder l'embauche : à défaut de date propre
+            // au site, celle de l'entreprise est la borne basse la plus juste connue.
+            if (affectation.getDateEntree() == null && dossier.getDateEmbauche() != null) {
+                affectation.setDateEntree(dossier.getDateEmbauche());
+                modifie = true;
+            }
+        }
+        return modifie;
     }
 }

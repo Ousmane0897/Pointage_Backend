@@ -43,9 +43,9 @@ class DossierEmployeBulkImportControllerTest {
               "strategieErreurs": "TOUT_OU_RIEN",
               "employes": [
                 {"matricule":"M001","nom":"DIOP","prenom":"Awa","poste":"Agent",
-                 "dateEntree":"2026-01-01","statut":"ACTIF","genre":"FEMME"},
+                 "dateEmbauche":"2026-01-01","statut":"ACTIF","genre":"FEMME"},
                 {"matricule":"M002","nom":"FALL","prenom":"Bob","poste":"Agent",
-                 "dateEntree":"2026-01-01","statut":"ACTIF","genre":"HOMME"}
+                 "dateEmbauche":"2026-01-01","statut":"ACTIF","genre":"HOMME"}
               ]
             }
             """;

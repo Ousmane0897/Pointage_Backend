@@ -145,8 +145,17 @@ public class TableauBordRhService {
             Page<PointageCentraliseDto> page = pointageCentraliseService.getPointages(
                     d, departement, site, null, null, 0, TAILLE_PAGE_POINTAGES);
             for (PointageCentraliseDto p : page.getContent()) {
-                totalObservations++;
                 String statut = p.getStatut();
+                // Un créneau non encore commencé (NEUTRE) ou en cours (EN_ATTENTE) n'est
+                // pas une observation : son sort n'est pas tranché. Un pointage hors
+                // planning (HORS_PLAN) n'en est pas une non plus — aucun créneau attendu
+                // ne lui correspond. Les compter gonflerait le dénominateur et diluerait
+                // le taux d'absentéisme sans qu'aucune absence n'ait disparu.
+                if ("NEUTRE".equals(statut) || "EN_ATTENTE".equals(statut)
+                        || "HORS_PLAN".equals(statut)) {
+                    continue;
+                }
+                totalObservations++;
                 if ("ABSENT".equals(statut)) {
                     totalAbsents++;
                 } else if ("RETARD".equals(statut)

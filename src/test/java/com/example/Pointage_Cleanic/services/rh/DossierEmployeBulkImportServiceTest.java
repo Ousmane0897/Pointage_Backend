@@ -66,7 +66,7 @@ class DossierEmployeBulkImportServiceTest {
                             .poste(dto.getPoste())
                             .departement(dto.getDepartement())
                             .siteAffecte(dto.getSiteAffecte())
-                            .dateEntree(dto.getDateEntree())
+                            .dateEmbauche(dto.getDateEmbauche())
                             .statut(dto.getStatut())
                             .genre(dto.getGenre())
                             .situationMatrimoniale(dto.getSituationMatrimoniale())
@@ -109,7 +109,7 @@ class DossierEmployeBulkImportServiceTest {
         dto.setNom("NOM_" + matricule);
         dto.setPrenom("Prenom_" + matricule);
         dto.setPoste("Agent");
-        dto.setDateEntree(LocalDate.of(2026, 1, 1));
+        dto.setDateEmbauche(LocalDate.of(2026, 1, 1));
         dto.setStatut(StatutDossierEmploye.ACTIF);
         dto.setGenre(GenreEmploye.HOMME);
         return dto;
