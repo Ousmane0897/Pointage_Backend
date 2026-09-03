@@ -55,7 +55,7 @@ class DossierEmployeServiceTest {
                     .nom(dto.getNom())
                     .prenom(dto.getPrenom())
                     .poste(dto.getPoste())
-                    .dateEntree(dto.getDateEntree())
+                    .dateEmbauche(dto.getDateEmbauche())
                     .statut(dto.getStatut())
                     .dureeEssaiMois(dto.getDureeEssaiMois())
                     .joursTravail(dto.getJoursTravail())
@@ -97,7 +97,7 @@ class DossierEmployeServiceTest {
     void create_employe_actif_ne_conserve_pas_de_duree_essai() throws Exception {
         DossierEmployeDto dto = DossierEmployeDto.builder()
                 .matricule("M2").agentId("0002").nom("X").prenom("Y").poste("Op")
-                .dateEntree(LocalDate.of(2026, 1, 1))
+                .dateEmbauche(LocalDate.of(2026, 1, 1))
                 .statut(StatutDossierEmploye.ACTIF)
                 .build();
 
@@ -113,7 +113,7 @@ class DossierEmployeServiceTest {
     void updateStatut_vers_periode_essai_fixe_la_duree() {
         DossierEmploye existing = DossierEmploye.builder()
                 .id("emp1").matricule("M1").nom("X").prenom("Y")
-                .dateEntree(LocalDate.of(2026, 1, 15))
+                .dateEmbauche(LocalDate.of(2026, 1, 15))
                 .statut(StatutDossierEmploye.ACTIF)
                 .build();
         when(repository.findById("emp1")).thenReturn(Optional.of(existing));
@@ -146,7 +146,7 @@ class DossierEmployeServiceTest {
     void updateStatut_de_periode_essai_vers_actif_vide_la_duree() {
         DossierEmploye existing = DossierEmploye.builder()
                 .id("emp1").matricule("M1").nom("X").prenom("Y")
-                .dateEntree(LocalDate.of(2026, 1, 15))
+                .dateEmbauche(LocalDate.of(2026, 1, 15))
                 .statut(StatutDossierEmploye.EN_PERIODE_ESSAI).dureeEssaiMois(3)
                 .build();
         when(repository.findById("emp1")).thenReturn(Optional.of(existing));
@@ -213,15 +213,15 @@ class DossierEmployeServiceTest {
     private DossierEmployeDto actifDto(String matricule) {
         return DossierEmployeDto.builder()
                 .matricule(matricule).agentId("0009").nom("X").prenom("Y").poste("Op")
-                .dateEntree(LocalDate.of(2026, 1, 1))
+                .dateEmbauche(LocalDate.of(2026, 1, 1))
                 .statut(StatutDossierEmploye.ACTIF)
                 .build();
     }
 
-    private DossierEmployeDto enPeriodeEssaiDto(String matricule, LocalDate dateEntree, int dureeMois) {
+    private DossierEmployeDto enPeriodeEssaiDto(String matricule, LocalDate dateEmbauche, int dureeMois) {
         return DossierEmployeDto.builder()
                 .matricule(matricule).agentId("0001").nom("X").prenom("Y").poste("Op")
-                .dateEntree(dateEntree)
+                .dateEmbauche(dateEmbauche)
                 .statut(StatutDossierEmploye.EN_PERIODE_ESSAI)
                 .dureeEssaiMois(dureeMois)
                 .build();

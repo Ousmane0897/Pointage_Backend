@@ -34,6 +34,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
@@ -325,6 +326,27 @@ public class DossierEmployeService {
                                 + affectation.getSite());
             }
         }
+
+        // Semaine ouvrée du site : même oracle que le champ homonyme de l'employé.
+        String joursTravail = affectation.getJoursTravail();
+        if (joursTravail != null && !joursTravail.isBlank()
+                && !estJoursTravailValide(joursTravail)) {
+            throw new IllegalArgumentException(
+                    "joursTravail invalide pour le site " + affectation.getSite()
+                            + " : " + joursTravail
+                            + " (valeurs autorisées : LUN_VEN, LUN_SAM, LUN_DIM)");
+        }
+
+        // Période de présence sur le site. Les deux bornes restent FACULTATIVES :
+        // l'import bulk et SiteAffecteUtils.affectationsDepuisSiteAffecte produisent
+        // des affectations sans aucune date, les exiger casserait ces deux flux.
+        LocalDate dateEntree = affectation.getDateEntree();
+        LocalDate dateSortie = affectation.getDateSortie();
+        if (dateEntree != null && dateSortie != null && dateSortie.isBefore(dateEntree)) {
+            throw new IllegalArgumentException(
+                    "dateSortie doit être postérieure ou égale à dateEntree pour le site "
+                            + affectation.getSite());
+        }
     }
 
     private LocalTime parseHeure(String valeur, String site) {
@@ -542,10 +564,10 @@ public class DossierEmployeService {
         exigerNonBlank(errorsByLine, index, dto, "nom", dto.getNom());
         exigerNonBlank(errorsByLine, index, dto, "prenom", dto.getPrenom());
         exigerNonBlank(errorsByLine, index, dto, "poste", dto.getPoste());
-        if (dto.getDateEntree() == null) {
+        if (dto.getDateEmbauche() == null) {
             errorsByLine.get(index).add(new DossierEmployeImportError(
-                    index, dto.getMatricule(), "dateEntree", "CHAMP_OBLIGATOIRE",
-                    "La date d'entrée est obligatoire"));
+                    index, dto.getMatricule(), "dateEmbauche", "CHAMP_OBLIGATOIRE",
+                    "La date d'embauche est obligatoire"));
         }
         if (dto.getStatut() == null) {
             errorsByLine.get(index).add(new DossierEmployeImportError(

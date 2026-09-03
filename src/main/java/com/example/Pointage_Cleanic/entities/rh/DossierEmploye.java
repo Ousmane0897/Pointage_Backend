@@ -8,6 +8,7 @@ import lombok.*;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
+import org.springframework.data.mongodb.core.mapping.Field;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -56,8 +57,13 @@ public class DossierEmploye {
     // intégralement à chaque écriture ; siteAffecte en est dérivé côté serveur.
     private List<AffectationSite> affectations;
 
+    // Entrée dans l'ENTREPRISE — à ne pas confondre avec AffectationSite.dateEntree,
+    // qui est l'arrivée sur un site donné. Le champ Mongo reste « dateEntree » : le
+    // renommer aurait rendu nulle la date de tous les dossiers déjà en base, alors que
+    // seul le nom Java/JSON devait changer (même procédé que Produit.dateEntree).
+    @Field("dateEntree")
     @JsonFormat(pattern = "yyyy-MM-dd")
-    private LocalDate dateEntree;
+    private LocalDate dateEmbauche;
 
     private StatutDossierEmploye statut;
     private String superieurHierarchiqueId;

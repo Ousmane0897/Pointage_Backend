@@ -55,7 +55,7 @@ class DossierEmployeAffectationServiceTest {
                     .nom(dto.getNom())
                     .prenom(dto.getPrenom())
                     .poste(dto.getPoste())
-                    .dateEntree(dto.getDateEntree())
+                    .dateEmbauche(dto.getDateEmbauche())
                     .statut(dto.getStatut())
                     .siteAffecte(dto.getSiteAffecte())
                     .build();
@@ -128,6 +128,57 @@ class DossierEmployeAffectationServiceTest {
     }
 
     @Test
+    void create_rejette_une_sortie_de_site_anterieure_a_l_entree() {
+        DossierEmployeDto dto = baseDto("M1", "0001");
+        dto.setAffectations(List.of(AffectationSiteDto.builder().site("Yoff")
+                .dateEntree(LocalDate.of(2026, 5, 10))
+                .dateSortie(LocalDate.of(2026, 5, 9)).build()));
+
+        assertThatThrownBy(() -> service.create(dto, null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("dateSortie");
+    }
+
+    @Test
+    void create_rejette_un_rythme_de_site_hors_enum() {
+        DossierEmployeDto dto = baseDto("M1", "0001");
+        dto.setAffectations(List.of(AffectationSiteDto.builder().site("Yoff")
+                .joursTravail("LUN_JEU").build()));
+
+        assertThatThrownBy(() -> service.create(dto, null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("joursTravail");
+    }
+
+    /**
+     * Les deux bornes restent facultatives : l'import bulk et le repli
+     * {@code affectationsDepuisSiteAffecte} produisent des affectations sans aucune date.
+     */
+    @Test
+    void create_accepte_une_affectation_sans_date_ni_rythme() throws Exception {
+        DossierEmployeDto dto = baseDto("M1", "0001");
+        dto.setAffectations(List.of(AffectationSiteDto.builder().site("Yoff").build()));
+
+        service.create(dto, null);
+
+        DossierEmploye saved = captureSaved();
+        assertThat(saved.getAffectations().get(0).getDateEntree()).isNull();
+        assertThat(saved.getAffectations().get(0).getJoursTravail()).isNull();
+    }
+
+    @Test
+    void create_accepte_une_sortie_egale_a_l_entree() throws Exception {
+        DossierEmployeDto dto = baseDto("M1", "0001");
+        dto.setAffectations(List.of(AffectationSiteDto.builder().site("Yoff")
+                .dateEntree(LocalDate.of(2026, 5, 10))
+                .dateSortie(LocalDate.of(2026, 5, 10)).build()));
+
+        service.create(dto, null);
+
+        assertThat(captureSaved().getAffectations()).hasSize(1);
+    }
+
+    @Test
     void create_accepte_un_seul_horaire_present() throws Exception {
         DossierEmployeDto dto = baseDto("M1", "0001");
         dto.setAffectations(List.of(
@@ -181,7 +232,7 @@ class DossierEmployeAffectationServiceTest {
     void update_remplace_integralement_la_liste() throws Exception {
         DossierEmploye existing = DossierEmploye.builder()
                 .id("emp1").matricule("M1").agentId("0001").nom("X").prenom("Y").poste("Op")
-                .dateEntree(LocalDate.of(2026, 1, 1)).statut(StatutDossierEmploye.ACTIF)
+                .dateEmbauche(LocalDate.of(2026, 1, 1)).statut(StatutDossierEmploye.ACTIF)
                 .siteAffecte("Ancien")
                 .affectations(List.of(AffectationSite.builder().site("Ancien").build()))
                 .build();
@@ -204,7 +255,7 @@ class DossierEmployeAffectationServiceTest {
     private DossierEmployeDto baseDto(String matricule, String agentId) {
         return DossierEmployeDto.builder()
                 .matricule(matricule).agentId(agentId).nom("X").prenom("Y").poste("Op")
-                .dateEntree(LocalDate.of(2026, 1, 1))
+                .dateEmbauche(LocalDate.of(2026, 1, 1))
                 .statut(StatutDossierEmploye.ACTIF)
                 .build();
     }
