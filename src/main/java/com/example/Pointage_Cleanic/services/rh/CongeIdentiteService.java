@@ -37,6 +37,13 @@ public class CongeIdentiteService {
      */
     public static final String ROLE_SUPERADMIN = "SUPERADMIN";
 
+    /**
+     * Responsable d'équipe terrain. Seul rôle, hors {@link #ROLE_RH} et
+     * {@link #ROLE_SUPERADMIN}, autorisé à déposer une demande au nom d'un tiers — et
+     * uniquement au nom de ses <b>subordonnés directs</b>.
+     */
+    public static final String ROLE_EXPLOITATION = "EXPLOITATION";
+
     private final CurrentUserProvider currentUserProvider;
     private final DossierEmployeRepository dossierEmployeRepository;
 
@@ -93,7 +100,7 @@ public class CongeIdentiteService {
         return ROLE_SUPERADMIN.equals(currentUserProvider.currentRole());
     }
 
-    /** Peut déposer une demande au nom d'un tiers. */
+    /** Peut déposer une demande au nom de n'importe quel employé. */
     public boolean peutCreerPourAutrui() {
         return estRh() || estSuperAdmin();
     }
@@ -152,5 +159,53 @@ public class CongeIdentiteService {
         dossierEmployeRepository.findBySuperieurHierarchiqueId(moi)
                 .forEach(subordonne -> visibles.add(subordonne.getId()));
         return new PerimetreConges(false, moi, Set.copyOf(visibles));
+    }
+
+    // ─── Périmètre de dépôt ───────────────────────────────────────────────────
+
+    /**
+     * Employés au nom desquels l'appelant peut <b>déposer</b> une demande.
+     *
+     * <p>⚠ Volontairement <b>plus étroit</b> que {@link #perimetreLecture()} : tout
+     * encadrant <i>voit</i> les congés de ses subordonnés, mais seul le rôle
+     * {@link #ROLE_EXPLOITATION} peut en <i>déposer</i> pour eux. Confondre les deux
+     * ouvrirait le dépôt pour autrui à n'importe quel manager, ce qui n'est pas la règle
+     * métier.
+     *
+     * <ul>
+     *   <li>{@code RH} / {@code SUPERADMIN} → tous les employés ;</li>
+     *   <li>{@code EXPLOITATION} → lui-même et ses subordonnés directs ;</li>
+     *   <li>tout autre profil → lui-même seul ;</li>
+     *   <li>compte non rattaché à un dossier employé → périmètre <b>vide</b>, jamais total.</li>
+     * </ul>
+     *
+     * <p>⚠ Perf : même règle que {@code perimetreLecture()} — <b>un seul appel par méthode
+     * publique</b>, le résultat circule en variable locale.
+     */
+    public PerimetreConges perimetreDepot() {
+        return perimetreDepot(employeCourant().orElse(null));
+    }
+
+    /**
+     * Variante qui réutilise un dossier employé déjà résolu, pour éviter la lecture Mongo
+     * supplémentaire de {@link #employeCourant()} là où l'appelant le tient déjà.
+     */
+    public PerimetreConges perimetreDepot(DossierEmploye moi) {
+        String role = currentUserProvider.currentRole();
+        if (ROLE_RH.equals(role) || ROLE_SUPERADMIN.equals(role)) {
+            return PerimetreConges.tout();
+        }
+
+        if (moi == null) {
+            return PerimetreConges.vide();
+        }
+
+        Set<String> autorises = new HashSet<>();
+        autorises.add(moi.getId());
+        if (ROLE_EXPLOITATION.equals(role)) {
+            dossierEmployeRepository.findBySuperieurHierarchiqueId(moi.getId())
+                    .forEach(subordonne -> autorises.add(subordonne.getId()));
+        }
+        return new PerimetreConges(false, moi.getId(), Set.copyOf(autorises));
     }
 }

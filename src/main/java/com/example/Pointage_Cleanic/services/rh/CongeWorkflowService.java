@@ -134,6 +134,17 @@ public class CongeWorkflowService {
         return decorer(mapper.toDto(sauvee));
     }
 
+    /**
+     * Résout l'employé au nom duquel la demande est déposée.
+     *
+     * <p>Le dépôt pour un tiers est borné par {@code perimetreDepot()} — la même règle que
+     * celle qui remplit le champ « Employé » du formulaire, sans quoi celui-ci proposerait
+     * des employés que la création refuserait ensuite : tous pour {@code RH} /
+     * {@code SUPERADMIN}, ses subordonnés directs pour {@code EXPLOITATION}.
+     *
+     * <p>⚠ La garde est posée <b>avant</b> le {@code findById} : refuser après aurait
+     * divulgué l'existence du dossier par un 404 distinct du 403.
+     */
     private DossierEmploye resoudreDemandeur(DemandeCongeDto dto) {
         String employeIdDemande = dto.getEmployeId();
         Optional<DossierEmploye> moi = identite.employeCourant();
@@ -142,9 +153,10 @@ public class CongeWorkflowService {
                 && moi.map(m -> !m.getId().equals(employeIdDemande)).orElse(true);
 
         if (pourAutrui) {
-            if (!identite.peutCreerPourAutrui()) {
+            // `moi` est déjà résolu : on passe le dossier pour éviter une seconde lecture.
+            if (!identite.perimetreDepot(moi.orElse(null)).voitEmploye(employeIdDemande)) {
                 throw new CongeAccesRefuseException(
-                        "Seuls les profils RH peuvent déposer une demande pour un autre employé.");
+                        "Vous n'êtes pas autorisé à déposer une demande pour cet employé.");
             }
             return dossierEmployeRepository.findById(employeIdDemande)
                     .orElseThrow(() -> new ResourceNotFoundException(

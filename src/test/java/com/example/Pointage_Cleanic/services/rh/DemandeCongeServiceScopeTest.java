@@ -55,9 +55,11 @@ class DemandeCongeServiceScopeTest {
 
     @BeforeEach
     void setUp() {
+        CongeAcquisCalculator calculator = new CongeAcquisCalculator();
+        // @Value n'est pas résolu hors contexte Spring : on pose la valeur à la main.
+        ReflectionTestUtils.setField(calculator, "joursAcquisParMois", 2);
         service = new DemandeCongeService(demandeCongeRepository, dossierEmployeRepository,
-                new CongeMapper(), workflowService, identite);
-        ReflectionTestUtils.setField(service, "joursAcquisParAn", 22);
+                new CongeMapper(), workflowService, identite, calculator);
     }
 
     // ─── Fixtures ─────────────────────────────────────────────────────────────
@@ -211,8 +213,7 @@ class DemandeCongeServiceScopeTest {
         perimetre(perimetreManager());
         when(dossierEmployeRepository.findById(SUBORDONNE)).thenReturn(java.util.Optional.of(
                 DossierEmploye.builder().id(SUBORDONNE).matricule("M-2").nom("Diop").build()));
-        when(demandeCongeRepository.findByEmployeIdAndDateDebutBetween(eq(SUBORDONNE), any(), any()))
-                .thenReturn(List.of());
+        when(demandeCongeRepository.findByEmployeId(eq(SUBORDONNE))).thenReturn(List.of());
 
         assertThat(service.getSolde(SUBORDONNE).getEmployeId()).isEqualTo(SUBORDONNE);
     }
@@ -225,8 +226,7 @@ class DemandeCongeServiceScopeTest {
         when(dossierEmployeRepository.findAllById(anyIterable())).thenReturn(List.of(
                 DossierEmploye.builder().id(MOI).statut(StatutDossierEmploye.ACTIF).build(),
                 DossierEmploye.builder().id(SUBORDONNE).statut(StatutDossierEmploye.ACTIF).build()));
-        when(demandeCongeRepository.findByEmployeIdAndDateDebutBetween(any(), any(), any()))
-                .thenReturn(List.of());
+        when(demandeCongeRepository.findByEmployeId(any())).thenReturn(List.of());
 
         List<SoldeCongeDto> soldes = service.getSoldes();
 
@@ -243,8 +243,7 @@ class DemandeCongeServiceScopeTest {
         when(dossierEmployeRepository.findAllById(anyIterable())).thenReturn(List.of(
                 DossierEmploye.builder().id(MOI).statut(StatutDossierEmploye.ACTIF).build(),
                 DossierEmploye.builder().id(SUBORDONNE).statut(StatutDossierEmploye.SORTI).build()));
-        when(demandeCongeRepository.findByEmployeIdAndDateDebutBetween(any(), any(), any()))
-                .thenReturn(List.of());
+        when(demandeCongeRepository.findByEmployeId(any())).thenReturn(List.of());
 
         assertThat(service.getSoldes()).extracting(SoldeCongeDto::getEmployeId).containsExactly(MOI);
     }
@@ -255,8 +254,7 @@ class DemandeCongeServiceScopeTest {
         when(dossierEmployeRepository.findByStatutIn(any())).thenReturn(List.of(
                 DossierEmploye.builder().id(MOI).statut(StatutDossierEmploye.ACTIF).build(),
                 DossierEmploye.builder().id(TIERS).statut(StatutDossierEmploye.ACTIF).build()));
-        when(demandeCongeRepository.findByEmployeIdAndDateDebutBetween(any(), any(), any()))
-                .thenReturn(List.of());
+        when(demandeCongeRepository.findByEmployeId(any())).thenReturn(List.of());
 
         assertThat(service.getSoldes()).hasSize(2);
     }

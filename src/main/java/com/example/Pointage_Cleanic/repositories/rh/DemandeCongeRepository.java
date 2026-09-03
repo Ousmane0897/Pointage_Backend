@@ -25,10 +25,6 @@ public interface DemandeCongeRepository extends MongoRepository<DemandeConge, St
     List<DemandeConge> findByStatutAndDateDebutLessThanEqualAndDateFinGreaterThanEqual(
             StatutDemande statut, LocalDate date, LocalDate dateSame);
 
-    // Congés d'un employé pour une année (pour calcul solde)
-    List<DemandeConge> findByEmployeIdAndDateDebutBetween(
-            String employeId, LocalDate debut, LocalDate fin);
-
     // ─── Circuit de validation à 3 niveaux ──────────────────────────────────
     // Requêtes Mongo dédiées : la file de validation ne doit pas passer par le
     // filtrage en mémoire de DemandeCongeService.searchDemandes.

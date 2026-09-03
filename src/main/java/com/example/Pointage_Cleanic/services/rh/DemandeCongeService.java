@@ -1,6 +1,7 @@
 package com.example.Pointage_Cleanic.services.rh;
 
 import com.example.Pointage_Cleanic.Dto.rh.DemandeCongeDto;
+import com.example.Pointage_Cleanic.Dto.rh.EmployeSelectionnableDto;
 import com.example.Pointage_Cleanic.Dto.rh.SoldeCongeDto;
 import com.example.Pointage_Cleanic.Enum.rh.StatutDemande;
 import com.example.Pointage_Cleanic.Enum.rh.TypeConge;
@@ -12,7 +13,6 @@ import com.example.Pointage_Cleanic.repositories.rh.DemandeCongeRepository;
 import com.example.Pointage_Cleanic.repositories.rh.DossierEmployeRepository;
 import com.example.Pointage_Cleanic.Enum.rh.StatutDossierEmploye;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
@@ -34,13 +34,7 @@ public class DemandeCongeService {
     private final CongeMapper mapper;
     private final CongeWorkflowService workflowService;
     private final CongeIdentiteService identite;
-
-    /**
-     * Jours de congé acquis par année pleine, en <b>jours ouvrés</b>.
-     * Configurable — la valeur historique de 30 jours était erronée.
-     */
-    @Value("${app.conges.jours-acquis-par-an:22}")
-    private int joursAcquisParAn;
+    private final CongeAcquisCalculator acquisCalculator;
 
     /**
      * Dépôt d'une demande : délégué au circuit de validation, qui résout le demandeur
@@ -141,6 +135,58 @@ public class DemandeCongeService {
     }
 
     /**
+     * Employés au nom desquels l'appelant peut déposer une demande — alimente le champ
+     * « Employé » du formulaire de demande.
+     *
+     * <p>S'appuie sur {@code perimetreDepot()} et <b>non</b> sur {@code perimetreLecture()} :
+     * tout encadrant <i>voit</i> les congés de ses subordonnés, mais seul le rôle
+     * {@code EXPLOITATION} peut en <i>déposer</i> pour eux. Un compte non rattaché à un
+     * dossier employé reçoit une liste <b>vide</b> — jamais totale — et le formulaire en
+     * déduit que le dépôt est impossible.
+     *
+     * <p>Tri : soi d'abord (le cas de loin le plus fréquent), puis nom et prénom croissants.
+     */
+    public List<EmployeSelectionnableDto> getEmployesSelectionnables() {
+        List<StatutDossierEmploye> statutsActifs = List.of(
+                StatutDossierEmploye.ACTIF,
+                StatutDossierEmploye.EN_PERIODE_ESSAI,
+                StatutDossierEmploye.SUSPENDU);
+
+        PerimetreConges perimetre = identite.perimetreDepot();
+        List<DossierEmploye> employes;
+        if (perimetre.voitTout()) {
+            employes = dossierEmployeRepository.findByStatutIn(statutsActifs);
+        } else if (perimetre.estVide()) {
+            employes = List.of();
+        } else {
+            // On part du périmètre plutôt que de scanner tous les dossiers : quelques ids.
+            employes = StreamSupport
+                    .stream(dossierEmployeRepository.findAllById(perimetre.employesVisibles()).spliterator(), false)
+                    .filter(e -> statutsActifs.contains(e.getStatut()))
+                    .collect(Collectors.toList());
+        }
+
+        String moi = perimetre.moi();
+        return employes.stream()
+                .map(e -> EmployeSelectionnableDto.builder()
+                        .id(e.getId())
+                        .matricule(e.getMatricule())
+                        .nom(e.getNom())
+                        .prenom(e.getPrenom())
+                        .departement(e.getDepartement())
+                        .superieurHierarchiqueId(e.getSuperieurHierarchiqueId())
+                        .superieurHierarchiqueNom(e.getSuperieurHierarchiqueNom())
+                        .estMoi(e.getId() != null && e.getId().equals(moi))
+                        .build())
+                .sorted(Comparator.comparing(EmployeSelectionnableDto::isEstMoi).reversed()
+                        .thenComparing(d -> d.getNom() == null ? "" : d.getNom(),
+                                String.CASE_INSENSITIVE_ORDER)
+                        .thenComparing(d -> d.getPrenom() == null ? "" : d.getPrenom(),
+                                String.CASE_INSENSITIVE_ORDER))
+                .collect(Collectors.toList());
+    }
+
+    /**
      * Garde de lecture par employé, à poser <b>avant</b> tout {@code findById} : refuser
      * après aurait divulgué l'existence (ou non) du dossier via un 404 distinct du 403.
      */
@@ -164,27 +210,35 @@ public class DemandeCongeService {
         return conge.getType() == null || conge.getType().decompteSoldeAnnuel();
     }
 
+    /**
+     * Solde de l'exercice courant, augmenté du <b>reliquat des exercices antérieurs</b>.
+     *
+     * <p>L'acquis n'est plus une constante : il vaut 2 jours ouvrables par mois de service
+     * effectif ({@link CongeAcquisCalculator}), calculés depuis la date d'entrée de l'employé.
+     *
+     * <p>Une <b>seule</b> lecture ramène tout l'historique de l'employé : le reliquat impose de
+     * parcourir les exercices clos, et refaire une requête par année serait N requêtes pour un
+     * volume qui tient largement en mémoire (quelques dizaines de demandes par carrière).
+     */
     private SoldeCongeDto buildSolde(DossierEmploye employe) {
-        int annee = LocalDate.now().getYear();
-        LocalDate debut = LocalDate.of(annee, 1, 1);
-        LocalDate fin = LocalDate.of(annee, 12, 31);
+        LocalDate aujourdhui = LocalDate.now();
+        int annee = aujourdhui.getYear();
+        LocalDate dateEntree = employe.getDateEntree();
 
-        List<DemandeConge> congesAnnee = demandeCongeRepository
-                .findByEmployeIdAndDateDebutBetween(employe.getId(), debut, fin);
-
-        int pris = congesAnnee.stream()
+        List<DemandeConge> decomptees = demandeCongeRepository.findByEmployeId(employe.getId())
+                .stream()
                 .filter(DemandeCongeService::decompteLeSolde)
-                .filter(c -> c.getStatut() == StatutDemande.APPROUVE)
-                .mapToInt(c -> c.getNombreJours() != null ? c.getNombreJours() : 0)
-                .sum();
+                .filter(c -> c.getDateDebut() != null)
+                .collect(Collectors.toList());
+
+        int pris = joursParStatut(decomptees, annee, false);
 
         // Toute demande encore dans le circuit réserve des jours — pas seulement celles
         // au premier niveau, sinon une demande en cours de validation disparaîtrait du solde.
-        int enCours = congesAnnee.stream()
-                .filter(DemandeCongeService::decompteLeSolde)
-                .filter(c -> c.getStatut() != null && c.getStatut().estEnCours())
-                .mapToInt(c -> c.getNombreJours() != null ? c.getNombreJours() : 0)
-                .sum();
+        int enCours = joursParStatut(decomptees, annee, true);
+
+        int acquis = acquisCalculator.acquis(annee, dateEntree, aujourdhui);
+        int soldeAnterieur = soldeAnterieur(decomptees, annee, dateEntree, aujourdhui);
 
         return SoldeCongeDto.builder()
                 .employeId(employe.getId())
@@ -193,12 +247,59 @@ public class DemandeCongeService {
                 .prenom(employe.getPrenom())
                 .departement(employe.getDepartement())
                 .anneeReference(annee)
-                .acquis(joursAcquisParAn)
+                .soldeAnterieur(soldeAnterieur)
+                .moisAcquis(acquisCalculator.moisAcquis(annee, dateEntree, aujourdhui))
+                .acquis(acquis)
                 .pris(pris)
                 .enCours(enCours)
-                // Acquis configurable, et jamais de solde négatif à l'affichage.
-                .solde(Math.max(0, joursAcquisParAn - pris - enCours))
+                // Le report est consommable ; jamais de solde négatif à l'affichage.
+                .solde(Math.max(0, soldeAnterieur + acquis - pris - enCours))
                 .build();
+    }
+
+    /**
+     * Reliquat cumulé des exercices <b>clos</b>, de l'année d'entrée à N-1.
+     *
+     * <p>Le cumul est planché à 0 une seule fois, <b>sur le total</b> et non année par année :
+     * un dépassement de droits en 2024 doit s'imputer sur le reliquat 2025, sinon le report
+     * serait systématiquement surévalué.
+     *
+     * <p>Seules les demandes <b>approuvées</b> amputent un exercice clos : une demande restée en
+     * attente depuis 2024 ne sera jamais tranchée, elle ne doit pas geler du reliquat.
+     *
+     * <p>Sans date d'entrée, il n'existe aucune base pour reconstituer un historique : le report
+     * est nul plutôt qu'inventé — même arbitrage prudent que le {@code type} nul de
+     * {@link #decompteLeSolde}, où l'on préfère sous-estimer un solde qu'en créditer à tort.
+     */
+    private int soldeAnterieur(List<DemandeConge> decomptees, int anneeCourante,
+                               LocalDate dateEntree, LocalDate aujourdhui) {
+        if (dateEntree == null) {
+            return 0;
+        }
+        int cumul = 0;
+        for (int a = dateEntree.getYear(); a < anneeCourante; a++) {
+            cumul += acquisCalculator.acquis(a, dateEntree, aujourdhui)
+                    - joursParStatut(decomptees, a, false);
+        }
+        return Math.max(0, cumul);
+    }
+
+    /**
+     * Jours d'un exercice, rattaché par la seule {@code dateDebut} : un congé à cheval sur le
+     * 31/12 est intégralement imputé à son année de début (règle historique, inchangée — la
+     * modifier ferait bouger des soldes déjà validés).
+     *
+     * @param enCours {@code true} pour les demandes encore dans le circuit, {@code false} pour
+     *                les seules demandes approuvées
+     */
+    private static int joursParStatut(List<DemandeConge> decomptees, int annee, boolean enCours) {
+        return decomptees.stream()
+                .filter(c -> c.getDateDebut().getYear() == annee)
+                .filter(c -> enCours
+                        ? c.getStatut() != null && c.getStatut().estEnCours()
+                        : c.getStatut() == StatutDemande.APPROUVE)
+                .mapToInt(c -> c.getNombreJours() != null ? c.getNombreJours() : 0)
+                .sum();
     }
 
     /**

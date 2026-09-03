@@ -24,8 +24,10 @@ app:
     # par la variable d'environnement APP_FRONTEND_BASE_URL.
     base-url: ${APP_FRONTEND_BASE_URL:https://pointic-cleanic.com}
   conges:
-    # Jours de congé acquis par année pleine, en jours ouvrés (week-ends exclus).
-    jours-acquis-par-an: ${CONGES_JOURS_ACQUIS_PAR_AN:22}
+    # Jours ouvrables acquis par mois de service effectif (droit sénégalais : 2 j/mois,
+    # soit 24 j pour une année pleine). Remplace l'ancien forfait annuel, qui accordait
+    # autant de jours à un employé embauché en novembre qu'à un employé présent toute l'année.
+    jours-acquis-par-mois: ${CONGES_JOURS_ACQUIS_PAR_MOIS:2}
 
 
 google:
