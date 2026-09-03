@@ -12,15 +12,20 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * Périmètre de lecture des congés : qui voit quoi.
+ * Périmètres des congés : qui voit quoi, et qui peut déposer pour qui.
  *
- * <p>Règle : la RH et le super-admin voient tout ; un employé se voit lui-même et ses
- * subordonnés directs ; un compte non rattaché à un dossier employé ne voit rien.
+ * <p><b>Lecture</b> : la RH et le super-admin voient tout ; un employé se voit lui-même et
+ * ses subordonnés directs ; un compte non rattaché à un dossier employé ne voit rien.
+ *
+ * <p><b>Dépôt</b> — volontairement plus étroit : la RH et le super-admin déposent pour tout
+ * le monde ; seul le rôle {@code EXPLOITATION} dépose pour ses subordonnés directs ; tout
+ * autre profil, <i>y compris un manager</i>, ne dépose que pour lui-même.
  */
 @ExtendWith(MockitoExtension.class)
 class CongeIdentiteServicePerimetreTest {
@@ -119,6 +124,74 @@ class CongeIdentiteServicePerimetreTest {
         service.perimetreLecture();
 
         verify(currentUserProvider, times(1)).currentRole();
+    }
+
+    // ─── Périmètre de dépôt ───────────────────────────────────────────────────
+
+    @Test
+    void depot_la_rh_peut_deposer_pour_tout_le_monde() {
+        connecte("RH");
+
+        assertThat(service.perimetreDepot().voitTout()).isTrue();
+    }
+
+    @Test
+    void depot_le_super_admin_peut_deposer_pour_tout_le_monde() {
+        connecte("SUPERADMIN");
+
+        assertThat(service.perimetreDepot().voitTout()).isTrue();
+    }
+
+    @Test
+    void depot_exploitation_couvre_ses_subordonnes_directs() {
+        connecte("EXPLOITATION");
+        rattacheA(MOI);
+        when(dossierEmployeRepository.findBySuperieurHierarchiqueId(MOI)).thenReturn(List.of(
+                DossierEmploye.builder().id("emp-sub-1").build(),
+                DossierEmploye.builder().id("emp-sub-2").build()));
+
+        PerimetreConges perimetre = service.perimetreDepot();
+
+        assertThat(perimetre.voitTout()).isFalse();
+        assertThat(perimetre.employesVisibles())
+                .containsExactlyInAnyOrder(MOI, "emp-sub-1", "emp-sub-2");
+        assertThat(perimetre.voitEmploye("emp-autre-equipe")).isFalse();
+    }
+
+    @Test
+    void depot_un_manager_sans_le_role_exploitation_ne_depose_que_pour_lui() {
+        // ⚠ Le point sensible : encadrer donne le droit de *voir* les congés de son équipe
+        // (perimetreLecture), jamais celui d'en *déposer* — seul le rôle l'ouvre.
+        connecte("BACKOFFICE");
+        rattacheA(MOI);
+
+        PerimetreConges depot = service.perimetreDepot();
+
+        assertThat(depot.employesVisibles()).containsExactly(MOI);
+        assertThat(depot.voitEmploye("emp-sub-1")).isFalse();
+        // Les subordonnés ne sont même pas cherchés : aucune lecture Mongo inutile.
+        verify(dossierEmployeRepository, never()).findBySuperieurHierarchiqueId(MOI);
+    }
+
+    @Test
+    void depot_un_compte_non_rattache_ne_peut_deposer_pour_personne() {
+        connecte("EXPLOITATION");
+        when(currentUserProvider.currentEmail()).thenReturn(EMAIL);
+        when(dossierEmployeRepository.findByEmailIgnoreCase(EMAIL)).thenReturn(List.of());
+
+        assertThat(service.perimetreDepot().estVide()).isTrue();
+    }
+
+    @Test
+    void depot_la_variante_avec_dossier_resolu_evite_la_relecture() {
+        // `resoudreDemandeur` tient déjà le dossier : la surcharge doit s'en contenter.
+        connecte("EXPLOITATION");
+        when(dossierEmployeRepository.findBySuperieurHierarchiqueId(MOI)).thenReturn(List.of());
+
+        PerimetreConges depot = service.perimetreDepot(DossierEmploye.builder().id(MOI).build());
+
+        assertThat(depot.employesVisibles()).containsExactly(MOI);
+        verify(dossierEmployeRepository, never()).findByEmailIgnoreCase(EMAIL);
     }
 
     @Test

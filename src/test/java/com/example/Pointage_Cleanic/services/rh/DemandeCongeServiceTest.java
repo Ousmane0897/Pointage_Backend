@@ -2,6 +2,7 @@ package com.example.Pointage_Cleanic.services.rh;
 
 import com.example.Pointage_Cleanic.Dto.rh.SoldeCongeDto;
 import com.example.Pointage_Cleanic.Enum.rh.StatutDemande;
+import com.example.Pointage_Cleanic.Enum.rh.TypeConge;
 import com.example.Pointage_Cleanic.entities.rh.DemandeConge;
 import com.example.Pointage_Cleanic.entities.rh.DossierEmploye;
 import com.example.Pointage_Cleanic.repositories.rh.DemandeCongeRepository;
@@ -18,32 +19,49 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 
 /**
- * Vérifie le droit annuel de congés (22 j depuis 2026-07) et le calcul du solde,
- * y compris le plafonnement à 0 en cas de dépassement.
+ * Invariants d'ensemble du solde : identité de l'employé reportée dans le DTO, égalité
+ * {@code report + acquis - pris - enCours}, et plafonnement à 0 en cas de dépassement.
+ *
+ * <p>Le détail par statut et par type est couvert par {@link DemandeCongeServiceSoldeTest},
+ * la formule de l'acquis par {@link CongeAcquisCalculatorTest}.
  */
 @ExtendWith(MockitoExtension.class)
 class DemandeCongeServiceTest {
+
+    private static final LocalDate AUJOURDHUI = LocalDate.now();
+    private static final int ANNEE = AUJOURDHUI.getYear();
+    private static final LocalDate ENTREE = LocalDate.of(ANNEE - 3, 1, 1);
 
     @Mock private DemandeCongeRepository demandeCongeRepository;
     @Mock private DossierEmployeRepository dossierEmployeRepository;
     @Mock private CongeWorkflowService workflowService;
     @Mock private CongeIdentiteService identite;
 
+    private final CongeAcquisCalculator calculator = new CongeAcquisCalculator();
     private DemandeCongeService service;
+
+    /** Droits totaux de l'employé de référence : report des 3 exercices clos + exercice courant. */
+    private int droitsTotaux;
 
     @BeforeEach
     void setUp() {
-        // Le service a gagné deux dépendances avec le circuit de validation à 3 niveaux et le
-        // périmètre de lecture : @InjectMocks les laisserait nulles et getSolde partirait en NPE.
+        // @Value n'est pas résolu hors contexte Spring : on pose la valeur à la main.
+        ReflectionTestUtils.setField(calculator, "joursAcquisParMois", 2);
+        // Le service a gagné trois dépendances avec le circuit de validation à 3 niveaux, le
+        // périmètre de lecture et le calcul des droits : @InjectMocks les laisserait nulles et
+        // getSolde partirait en NPE.
         service = new DemandeCongeService(demandeCongeRepository, dossierEmployeRepository,
-                new CongeMapper(), workflowService, identite);
-        // L'acquis vient de @Value("${app.conges.jours-acquis-par-an:22}"), non résolu hors Spring.
-        ReflectionTestUtils.setField(service, "joursAcquisParAn", 22);
+                new CongeMapper(), workflowService, identite, calculator);
+
+        droitsTotaux = calculator.acquis(ANNEE - 3, ENTREE, AUJOURDHUI)
+                + calculator.acquis(ANNEE - 2, ENTREE, AUJOURDHUI)
+                + calculator.acquis(ANNEE - 1, ENTREE, AUJOURDHUI)
+                + calculator.acquis(ANNEE, ENTREE, AUJOURDHUI);
+
         // Le périmètre est couvert par DemandeCongeServiceScopeTest : ici on se place en RH pour
         // ne mesurer que le calcul du solde.
         when(identite.perimetreLecture()).thenReturn(PerimetreConges.tout());
@@ -56,58 +74,63 @@ class DemandeCongeServiceTest {
         e.setNom("Diop");
         e.setPrenom("Awa");
         e.setDepartement("Exploitation");
+        e.setDateEntree(ENTREE);
         return e;
     }
 
+    /** Congé de l'exercice courant — le 1er mars, un quantième jamais à cheval sur le 31/12. */
     private DemandeConge conge(StatutDemande statut, int jours) {
-        return DemandeConge.builder().statut(statut).nombreJours(jours).build();
+        return DemandeConge.builder()
+                .statut(statut)
+                .type(TypeConge.ANNUEL)
+                .nombreJours(jours)
+                .dateDebut(LocalDate.of(ANNEE, 3, 1))
+                .build();
+    }
+
+    private void enBase(String id, DemandeConge... conges) {
+        when(dossierEmployeRepository.findById(id)).thenReturn(Optional.of(employe(id)));
+        when(demandeCongeRepository.findByEmployeId(eq(id))).thenReturn(List.of(conges));
     }
 
     @Test
-    void employe_sans_conge_pris_a_22_acquis_et_22_solde() {
-        when(dossierEmployeRepository.findById("emp-1")).thenReturn(Optional.of(employe("emp-1")));
-        when(demandeCongeRepository.findByEmployeIdAndDateDebutBetween(eq("emp-1"), any(), any()))
-                .thenReturn(List.of());
+    void employe_sans_conge_pris_dispose_de_la_totalite_de_ses_droits() {
+        enBase("emp-1");
 
         SoldeCongeDto solde = service.getSolde("emp-1");
 
-        assertThat(solde.getAcquis()).isEqualTo(22);
         assertThat(solde.getPris()).isZero();
         assertThat(solde.getEnCours()).isZero();
-        assertThat(solde.getSolde()).isEqualTo(22);
-        assertThat(solde.getAnneeReference()).isEqualTo(LocalDate.now().getYear());
+        assertThat(solde.getSolde()).isEqualTo(droitsTotaux);
+        assertThat(solde.getSoldeAnterieur() + solde.getAcquis()).isEqualTo(droitsTotaux);
+        assertThat(solde.getAnneeReference()).isEqualTo(ANNEE);
         assertThat(solde.getMatricule()).isEqualTo("M-emp-1");
     }
 
     @Test
-    void solde_nominal_respecte_l_invariant_acquis_moins_pris_moins_enCours() {
-        when(dossierEmployeRepository.findById("emp-2")).thenReturn(Optional.of(employe("emp-2")));
-        when(demandeCongeRepository.findByEmployeIdAndDateDebutBetween(eq("emp-2"), any(), any()))
-                .thenReturn(List.of(
-                        conge(StatutDemande.APPROUVE, 10),   // pris
-                        conge(StatutDemande.EN_ATTENTE, 5))); // enCours
+    void solde_nominal_respecte_l_invariant_report_plus_acquis_moins_pris_moins_enCours() {
+        enBase("emp-2",
+                conge(StatutDemande.APPROUVE, 10),   // pris
+                conge(StatutDemande.EN_ATTENTE, 5)); // enCours
 
         SoldeCongeDto solde = service.getSolde("emp-2");
 
-        assertThat(solde.getAcquis()).isEqualTo(22);
         assertThat(solde.getPris()).isEqualTo(10);
         assertThat(solde.getEnCours()).isEqualTo(5);
-        assertThat(solde.getSolde()).isEqualTo(7); // 22 - 10 - 5
+        assertThat(solde.getSolde()).isEqualTo(droitsTotaux - 15);
     }
 
     @Test
     void solde_plafonne_a_0_en_cas_de_depassement() {
-        when(dossierEmployeRepository.findById("emp-3")).thenReturn(Optional.of(employe("emp-3")));
-        when(demandeCongeRepository.findByEmployeIdAndDateDebutBetween(eq("emp-3"), any(), any()))
-                .thenReturn(List.of(
-                        conge(StatutDemande.APPROUVE, 25),   // déjà pris au-delà du droit
-                        conge(StatutDemande.EN_ATTENTE, 3)));
+        // Le plancher masque les dépassements de droits : comportement historique, conservé.
+        enBase("emp-3",
+                conge(StatutDemande.APPROUVE, 500),  // très au-delà du droit
+                conge(StatutDemande.EN_ATTENTE, 3));
 
         SoldeCongeDto solde = service.getSolde("emp-3");
 
-        assertThat(solde.getAcquis()).isEqualTo(22);
-        assertThat(solde.getPris()).isEqualTo(25);
+        assertThat(solde.getPris()).isEqualTo(500);
         assertThat(solde.getEnCours()).isEqualTo(3);
-        assertThat(solde.getSolde()).isZero(); // max(0, 22 - 25 - 3)
+        assertThat(solde.getSolde()).isZero();
     }
 }

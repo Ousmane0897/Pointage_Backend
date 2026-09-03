@@ -2,6 +2,7 @@ package com.example.Pointage_Cleanic.controllers.rh.tempspresences;
 
 import com.example.Pointage_Cleanic.Dto.rh.CompteursAValiderDto;
 import com.example.Pointage_Cleanic.Dto.rh.DemandeCongeDto;
+import com.example.Pointage_Cleanic.Dto.rh.EmployeSelectionnableDto;
 import com.example.Pointage_Cleanic.Dto.rh.MonProfilCongeDto;
 import com.example.Pointage_Cleanic.Dto.rh.SoldeCongeDto;
 import com.example.Pointage_Cleanic.Enum.rh.NiveauValidationConge;
@@ -46,6 +47,23 @@ public class TempsPresencesCongeController {
     @GetMapping("/moi")
     public ResponseEntity<MonProfilCongeDto> monProfil() {
         return ResponseEntity.ok(congeWorkflowService.monProfil());
+    }
+
+    /**
+     * Employés au nom desquels l'appelant peut déposer une demande — alimente le champ
+     * « Employé » du formulaire de demande.
+     *
+     * <p>Tous les employés pour {@code RH} / {@code SUPERADMIN}, lui-même et ses subordonnés
+     * directs pour {@code EXPLOITATION}, lui-même seul pour tout autre profil. Un compte non
+     * rattaché à un dossier employé reçoit une liste <b>vide</b>, jamais totale.
+     *
+     * <p>⚠ Volontairement sous {@code /conges/} et non sous {@code /gestion-personnel/} : un
+     * compte {@code EXPLOITATION} n'a pas le droit de lecture du référentiel employés. Non
+     * paginé — la liste est bornée par construction.
+     */
+    @GetMapping("/employes-selectionnables")
+    public ResponseEntity<List<EmployeSelectionnableDto>> employesSelectionnables() {
+        return ResponseEntity.ok(demandeCongeService.getEmployesSelectionnables());
     }
 
     // --- Soldes (tableau brut / objet seul) ---

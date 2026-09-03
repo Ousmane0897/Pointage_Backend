@@ -25,6 +25,7 @@ import org.mockito.quality.Strictness;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -156,21 +157,26 @@ class CongeWorkflowServiceTest {
         }
 
         @Test
-        void deposer_pour_autrui_est_refuse_hors_rh() {
+        void deposer_pour_autrui_est_refuse_hors_du_perimetre_de_depot() {
             DossierEmploye moi = DossierEmploye.builder().id(MOI).build();
             when(identite.employeCourant()).thenReturn(Optional.of(moi));
-            when(identite.peutCreerPourAutrui()).thenReturn(false);
+            // Périmètre réduit à soi : le cas de tout profil hors RH et EXPLOITATION.
+            when(identite.perimetreDepot(moi))
+                    .thenReturn(new PerimetreConges(false, MOI, Set.of(MOI)));
 
             assertThatThrownBy(() -> service.creer(payload("emp-autre")))
                     .isInstanceOf(CongeAccesRefuseException.class);
+            // ⚠ Le dossier ne doit même pas être lu : un 404 distinct du 403 divulguerait
+            // son existence.
+            verify(dossierEmployeRepository, never()).findById("emp-autre");
             verify(demandeCongeRepository, never()).save(any());
         }
 
         @Test
         void la_rh_peut_deposer_pour_autrui() {
-            when(identite.employeCourant())
-                    .thenReturn(Optional.of(DossierEmploye.builder().id("emp-rh").build()));
-            when(identite.peutCreerPourAutrui()).thenReturn(true);
+            DossierEmploye rh = DossierEmploye.builder().id("emp-rh").build();
+            when(identite.employeCourant()).thenReturn(Optional.of(rh));
+            when(identite.perimetreDepot(rh)).thenReturn(PerimetreConges.tout());
             when(dossierEmployeRepository.findById("emp-autre")).thenReturn(Optional.of(
                     DossierEmploye.builder().id("emp-autre").nom("Sow")
                             .superieurHierarchiqueId("emp-chef").build()));
@@ -178,6 +184,22 @@ class CongeWorkflowServiceTest {
             DemandeCongeDto res = service.creer(payload("emp-autre"));
 
             assertThat(res.getEmployeId()).isEqualTo("emp-autre");
+            assertThat(res.getStatut()).isEqualTo(StatutDemande.EN_ATTENTE_SUPERIEUR);
+        }
+
+        @Test
+        void un_responsable_exploitation_peut_deposer_pour_son_subordonne() {
+            DossierEmploye chef = DossierEmploye.builder().id(MOI).build();
+            when(identite.employeCourant()).thenReturn(Optional.of(chef));
+            when(identite.perimetreDepot(chef))
+                    .thenReturn(new PerimetreConges(false, MOI, Set.of(MOI, "emp-subordonne")));
+            when(dossierEmployeRepository.findById("emp-subordonne")).thenReturn(Optional.of(
+                    DossierEmploye.builder().id("emp-subordonne").nom("Ndiaye")
+                            .superieurHierarchiqueId(MOI).build()));
+
+            DemandeCongeDto res = service.creer(payload("emp-subordonne"));
+
+            assertThat(res.getEmployeId()).isEqualTo("emp-subordonne");
             assertThat(res.getStatut()).isEqualTo(StatutDemande.EN_ATTENTE_SUPERIEUR);
         }
 
