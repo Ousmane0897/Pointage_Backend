@@ -76,7 +76,7 @@ class DemandeCongeServiceSoldeTest {
     private void employeEnBase(LocalDate dateEntree) {
         when(dossierEmployeRepository.findById(EMPLOYE)).thenReturn(Optional.of(
                 DossierEmploye.builder().id(EMPLOYE).matricule("M-1").nom("Fall")
-                        .dateEntree(dateEntree).build()));
+                        .dateEmbauche(dateEntree).build()));
     }
 
     private DemandeConge conge(StatutDemande statut, int jours) {

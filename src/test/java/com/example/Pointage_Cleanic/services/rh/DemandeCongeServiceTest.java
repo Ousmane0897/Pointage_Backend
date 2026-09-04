@@ -74,7 +74,7 @@ class DemandeCongeServiceTest {
         e.setNom("Diop");
         e.setPrenom("Awa");
         e.setDepartement("Exploitation");
-        e.setDateEntree(ENTREE);
+        e.setDateEmbauche(ENTREE);
         return e;
     }
 

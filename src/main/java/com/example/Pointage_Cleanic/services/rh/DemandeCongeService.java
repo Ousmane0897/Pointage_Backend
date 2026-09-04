@@ -223,7 +223,7 @@ public class DemandeCongeService {
     private SoldeCongeDto buildSolde(DossierEmploye employe) {
         LocalDate aujourdhui = LocalDate.now();
         int annee = aujourdhui.getYear();
-        LocalDate dateEntree = employe.getDateEntree();
+        LocalDate dateEntree = employe.getDateEmbauche();
 
         List<DemandeConge> decomptees = demandeCongeRepository.findByEmployeId(employe.getId())
                 .stream()
