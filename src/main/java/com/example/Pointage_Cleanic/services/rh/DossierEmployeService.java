@@ -12,11 +12,14 @@ import com.example.Pointage_Cleanic.Enum.rh.SituationMatrimoniale;
 import com.example.Pointage_Cleanic.Enum.rh.StatutDossierEmploye;
 import com.example.Pointage_Cleanic.Enum.StrategieErreursImport;
 import com.example.Pointage_Cleanic.Mapper.rh.DossierEmployeMapper;
+import com.example.Pointage_Cleanic.entities.rh.AffectationSite;
 import com.example.Pointage_Cleanic.entities.rh.DossierEmploye;
+import com.example.Pointage_Cleanic.exception.AffectationInvalideException;
 import com.example.Pointage_Cleanic.exception.BulkInsertPartialFailureException;
 import com.example.Pointage_Cleanic.exception.EmployeAlreadyExistsException;
 import com.example.Pointage_Cleanic.exception.ResourceNotFoundException;
 import com.example.Pointage_Cleanic.repositories.rh.DossierEmployeRepository;
+import com.example.Pointage_Cleanic.util.AffectationSiteUtils;
 import com.example.Pointage_Cleanic.util.SiteAffecteUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -34,6 +37,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.format.DateTimeParseException;
@@ -56,6 +60,12 @@ public class DossierEmployeService {
     private final DossierEmployeRepository dossierEmployeRepository;
     private final DossierEmployeMapper mapper;
     private final MongoTemplate mongoTemplate;
+    /**
+     * Horloge d'{@code Africa/Dakar} ({@code configurations.TimeConfig}) : « une
+     * affectation est-elle close ? » se tranche par rapport à une date, et la figer
+     * en dur rendrait la règle fausse hors Dakar et intestable.
+     */
+    private final Clock clock;
 
     @Value("${rh.import.bulk.max-size:1000}")
     private int bulkMaxSize;
@@ -162,6 +172,9 @@ public class DossierEmployeService {
         validerCoherenceDureeEssai(existing.getStatut(), existing.getDureeEssaiMois());
         validerCoherenceNombreEnfants(existing.getSituationMatrimoniale(), existing.getNombreEnfants());
         nettoyerChampsOptionnels(existing);
+        // ⚠ Ici, et ici seulement, l'ancienne liste (le mapper l'ignore) et la
+        // nouvelle coexistent : c'est le seul point où la perte est détectable.
+        verifierAffectationsClosesConservees(existing.getAffectations(), dto.getAffectations());
         // Remplacement complet des affectations (le mapper les a ignorées) +
         // re-dérivation de siteAffecte.
         appliquerAffectations(existing, dto);
@@ -291,21 +304,79 @@ public class DossierEmployeService {
         if (aff != null && !aff.isEmpty()) {
             aff.forEach(this::validerAffectation);
             entity.setAffectations(mapper.toAffectationEntities(aff));
-            entity.setSiteAffecte(deriverSiteAffecte(aff));
+            entity.setSiteAffecte(deriverSiteAffecte(entity.getAffectations()));
         } else {
+            // Rétro-compat : la chaîne du client fait foi et reste conservée telle
+            // quelle, séparateurs d'origine compris — on ne la normalise pas.
             if (dto.getSiteAffecte() != null) {
                 entity.setSiteAffecte(dto.getSiteAffecte());
             }
             entity.setAffectations(
                     SiteAffecteUtils.affectationsDepuisSiteAffecte(entity.getSiteAffecte()));
         }
+        // Une ligne nouvelle arrive sans id ; une ligne déjà persistée renvoie le sien,
+        // que MapStruct a recopié. Les affectations dérivées de `siteAffecte` en
+        // reçoivent un ici plutôt que dans SiteAffecteUtils, qui doit rester pure.
+        AffectationSiteUtils.assurerIds(entity.getAffectations());
     }
 
-    private String deriverSiteAffecte(List<AffectationSiteDto> affectations) {
-        return affectations.stream()
-                .map(AffectationSiteDto::getSite)
+    /**
+     * {@code siteAffecte} ne liste que les sites <b>en cours</b>.
+     * <p>
+     * ⚠ Les affectations closes étant désormais conservées à vie, y joindre tous les
+     * sites ferait grossir ce champ indéfiniment — or il alimente le filtre « Site »
+     * de {@link #list} (regex sous-chaîne) : « qui travaille à Yoff ? » finirait par
+     * remonter des agents partis depuis des années. Un agent dont tous les sites sont
+     * clos a donc un {@code siteAffecte} vide, ce qui est exact : il n'est affecté
+     * nulle part. Ses affectations structurées, elles, restent intactes.
+     */
+    private String deriverSiteAffecte(List<AffectationSite> affectations) {
+        return AffectationSiteUtils.actives(affectations, LocalDate.now(clock)).stream()
+                .map(AffectationSite::getSite)
+                .filter(s -> s != null && !s.isBlank())
                 .map(String::trim)
                 .collect(Collectors.joining(SiteAffecteUtils.SEPARATEUR));
+    }
+
+    /**
+     * Refuse une écriture qui ferait disparaître une affectation déjà close : elle
+     * constitue l'historique de l'agent, et {@link #appliquerAffectations} remplace la
+     * liste <b>en bloc</b>.
+     * <p>
+     * ⚠ Le rapprochement se fait sur la <b>clé naturelle</b> et non sur l'{@code id} :
+     * un client qui ne renverrait pas les ids contournerait autrement la garde, et
+     * celle-ci doit valoir dès le premier déploiement, avant tout backfill.
+     * <p>
+     * ⚠ Le cas « payload sans affectations » est couvert par la même règle : la branche
+     * {@code else} d'{@link #appliquerAffectations} écrase alors la liste par celle
+     * dérivée de {@code siteAffecte}, ce qui est bien une disparition.
+     * <p>
+     * Posée sur {@code update} seulement — créer un dossier avec un historique (reprise
+     * de données) est légitime.
+     */
+    private void verifierAffectationsClosesConservees(List<AffectationSite> existantes,
+                                                      List<AffectationSiteDto> entrantes) {
+        List<AffectationSite> closes =
+                AffectationSiteUtils.terminees(existantes, LocalDate.now(clock));
+        if (closes.isEmpty()) {
+            return;
+        }
+
+        Set<String> signaturesEntrantes = (entrantes == null ? List.<AffectationSiteDto>of() : entrantes)
+                .stream()
+                .filter(a -> a != null)
+                .map(a -> AffectationSiteUtils.signature(
+                        a.getSite(), a.getDateEntree(), a.getDateSortie()))
+                .collect(Collectors.toSet());
+
+        for (AffectationSite close : closes) {
+            if (!signaturesEntrantes.contains(AffectationSiteUtils.signature(close))) {
+                throw new AffectationInvalideException(
+                        "L'affectation close sur " + close.getSite()
+                                + " (du " + close.getDateEntree() + " au " + close.getDateSortie()
+                                + ") ne peut pas être retirée du dossier.");
+            }
+        }
     }
 
     private void validerAffectation(AffectationSiteDto affectation) {
@@ -475,6 +546,9 @@ public class DossierEmployeService {
             // horaires) pour rester cohérent avec le CRUD unitaire.
             entity.setAffectations(
                     SiteAffecteUtils.affectationsDepuisSiteAffecte(entity.getSiteAffecte()));
+            // Troisième point de création d'affectations (avec appliquerAffectations et
+            // le backfill) : leur poser un id ici évite d'attendre le prochain démarrage.
+            AffectationSiteUtils.assurerIds(entity.getAffectations());
             aInserer.add(entity);
         }
 

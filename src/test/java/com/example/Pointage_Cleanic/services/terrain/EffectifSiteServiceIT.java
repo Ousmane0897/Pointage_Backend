@@ -16,6 +16,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Query;
 
+import java.time.LocalDate;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -56,6 +57,20 @@ class EffectifSiteServiceIT extends MongoTestContainer {
         return id;
     }
 
+    /**
+     * Dossier dont l'affectation sur ce site est close. Dates volontairement très
+     * antérieures : l'IT tourne sur l'horloge réelle, une date passée en dur reste
+     * passée quel que soit le jour d'exécution.
+     */
+    private void dossierAvecAffectationClose(String id, String site) {
+        mongoTemplate.save(DossierEmploye.builder()
+                .id(id).matricule(id)
+                .affectations(List.of(AffectationSite.builder().site(site)
+                        .dateEntree(LocalDate.of(2020, 1, 1))
+                        .dateSortie(LocalDate.of(2020, 6, 30)).build()))
+                .build());
+    }
+
     private String dossierParSiteAffecte(String id, String siteAffecte) {
         mongoTemplate.save(DossierEmploye.builder()
                 .id(id).matricule(id).siteAffecte(siteAffecte).build());
@@ -80,6 +95,61 @@ class EffectifSiteServiceIT extends MongoTestContainer {
 
         assertThat(effectif.nombreActuel()).isEqualTo(3);
         assertThat(effectif.nombreMax()).isEqualTo(10);
+    }
+
+    /**
+     * Un agent qui a quitté le site n'occupe plus de poste. Son affectation close étant
+     * désormais conservée à vie, sans cette exclusion le plafond du site finirait par
+     * saturer d'agents partis et refuserait toute nouvelle affectation.
+     */
+    @Test
+    void rh_ne_compte_pas_un_agent_qui_a_quitte_le_site() {
+        siteAvecPlafond(SITE_ID, NOM_SITE, 10);
+        dossierParAffectations("d1", NOM_SITE);              // toujours en poste
+        dossierAvecAffectationClose("d2", NOM_SITE);         // parti
+
+        EffectifSiteDto effectif = service.calculer(SITE_ID, PerimetreEffectif.RH, null, null);
+
+        assertThat(effectif.nombreActuel()).isEqualTo(1);
+    }
+
+    /**
+     * ⚠ Le repli {@code siteAffecte} ne doit jouer QUE pour les dossiers dépourvus
+     * d'affectations structurées. Sinon l'agent parti, dont l'affectation close ne
+     * matche plus, serait recompté par le repli — la correction précédente ne servirait
+     * à rien.
+     */
+    @Test
+    void rh_n_utilise_pas_le_fallback_siteAffecte_quand_des_affectations_existent() {
+        siteAvecPlafond(SITE_ID, NOM_SITE, 10);
+        DossierEmploye parti = DossierEmploye.builder()
+                .id("d1").matricule("d1")
+                .siteAffecte(NOM_SITE)   // chaîne héritée, encore renseignée
+                .affectations(List.of(AffectationSite.builder().site(NOM_SITE)
+                        .dateEntree(LocalDate.of(2020, 1, 1))
+                        .dateSortie(LocalDate.of(2020, 6, 30)).build()))
+                .build();
+        mongoTemplate.save(parti);
+
+        EffectifSiteDto effectif = service.calculer(SITE_ID, PerimetreEffectif.RH, null, null);
+
+        assertThat(effectif.nombreActuel()).isZero();
+    }
+
+    /** Une sortie à venir laisse l'agent en poste aujourd'hui. */
+    @Test
+    void rh_compte_un_agent_dont_la_sortie_est_a_venir() {
+        siteAvecPlafond(SITE_ID, NOM_SITE, 10);
+        mongoTemplate.save(DossierEmploye.builder()
+                .id("d1").matricule("d1")
+                .affectations(List.of(AffectationSite.builder().site(NOM_SITE)
+                        .dateEntree(LocalDate.of(2020, 1, 1))
+                        .dateSortie(LocalDate.of(2999, 12, 31)).build()))
+                .build());
+
+        EffectifSiteDto effectif = service.calculer(SITE_ID, PerimetreEffectif.RH, null, null);
+
+        assertThat(effectif.nombreActuel()).isEqualTo(1);
     }
 
     @Test

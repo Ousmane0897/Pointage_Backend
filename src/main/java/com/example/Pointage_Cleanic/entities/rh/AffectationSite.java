@@ -38,6 +38,22 @@ import java.time.LocalDate;
 @Builder
 public class AffectationSite {
 
+    /**
+     * Identité stable de la ligne, posée par
+     * {@link com.example.Pointage_Cleanic.util.AffectationSiteUtils#assurerIds}.
+     * <p>
+     * Sous-document embarqué : pas de {@code @Id}, l'identité Mongo reste celle du
+     * dossier. Ce champ existe parce que la liste est <b>remplacée en bloc</b> à
+     * chaque écriture — sans lui, aucune ligne ne survit à un enregistrement en tant
+     * qu'objet identifiable. Nul sur les dossiers antérieurs au backfill.
+     * <p>
+     * ⚠ Ne PAS s'en servir pour rapprocher l'ancienne et la nouvelle liste dans
+     * {@code DossierEmployeService} : un client qui ne le renverrait pas contournerait
+     * la garde. Le rapprochement se fait sur la clé naturelle ({@link
+     * com.example.Pointage_Cleanic.util.AffectationSiteUtils#signature}).
+     */
+    private String id;
+
     private String site;
     private String horaireDebut;
     private String horaireFin;

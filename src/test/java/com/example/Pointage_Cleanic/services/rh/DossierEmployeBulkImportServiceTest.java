@@ -21,7 +21,9 @@ import org.mockito.quality.Strictness;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.time.Clock;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -52,7 +54,9 @@ class DossierEmployeBulkImportServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new DossierEmployeService(repository, mapper, mongoTemplate);
+        service = new DossierEmployeService(repository, mapper, mongoTemplate,
+                Clock.fixed(LocalDate.of(2026, 9, 4).atStartOfDay(ZoneId.of("Africa/Dakar"))
+                        .toInstant(), ZoneId.of("Africa/Dakar")));
         ReflectionTestUtils.setField(service, "bulkMaxSize", 1000);
 
         // Mapper mock : copie les champs du DTO vers l'entité (suffisant pour valider le flux).
