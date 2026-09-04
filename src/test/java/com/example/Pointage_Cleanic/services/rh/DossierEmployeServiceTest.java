@@ -16,7 +16,9 @@ import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 import org.springframework.data.mongodb.core.MongoTemplate;
 
+import java.time.Clock;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -45,7 +47,11 @@ class DossierEmployeServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new DossierEmployeService(repository, mapper, mongoTemplate);
+        // Horloge figée : le service s'en sert pour trancher si une affectation est
+        // close ; une horloge système rendrait ces tests dépendants du jour d'exécution.
+        service = new DossierEmployeService(repository, mapper, mongoTemplate,
+                Clock.fixed(LocalDate.of(2026, 9, 4).atStartOfDay(ZoneId.of("Africa/Dakar"))
+                        .toInstant(), ZoneId.of("Africa/Dakar")));
 
         // Mapper mock : copie les champs essentiels du DTO vers l'entité.
         when(mapper.toEntity(any(DossierEmployeDto.class))).thenAnswer(inv -> {

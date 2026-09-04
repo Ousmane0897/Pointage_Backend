@@ -210,6 +210,69 @@ class AffectationSiteBackfillRunnerIT extends MongoTestContainer {
         assertThat(affectation.getDateEntree()).isEqualTo(LocalDate.of(2026, 6, 1));
     }
 
+    // ---- Identité de ligne -------------------------------------------------------------
+
+    /**
+     * La liste d'affectations étant remplacée en bloc à chaque écriture, aucune ligne
+     * antérieure ne recevrait jamais d'identifiant sans cette passe.
+     */
+    @Test
+    void backfill_pose_un_id_sur_les_affectations_qui_n_en_ont_pas() {
+        DossierEmploye sansIds = DossierEmploye.builder()
+                .matricule("MAT-ID").agentId("1914").nom("Id").prenom("Sans")
+                .dateEmbauche(LocalDate.of(2025, 1, 1)).statut(StatutDossierEmploye.ACTIF)
+                .siteAffecte("Site A - Site B")
+                .affectations(List.of(
+                        AffectationSite.builder().site("Site A").build(),
+                        AffectationSite.builder().site("Site B").build()))
+                .build();
+        repository.save(sansIds);
+
+        runner.run();
+
+        assertThat(repository.findByMatricule("MAT-ID").orElseThrow().getAffectations())
+                .extracting(AffectationSite::getId)
+                .doesNotContainNull()
+                .doesNotHaveDuplicates();
+    }
+
+    @Test
+    void backfill_ne_regenere_pas_les_ids_au_second_demarrage() {
+        DossierEmploye dossier = DossierEmploye.builder()
+                .matricule("MAT-IDEM").agentId("1915").nom("Idem").prenom("Pot")
+                .dateEmbauche(LocalDate.of(2025, 1, 1)).statut(StatutDossierEmploye.ACTIF)
+                .siteAffecte("Site A")
+                .affectations(List.of(AffectationSite.builder().site("Site A").build()))
+                .build();
+        repository.save(dossier);
+
+        runner.run();
+        String pose = repository.findByMatricule("MAT-IDEM").orElseThrow()
+                .getAffectations().get(0).getId();
+
+        runner.run();
+
+        assertThat(repository.findByMatricule("MAT-IDEM").orElseThrow()
+                .getAffectations().get(0).getId()).isEqualTo(pose);
+    }
+
+    /** Les affectations dérivées de {@code siteAffecte} par la passe 1 en reçoivent un aussi. */
+    @Test
+    void backfill_pose_un_id_sur_les_affectations_qu_il_vient_de_deriver() {
+        DossierEmploye legacy = DossierEmploye.builder()
+                .matricule("MAT-DERIVE").agentId("1916").nom("Derive").prenom("Aga")
+                .dateEmbauche(LocalDate.of(2025, 1, 1)).statut(StatutDossierEmploye.ACTIF)
+                .siteAffecte("Sacré-Coeur / Point E")
+                .build();
+        repository.save(legacy);
+
+        runner.run();
+
+        assertThat(repository.findByMatricule("MAT-DERIVE").orElseThrow().getAffectations())
+                .hasSize(2)
+                .extracting(AffectationSite::getId).doesNotContainNull();
+    }
+
     /**
      * {@code dateEmbauche} est mappé sur le champ Mongo historique {@code dateEntree} :
      * un dossier écrit avant le renommage doit continuer à rendre sa date. Sans le

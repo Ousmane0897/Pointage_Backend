@@ -10,6 +10,7 @@ import com.example.Pointage_Cleanic.entities.terrain.SiteClient;
 import com.example.Pointage_Cleanic.exception.ResourceNotFoundException;
 import com.example.Pointage_Cleanic.repositories.terrain.AffectationAgentRepository;
 import com.example.Pointage_Cleanic.repositories.terrain.SiteClientRepository;
+import com.example.Pointage_Cleanic.util.AffectationSiteUtils;
 import com.example.Pointage_Cleanic.util.SiteAffecteUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.mongodb.core.MongoTemplate;
@@ -17,6 +18,8 @@ import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.stereotype.Service;
 
+import java.time.Clock;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.regex.Pattern;
 
@@ -37,6 +40,8 @@ public class EffectifSiteService {
     private final SiteClientRepository siteClientRepository;
     private final AffectationAgentRepository affectationAgentRepository;
     private final MongoTemplate mongoTemplate;
+    /** Horloge d'{@code Africa/Dakar} : sert à écarter les affectations closes. */
+    private final Clock clock;
 
     public EffectifSiteDto calculer(String siteId, PerimetreEffectif perimetre,
                                     String excludeEmployeId, String excludeAffectationId) {
@@ -72,12 +77,26 @@ public class EffectifSiteService {
                 .count();
     }
 
-    /** Vrai si le dossier référence le site par affectation structurée ou via siteAffecte. */
+    /**
+     * Vrai si le dossier occupe <b>actuellement</b> un poste sur ce site.
+     * <p>
+     * ⚠ Deux règles, dans cet ordre, et l'ordre compte :
+     * <ol>
+     *   <li>dossier doté d'affectations structurées ⇒ <b>elles seules font foi</b>,
+     *       les closes exclues ;</li>
+     *   <li>sinon seulement, repli sur {@code siteAffecte} (dossiers antérieurs, sans
+     *       aucune date).</li>
+     * </ol>
+     * Sans la borne de l'étape 1, un agent parti resterait compté — il l'était jusqu'ici,
+     * ce qui ne se voyait pas tant que les affectations closes étaient supprimées à la
+     * main. Sans la subordination de l'étape 2, il le resterait tout autant : son
+     * affectation close ne matchant plus, le code retomberait sur {@code siteAffecte}.
+     */
     private boolean estRattacheAuSite(DossierEmploye dossier, String nom) {
         List<AffectationSite> affectations = dossier.getAffectations();
-        if (affectations != null && affectations.stream()
-                .anyMatch(a -> memeSite(a.getSite(), nom))) {
-            return true;
+        if (affectations != null && !affectations.isEmpty()) {
+            return AffectationSiteUtils.actives(affectations, LocalDate.now(clock)).stream()
+                    .anyMatch(a -> memeSite(a.getSite(), nom));
         }
         return SiteAffecteUtils.decouper(dossier.getSiteAffecte()).stream()
                 .anyMatch(s -> memeSite(s, nom));

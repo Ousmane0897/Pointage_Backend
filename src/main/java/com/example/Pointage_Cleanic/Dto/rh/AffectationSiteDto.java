@@ -20,6 +20,12 @@ import java.time.LocalDate;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class AffectationSiteDto {
 
+    /**
+     * Identité stable de la ligne, générée serveur. Le client la renvoie telle quelle ;
+     * une ligne nouvelle arrive sans id et s'en voit attribuer un à l'enregistrement.
+     */
+    private String id;
+
     private String site;
     private String horaireDebut;
     private String horaireFin;
