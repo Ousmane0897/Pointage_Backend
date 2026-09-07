@@ -7,16 +7,19 @@ import com.example.Pointage_Cleanic.Dto.rh.DossierEmployeBulkLigneDto;
 import com.example.Pointage_Cleanic.Dto.rh.DossierEmployeDto;
 import com.example.Pointage_Cleanic.Dto.rh.DossierEmployeImportError;
 import com.example.Pointage_Cleanic.Dto.rh.DossierEmployeStatutRequest;
+import com.example.Pointage_Cleanic.Dto.rh.EnfantEmployeDto;
 import com.example.Pointage_Cleanic.Enum.rh.JoursTravail;
 import com.example.Pointage_Cleanic.Enum.rh.SituationMatrimoniale;
 import com.example.Pointage_Cleanic.Enum.rh.StatutDossierEmploye;
 import com.example.Pointage_Cleanic.Enum.StrategieErreursImport;
 import com.example.Pointage_Cleanic.Mapper.rh.DossierEmployeMapper;
 import com.example.Pointage_Cleanic.entities.rh.DossierEmploye;
+import com.example.Pointage_Cleanic.entities.rh.EnfantEmploye;
 import com.example.Pointage_Cleanic.exception.BulkInsertPartialFailureException;
 import com.example.Pointage_Cleanic.exception.EmployeAlreadyExistsException;
 import com.example.Pointage_Cleanic.exception.ResourceNotFoundException;
 import com.example.Pointage_Cleanic.repositories.rh.DossierEmployeRepository;
+import com.example.Pointage_Cleanic.util.EnfantEmployeUtils;
 import com.example.Pointage_Cleanic.util.SiteAffecteUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -34,6 +37,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.format.DateTimeParseException;
@@ -56,9 +60,14 @@ public class DossierEmployeService {
     private final DossierEmployeRepository dossierEmployeRepository;
     private final DossierEmployeMapper mapper;
     private final MongoTemplate mongoTemplate;
+    /** Bean de {@code configurations.TimeConfig} (Africa/Dakar) — « aujourd'hui » testable. */
+    private final Clock clock;
 
     @Value("${rh.import.bulk.max-size:1000}")
     private int bulkMaxSize;
+
+    /** Borne de garde sur la taille du sous-document enfants. */
+    private static final int MAX_ENFANTS = 20;
 
     // agentId = code agent 4 chiffres, clé du pointage
     private static final java.util.regex.Pattern AGENT_ID_PATTERN =
@@ -125,9 +134,12 @@ public class DossierEmployeService {
         validerCoherenceNombreEnfants(dto.getSituationMatrimoniale(), dto.getNombreEnfants());
         validerJoursTravail(dto.getJoursTravail());
 
+        validerCoherenceEnfants(dto.getEnfants());
+
         DossierEmploye entity = mapper.toEntity(dto);
         nettoyerChampsOptionnels(entity);
         appliquerAffectations(entity, dto);
+        appliquerEnfants(entity, dto);
 
         if (photo != null && !photo.isEmpty()) {
             entity.setPhoto(photo.getBytes());
@@ -156,6 +168,7 @@ public class DossierEmployeService {
         // Validation de la valeur entrante avant le merge (null = ignoré par le
         // merge null-safe → valeur existante conservée, pas de validation requise).
         validerJoursTravail(dto.getJoursTravail());
+        validerCoherenceEnfants(dto.getEnfants());
 
         mapper.updateEntityFromDto(dto, existing);
         // Règles de cohérence post-mise-à-jour
@@ -165,6 +178,7 @@ public class DossierEmployeService {
         // Remplacement complet des affectations (le mapper les a ignorées) +
         // re-dérivation de siteAffecte.
         appliquerAffectations(existing, dto);
+        appliquerEnfants(existing, dto);
 
         if (photo != null && !photo.isEmpty()) {
             existing.setPhoto(photo.getBytes());
@@ -233,6 +247,74 @@ public class DossierEmployeService {
             com.example.Pointage_Cleanic.Enum.rh.SituationMatrimoniale situation, Integer nombreEnfants) {
         if (nombreEnfants != null && nombreEnfants < 0) {
             throw new IllegalArgumentException("nombreEnfants doit être >= 0");
+        }
+    }
+
+    /**
+     * Enfants à charge : prénom et date de naissance obligatoires sur chaque ligne
+     * transmise, date jamais dans le futur, liste bornée.
+     *
+     * <p>Aucun contrôle croisé avec la date de naissance du parent : il serait bloquant
+     * sur les données historiques (dates approximatives, dossiers incomplets) pour un
+     * gain nul — un tel écart ne fausse aucun droit.
+     *
+     * <p>Aucun contrôle de cohérence avec {@code nombreEnfants} non plus : le compteur
+     * est <b>dérivé</b> de cette liste ({@link #appliquerEnfants}), un client qui
+     * enverrait une valeur périmée n'a pas à recevoir une erreur pour autant.
+     */
+    private void validerCoherenceEnfants(List<EnfantEmployeDto> enfants) {
+        if (enfants == null || enfants.isEmpty()) {
+            return;
+        }
+        if (enfants.size() > MAX_ENFANTS) {
+            throw new IllegalArgumentException(
+                    "Un dossier ne peut pas porter plus de " + MAX_ENFANTS + " enfants");
+        }
+        LocalDate aujourdhui = LocalDate.now(clock);
+        for (EnfantEmployeDto enfant : enfants) {
+            if (enfant == null || enfant.getPrenom() == null || enfant.getPrenom().isBlank()) {
+                throw new IllegalArgumentException("Le prénom de l'enfant est obligatoire");
+            }
+            if (enfant.getDateNaissance() == null) {
+                throw new IllegalArgumentException(
+                        "La date de naissance est obligatoire pour l'enfant " + enfant.getPrenom());
+            }
+            if (enfant.getDateNaissance().isAfter(aujourdhui)) {
+                throw new IllegalArgumentException(
+                        "La date de naissance de l'enfant " + enfant.getPrenom()
+                                + " ne peut pas être dans le futur");
+            }
+        }
+    }
+
+    /**
+     * Applique la liste d'enfants reçue et maintient {@code nombreEnfants} comme champ
+     * dérivé.
+     *
+     * <p>⚠ {@code null} et liste vide ne veulent <b>pas</b> dire la même chose :
+     * <ul>
+     *   <li>{@code null} = champ non transmis (import bulk, clients antérieurs) ⇒ on ne
+     *       touche à rien, ni à la liste ni au compteur. Sans cette branche, tout écrit
+     *       par un ancien client effacerait les enfants du dossier.</li>
+     *   <li>liste vide = le client a retiré toutes les lignes ⇒ la liste est bien vidée,
+     *       mais {@code nombreEnfants} reste celui du payload (champ saisi manuellement),
+     *       exactement comme avant l'existence de la liste. C'est ce qui permet à un
+     *       dossier antérieur, dont les enfants ne sont pas encore datés, de conserver
+     *       son seul compteur au fil des enregistrements.</li>
+     * </ul>
+     * Le compteur n'est donc <b>dérivé que d'une liste non vide</b>.
+     */
+    private void appliquerEnfants(DossierEmploye entity, DossierEmployeDto dto) {
+        List<EnfantEmployeDto> enfants = dto.getEnfants();
+        if (enfants == null) {
+            return;
+        }
+        List<EnfantEmploye> entities = mapper.toEnfantEntities(enfants);
+        EnfantEmployeUtils.assurerIds(entities);
+        EnfantEmployeUtils.trierParNaissance(entities);
+        entity.setEnfants(entities);
+        if (!entities.isEmpty()) {
+            entity.setNombreEnfants(entities.size());
         }
     }
 

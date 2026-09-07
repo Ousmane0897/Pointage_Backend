@@ -1,5 +1,8 @@
 package com.example.Pointage_Cleanic.services.rh;
 
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
 import com.example.Pointage_Cleanic.Dto.rh.AffectationSiteDto;
 import com.example.Pointage_Cleanic.Dto.rh.DossierEmployeDto;
 import com.example.Pointage_Cleanic.Enum.rh.StatutDossierEmploye;
@@ -45,7 +48,10 @@ class DossierEmployeAffectationServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new DossierEmployeService(repository, mapper, mongoTemplate);
+        // Horloge figée : la validation « date de naissance d'un enfant pas dans le futur »
+        // ne doit pas dépendre du jour d'exécution.
+        service = new DossierEmployeService(repository, mapper, mongoTemplate,
+                Clock.fixed(Instant.parse("2026-09-02T08:00:00Z"), ZoneOffset.UTC));
 
         when(mapper.toEntity(any(DossierEmployeDto.class))).thenAnswer(inv -> {
             DossierEmployeDto dto = inv.getArgument(0);

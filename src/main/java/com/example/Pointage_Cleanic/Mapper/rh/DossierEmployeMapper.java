@@ -4,9 +4,11 @@ import com.example.Pointage_Cleanic.Mapper.DateMapper;
 import com.example.Pointage_Cleanic.Dto.rh.AffectationSiteDto;
 import com.example.Pointage_Cleanic.Dto.rh.ContactUrgenceDto;
 import com.example.Pointage_Cleanic.Dto.rh.DossierEmployeDto;
+import com.example.Pointage_Cleanic.Dto.rh.EnfantEmployeDto;
 import com.example.Pointage_Cleanic.entities.rh.AffectationSite;
 import com.example.Pointage_Cleanic.entities.rh.ContactUrgence;
 import com.example.Pointage_Cleanic.entities.rh.DossierEmploye;
+import com.example.Pointage_Cleanic.entities.rh.EnfantEmploye;
 import org.mapstruct.*;
 
 import java.util.List;
@@ -20,15 +22,16 @@ public interface DossierEmployeMapper {
     @Mapping(target = "photoUrl", ignore = true)
     DossierEmployeDto toDto(DossierEmploye entity);
 
-    // affectations + siteAffecte sont pilotés explicitement par le service
-    // (remplacement complet de la liste + dérivation de siteAffecte), pas par
-    // le merge partiel : on les ignore ici pour éviter les surprises de merge
+    // affectations + siteAffecte + enfants sont pilotés explicitement par le service
+    // (remplacement complet de la liste + dérivation de siteAffecte / nombreEnfants),
+    // pas par le merge partiel : on les ignore ici pour éviter les surprises de merge
     // de collection MapStruct.
     @BeanMapping(nullValuePropertyMappingStrategy = NullValuePropertyMappingStrategy.IGNORE)
     @Mapping(target = "photo", ignore = true)
     @Mapping(target = "id", ignore = true)
     @Mapping(target = "affectations", ignore = true)
     @Mapping(target = "siteAffecte", ignore = true)
+    @Mapping(target = "enfants", ignore = true)
     void updateEntityFromDto(DossierEmployeDto dto, @MappingTarget DossierEmploye entity);
 
     ContactUrgence toEntity(ContactUrgenceDto dto);
@@ -40,4 +43,10 @@ public interface DossierEmployeMapper {
     AffectationSiteDto toDto(AffectationSite entity);
 
     List<AffectationSite> toAffectationEntities(List<AffectationSiteDto> dtos);
+
+    EnfantEmploye toEntity(EnfantEmployeDto dto);
+
+    EnfantEmployeDto toDto(EnfantEmploye entity);
+
+    List<EnfantEmploye> toEnfantEntities(List<EnfantEmployeDto> dtos);
 }

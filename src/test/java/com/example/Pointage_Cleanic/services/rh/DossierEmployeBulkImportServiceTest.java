@@ -1,5 +1,8 @@
 package com.example.Pointage_Cleanic.services.rh;
 
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
 import com.example.Pointage_Cleanic.Dto.rh.DossierEmployeBulkImportRequest;
 import com.example.Pointage_Cleanic.Dto.rh.DossierEmployeBulkImportResponse;
 import com.example.Pointage_Cleanic.Dto.rh.DossierEmployeBulkLigneDto;
@@ -52,7 +55,10 @@ class DossierEmployeBulkImportServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new DossierEmployeService(repository, mapper, mongoTemplate);
+        // Horloge figée : la validation « date de naissance d'un enfant pas dans le futur »
+        // ne doit pas dépendre du jour d'exécution.
+        service = new DossierEmployeService(repository, mapper, mongoTemplate,
+                Clock.fixed(Instant.parse("2026-09-02T08:00:00Z"), ZoneOffset.UTC));
         ReflectionTestUtils.setField(service, "bulkMaxSize", 1000);
 
         // Mapper mock : copie les champs du DTO vers l'entité (suffisant pour valider le flux).
