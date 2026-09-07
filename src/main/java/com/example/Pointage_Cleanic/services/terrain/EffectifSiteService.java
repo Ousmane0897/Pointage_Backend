@@ -1,6 +1,7 @@
 package com.example.Pointage_Cleanic.services.terrain;
 
 import com.example.Pointage_Cleanic.Dto.terrain.EffectifSiteDto;
+import com.example.Pointage_Cleanic.Enum.rh.StatutDossierEmploye;
 import com.example.Pointage_Cleanic.Enum.terrain.PerimetreEffectif;
 import com.example.Pointage_Cleanic.Enum.terrain.StatutAffectation;
 import com.example.Pointage_Cleanic.entities.rh.AffectationSite;
@@ -20,14 +21,16 @@ import org.springframework.stereotype.Service;
 
 import java.time.Clock;
 import java.time.LocalDate;
+import java.util.EnumSet;
 import java.util.List;
+import java.util.Set;
 import java.util.regex.Pattern;
 
 /**
  * Calcule l'effectif actuel d'un site client selon deux périmètres distincts
  * partageant le même plafond {@code nombreMaxEmployes} :
  * <ul>
- *   <li>RH : employés (dossiers) rattachés au site par NOM ;</li>
+ *   <li>RH : employés (dossiers) rattachés au site par NOM <b>et occupant un poste</b> ;</li>
  *   <li>TERRAIN : affectations de planning terrain sur le {@code siteId} non annulées.</li>
  * </ul>
  * Voir {@link PerimetreEffectif}. Aucun blocage métier : le comptage est consultatif,
@@ -36,6 +39,24 @@ import java.util.regex.Pattern;
 @Service
 @RequiredArgsConstructor
 public class EffectifSiteService {
+
+    /**
+     * Statuts dont le titulaire occupe effectivement un poste au sens du plafond du site.
+     * <p>
+     * {@code SORTI} et {@code SUSPENDU} en sont exclus : l'agent a quitté l'entreprise ou
+     * en est temporairement écarté (congé long, suspension), et sa place doit pouvoir être
+     * confiée à un remplaçant. Jusqu'ici le décompte ignorait complètement le statut, si
+     * bien qu'un site restait réputé plein d'agents absents et refusait toute nouvelle
+     * affectation — la seule échappatoire étant de clore la ligne d'affectation par une
+     * {@code dateSortie}, ce qui aurait faussement acté un départ définitif du site dans
+     * son historique.
+     * <p>
+     * Même liste que {@code OrganigrammeService.STATUTS_ACTIFS}, et volontairement plus
+     * étroite que celle de {@code DemandeCongeService} (qui garde {@code SUSPENDU} : un
+     * agent suspendu conserve ses droits à congés, mais pas son poste).
+     */
+    private static final Set<StatutDossierEmploye> STATUTS_OCCUPANTS =
+            EnumSet.of(StatutDossierEmploye.ACTIF, StatutDossierEmploye.EN_PERIODE_ESSAI);
 
     private final SiteClientRepository siteClientRepository;
     private final AffectationAgentRepository affectationAgentRepository;
@@ -57,8 +78,11 @@ public class EffectifSiteService {
     }
 
     /**
-     * Compte les dossiers employés dont une affectation vise le nom du site (comparaison
-     * exacte, insensible à la casse), avec fallback sur la chaîne {@code siteAffecte}.
+     * Compte les dossiers employés qui <b>occupent un poste</b> sur ce site : statut
+     * occupant (voir {@link #STATUTS_OCCUPANTS}) <b>et</b> affectation active visant le nom
+     * du site (comparaison exacte, insensible à la casse), avec repli sur la chaîne
+     * {@code siteAffecte}.
+     * <p>
      * Le pré-filtre Mongo réduit le scan ; le filtrage exact en mémoire évite le sur-match
      * du regex de sous-chaîne (ex. « Point » ⊂ « Point E »).
      */
@@ -73,12 +97,29 @@ public class EffectifSiteService {
 
         return candidats.stream()
                 .filter(d -> excludeEmployeId == null || !excludeEmployeId.equals(d.getId()))
+                .filter(this::occupeUnPoste)
                 .filter(d -> estRattacheAuSite(d, nom))
                 .count();
     }
 
     /**
-     * Vrai si le dossier occupe <b>actuellement</b> un poste sur ce site.
+     * Vrai si le dossier occupe un poste, indépendamment du site.
+     * <p>
+     * ⚠ Un {@code statut} <b>nul</b> est compté. Le champ n'a jamais été {@code @NotNull}
+     * et les dossiers antérieurs peuvent en être dépourvus : libérer une place sur la foi
+     * d'une donnée absente ferait dépasser le plafond en silence, alors que le sur-compter
+     * ne fait qu'appeler une correction du dossier. Même arbitrage prudent que le
+     * {@code type} nul de {@code TypeConge.decompteSoldeAnnuel}.
+     */
+    private boolean occupeUnPoste(DossierEmploye dossier) {
+        StatutDossierEmploye statut = dossier.getStatut();
+        return statut == null || STATUTS_OCCUPANTS.contains(statut);
+    }
+
+    /**
+     * Vrai si le dossier est <b>actuellement rattaché</b> à ce site. Ne dit rien du statut
+     * de l'employé : « est-il sur ce site ? » et « occupe-t-il un poste ? » sont deux
+     * questions distinctes, la seconde étant tranchée par {@link #occupeUnPoste}.
      * <p>
      * ⚠ Deux règles, dans cet ordre, et l'ordre compte :
      * <ol>

@@ -1,6 +1,7 @@
 package com.example.Pointage_Cleanic.services.terrain;
 
 import com.example.Pointage_Cleanic.Dto.terrain.EffectifSiteDto;
+import com.example.Pointage_Cleanic.Enum.rh.StatutDossierEmploye;
 import com.example.Pointage_Cleanic.Enum.terrain.PerimetreEffectif;
 import com.example.Pointage_Cleanic.Enum.terrain.StatutAffectation;
 import com.example.Pointage_Cleanic.config.MongoTestContainer;
@@ -77,6 +78,19 @@ class EffectifSiteServiceIT extends MongoTestContainer {
         return id;
     }
 
+    /**
+     * Dossier au statut donné, avec une affectation <b>ouverte</b> (aucune
+     * {@code dateSortie}) sur le site : c'est la configuration réelle d'un agent absent
+     * dont on n'a pas — et ne doit pas — clore le passage sur le site.
+     */
+    private void dossierAvecStatut(String id, String site, StatutDossierEmploye statut) {
+        mongoTemplate.save(DossierEmploye.builder()
+                .id(id).matricule(id).statut(statut)
+                .affectations(List.of(AffectationSite.builder().site(site)
+                        .dateEntree(LocalDate.of(2020, 1, 1)).build()))
+                .build());
+    }
+
     private void affectationTerrain(String id, String siteId, StatutAffectation statut) {
         mongoTemplate.save(AffectationAgent.builder()
                 .id(id).siteId(siteId).statut(statut).build());
@@ -111,6 +125,77 @@ class EffectifSiteServiceIT extends MongoTestContainer {
         EffectifSiteDto effectif = service.calculer(SITE_ID, PerimetreEffectif.RH, null, null);
 
         assertThat(effectif.nombreActuel()).isEqualTo(1);
+    }
+
+    /**
+     * Cas SGS Point E : l'agent est SORTI mais son affectation est restée ouverte. Il
+     * n'occupe plus de poste, sa place doit être libre pour un remplaçant — sans qu'on ait
+     * eu à clore son affectation, ce qui aurait acté un départ du site dans l'historique.
+     */
+    @Test
+    void rh_ne_compte_pas_un_agent_sorti() {
+        siteAvecPlafond(SITE_ID, NOM_SITE, 10);
+        dossierAvecStatut("d1", NOM_SITE, StatutDossierEmploye.SORTI);
+
+        EffectifSiteDto effectif = service.calculer(SITE_ID, PerimetreEffectif.RH, null, null);
+
+        assertThat(effectif.nombreActuel()).isZero();
+    }
+
+    /** Absence temporaire (congé long, suspension) : la place est libérée le temps de l'absence. */
+    @Test
+    void rh_ne_compte_pas_un_agent_suspendu() {
+        siteAvecPlafond(SITE_ID, NOM_SITE, 10);
+        dossierAvecStatut("d1", NOM_SITE, StatutDossierEmploye.SUSPENDU);
+
+        EffectifSiteDto effectif = service.calculer(SITE_ID, PerimetreEffectif.RH, null, null);
+
+        assertThat(effectif.nombreActuel()).isZero();
+    }
+
+    /** Un agent en période d'essai tient bien un poste. */
+    @Test
+    void rh_compte_un_agent_actif_ou_en_periode_essai() {
+        siteAvecPlafond(SITE_ID, NOM_SITE, 10);
+        dossierAvecStatut("d1", NOM_SITE, StatutDossierEmploye.ACTIF);
+        dossierAvecStatut("d2", NOM_SITE, StatutDossierEmploye.EN_PERIODE_ESSAI);
+
+        EffectifSiteDto effectif = service.calculer(SITE_ID, PerimetreEffectif.RH, null, null);
+
+        assertThat(effectif.nombreActuel()).isEqualTo(2);
+    }
+
+    /**
+     * ⚠ Statut absent (dossiers antérieurs) ⇒ l'employé est COMPTÉ : libérer une place sur
+     * la foi d'une donnée manquante ferait dépasser le plafond en silence.
+     */
+    @Test
+    void rh_compte_un_dossier_sans_statut() {
+        siteAvecPlafond(SITE_ID, NOM_SITE, 10);
+        dossierParAffectations("d1", NOM_SITE);   // aucun statut renseigné
+
+        EffectifSiteDto effectif = service.calculer(SITE_ID, PerimetreEffectif.RH, null, null);
+
+        assertThat(effectif.nombreActuel()).isEqualTo(1);
+    }
+
+    /**
+     * Le filtre de statut doit précéder le choix de la règle de rattachement, sans quoi un
+     * agent sorti d'un dossier antérieur (sans affectations structurées) serait recompté
+     * par le repli {@code siteAffecte}.
+     */
+    @Test
+    void rh_ne_compte_pas_un_agent_sorti_via_le_repli_siteAffecte() {
+        siteAvecPlafond(SITE_ID, NOM_SITE, 10);
+        mongoTemplate.save(DossierEmploye.builder()
+                .id("d1").matricule("d1")
+                .statut(StatutDossierEmploye.SORTI)
+                .siteAffecte(NOM_SITE)            // aucune affectation structurée
+                .build());
+
+        EffectifSiteDto effectif = service.calculer(SITE_ID, PerimetreEffectif.RH, null, null);
+
+        assertThat(effectif.nombreActuel()).isZero();
     }
 
     /**
