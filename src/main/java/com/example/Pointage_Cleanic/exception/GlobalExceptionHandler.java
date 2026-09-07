@@ -88,6 +88,19 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY).body(body);
     }
 
+    // ─── Historique des affectations par site (RH 6.1) ──────────────────────
+    // Même raison que ci-dessus : sans cette entrée, la perte d'une affectation
+    // close sortirait en 500 via le handler RuntimeException.
+
+    @ExceptionHandler(AffectationInvalideException.class)
+    public ResponseEntity<Map<String, Object>> handleAffectationInvalide(
+            AffectationInvalideException ex) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("error", "AFFECTATION_INVALIDE");
+        body.put("message", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY).body(body);
+    }
+
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<Map<String, Object>> handleIllegalArgument(IllegalArgumentException ex) {
         Map<String, Object> body = new HashMap<>();

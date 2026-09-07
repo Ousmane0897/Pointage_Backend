@@ -3,6 +3,7 @@ package com.example.Pointage_Cleanic.DataLoader;
 import com.example.Pointage_Cleanic.entities.rh.AffectationSite;
 import com.example.Pointage_Cleanic.entities.rh.DossierEmploye;
 import com.example.Pointage_Cleanic.repositories.rh.DossierEmployeRepository;
+import com.example.Pointage_Cleanic.util.AffectationSiteUtils;
 import com.example.Pointage_Cleanic.util.SiteAffecteUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -81,7 +82,8 @@ public class AffectationSiteBackfillRunner implements CommandLineRunner {
     /**
      * Recopie sur chaque affectation les informations que le dossier ne portait
      * jusqu'ici qu'au niveau de l'employé : la semaine ouvrée et, à défaut de mieux,
-     * la date d'embauche comme date d'arrivée sur le site.
+     * la date d'embauche comme date d'arrivée sur le site. Pose également l'identité
+     * de ligne ({@code id}) sur les affectations qui n'en ont pas.
      * <p>
      * <b>Idempotent et purement additif</b> : seuls les champs {@code null} sont
      * renseignés, une valeur saisie par les RH n'est jamais écrasée. {@code dateSortie}
@@ -95,7 +97,10 @@ public class AffectationSiteBackfillRunner implements CommandLineRunner {
         if (affectations == null || affectations.isEmpty()) {
             return false;
         }
-        boolean modifie = false;
+        // Identité stable des lignes : les dossiers antérieurs n'en ont pas, et la
+        // liste étant remplacée en bloc à chaque écriture, aucune n'en recevrait
+        // jamais sans cette passe. Purement additif, comme le reste de la méthode.
+        boolean modifie = AffectationSiteUtils.assurerIds(affectations);
         for (AffectationSite affectation : affectations) {
             if (affectation == null) continue;
             if (affectation.getJoursTravail() == null && dossier.getJoursTravail() != null) {

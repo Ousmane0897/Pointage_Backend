@@ -21,7 +21,9 @@ import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 import org.springframework.data.mongodb.core.MongoTemplate;
 
+import java.time.Clock;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 
@@ -51,10 +53,12 @@ class DossierEmployeServiceTest {
 
     @BeforeEach
     void setUp() {
-        // Horloge figée : la validation « date de naissance d'un enfant pas dans le futur »
-        // ne doit pas dépendre du jour d'exécution.
+        // Horloge figée : le service s'en sert pour trancher si une affectation est
+        // close et si une date de naissance d'enfant est dans le futur ; une horloge
+        // système rendrait ces tests dépendants du jour d'exécution.
         service = new DossierEmployeService(repository, mapper, mongoTemplate,
-                Clock.fixed(Instant.parse("2026-09-02T08:00:00Z"), ZoneOffset.UTC));
+                Clock.fixed(LocalDate.of(2026, 9, 4).atStartOfDay(ZoneId.of("Africa/Dakar"))
+                        .toInstant(), ZoneId.of("Africa/Dakar")));
 
         // Mapper mock : copie les champs essentiels du DTO vers l'entité.
         when(mapper.toEntity(any(DossierEmployeDto.class))).thenAnswer(inv -> {
@@ -300,7 +304,7 @@ class DossierEmployeServiceTest {
     @Test
     void une_date_de_naissance_dans_le_futur_leve_400() {
         DossierEmployeDto dto = actifDto("M14");
-        // L'horloge est figée au 02/09/2026.
+        // L'horloge est figée au 04/09/2026.
         dto.setEnfants(List.of(enfant("Awa", LocalDate.of(2027, 1, 1))));
 
         assertThatThrownBy(() -> service.create(dto, null))
