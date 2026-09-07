@@ -19,6 +19,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
+import java.time.Clock;
 import java.time.LocalDate;
 import java.util.Comparator;
 import java.util.List;
@@ -35,6 +36,9 @@ public class DemandeCongeService {
     private final CongeWorkflowService workflowService;
     private final CongeIdentiteService identite;
     private final CongeAcquisCalculator acquisCalculator;
+    private final ParametresCongesService parametresCongesService;
+    /** Bean de {@code configurations.TimeConfig} (Africa/Dakar) — « aujourd'hui » testable. */
+    private final Clock clock;
 
     /**
      * Dépôt d'une demande : délégué au circuit de validation, qui résout le demandeur
@@ -103,7 +107,7 @@ public class DemandeCongeService {
         DossierEmploye employe = dossierEmployeRepository.findById(employeId)
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Dossier employé introuvable : " + employeId));
-        return buildSolde(employe);
+        return buildSolde(employe, parametresCongesService.baremeCourant(), LocalDate.now(clock));
     }
 
     /**
@@ -131,7 +135,14 @@ public class DemandeCongeService {
                     .collect(Collectors.toList());
         }
 
-        return employes.stream().map(this::buildSolde).collect(Collectors.toList());
+        // ⚠ Barème et « aujourd'hui » résolus UNE SEULE FOIS, avant la boucle : même
+        // discipline que PerimetreConges. Les lire dans buildSolde ferait une requête Mongo
+        // par employé, et un appel chevauchant minuit rendrait des soldes incohérents entre eux.
+        BaremeConges bareme = parametresCongesService.baremeCourant();
+        LocalDate aujourdhui = LocalDate.now(clock);
+        return employes.stream()
+                .map(e -> buildSolde(e, bareme, aujourdhui))
+                .collect(Collectors.toList());
     }
 
     /**
@@ -213,17 +224,21 @@ public class DemandeCongeService {
     /**
      * Solde de l'exercice courant, augmenté du <b>reliquat des exercices antérieurs</b>.
      *
-     * <p>L'acquis n'est plus une constante : il vaut 2 jours ouvrables par mois de service
-     * effectif ({@link CongeAcquisCalculator}), calculés depuis la date d'entrée de l'employé.
+     * <p>L'acquis n'est plus une constante : il vaut l'acquis de base — 2 jours ouvrables par
+     * mois de service effectif — <b>augmenté des majorations</b> pour enfants à charge et pour
+     * ancienneté, toutes trois gouvernées par le barème paramétrable
+     * ({@link CongeAcquisCalculator}, {@link BaremeConges}).
      *
      * <p>Une <b>seule</b> lecture ramène tout l'historique de l'employé : le reliquat impose de
      * parcourir les exercices clos, et refaire une requête par année serait N requêtes pour un
      * volume qui tient largement en mémoire (quelques dizaines de demandes par carrière).
+     *
+     * <p>Le barème et « aujourd'hui » sont <b>reçus en argument</b> et jamais relus ici : cf.
+     * {@link #getSoldes()}, qui appelle cette méthode en boucle.
      */
-    private SoldeCongeDto buildSolde(DossierEmploye employe) {
-        LocalDate aujourdhui = LocalDate.now();
+    private SoldeCongeDto buildSolde(DossierEmploye employe, BaremeConges bareme, LocalDate aujourdhui) {
         int annee = aujourdhui.getYear();
-        LocalDate dateEntree = employe.getDateEmbauche();
+        DroitsEmployeSnapshot droits = DroitsEmployeSnapshot.from(employe);
 
         List<DemandeConge> decomptees = demandeCongeRepository.findByEmployeId(employe.getId())
                 .stream()
@@ -237,8 +252,9 @@ public class DemandeCongeService {
         // au premier niveau, sinon une demande en cours de validation disparaîtrait du solde.
         int enCours = joursParStatut(decomptees, annee, true);
 
-        int acquis = acquisCalculator.acquis(annee, dateEntree, aujourdhui);
-        int soldeAnterieur = soldeAnterieur(decomptees, annee, dateEntree, aujourdhui);
+        DetailAcquis detail = acquisCalculator.acquis(annee, droits, aujourdhui, bareme);
+        int acquis = detail.total();
+        int soldeAnterieur = soldeAnterieur(decomptees, annee, droits, aujourdhui, bareme);
 
         return SoldeCongeDto.builder()
                 .employeId(employe.getId())
@@ -248,8 +264,13 @@ public class DemandeCongeService {
                 .departement(employe.getDepartement())
                 .anneeReference(annee)
                 .soldeAnterieur(soldeAnterieur)
-                .moisAcquis(acquisCalculator.moisAcquis(annee, dateEntree, aujourdhui))
+                .moisAcquis(detail.moisAcquis())
                 .acquis(acquis)
+                .acquisBase(detail.acquisBase())
+                .supplementEnfants(detail.supplementEnfants())
+                .supplementAnciennete(detail.supplementAnciennete())
+                .anneesAnciennete(detail.anneesAnciennete())
+                .enfantsBeneficiaires(detail.enfantsBeneficiaires())
                 .pris(pris)
                 .enCours(enCours)
                 // Le report est consommable ; jamais de solde négatif à l'affichage.
@@ -270,15 +291,22 @@ public class DemandeCongeService {
      * <p>Sans date d'entrée, il n'existe aucune base pour reconstituer un historique : le report
      * est nul plutôt qu'inventé — même arbitrage prudent que le {@code type} nul de
      * {@link #decompteLeSolde}, où l'on préfère sous-estimer un solde qu'en créditer à tort.
+     *
+     * <p><b>Chaque exercice clos est recalculé avec les droits de SON époque</b> : l'âge des
+     * enfants et l'ancienneté sont réévalués au 31 décembre de l'année parcourue. Le snapshot
+     * ne portant que des dates immuables, l'exercice 2022 rend le même résultat aujourd'hui et
+     * dans cinq ans — c'est ce qui rend le reliquat stable. (La seule chose qui puisse le faire
+     * bouger est une modification du barème lui-même, qui n'est pas versionné par date d'effet.)
      */
     private int soldeAnterieur(List<DemandeConge> decomptees, int anneeCourante,
-                               LocalDate dateEntree, LocalDate aujourdhui) {
-        if (dateEntree == null) {
+                               DroitsEmployeSnapshot droits, LocalDate aujourdhui,
+                               BaremeConges bareme) {
+        if (droits.dateEntree() == null) {
             return 0;
         }
         int cumul = 0;
-        for (int a = dateEntree.getYear(); a < anneeCourante; a++) {
-            cumul += acquisCalculator.acquis(a, dateEntree, aujourdhui)
+        for (int a = droits.dateEntree().getYear(); a < anneeCourante; a++) {
+            cumul += acquisCalculator.acquis(a, droits, aujourdhui, bareme).total()
                     - joursParStatut(decomptees, a, false);
         }
         return Math.max(0, cumul);

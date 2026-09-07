@@ -44,7 +44,18 @@ public class DossierEmploye {
     private String nationalite;
     private String numeroIdentification;
     private SituationMatrimoniale situationMatrimoniale;
+
+    // Compteur historique. DÉRIVÉ de `enfants` dès que cette liste est renseignée,
+    // et JAMAIS remis à null quand elle est vide : les dossiers antérieurs à la
+    // saisie datée ne portent que lui, l'effacer perdrait la seule information
+    // d'enfants à charge dont ils disposent.
     private Integer nombreEnfants;
+
+    // Enfants à charge avec leur date de naissance. Remplacée intégralement à chaque
+    // écriture (comme `affectations`). C'est cette liste, et non le compteur, qui
+    // ouvre le droit à congé supplémentaire par enfant de moins de N ans — cf.
+    // EnfantEmploye pour la raison d'être des dates.
+    private List<EnfantEmploye> enfants;
 
     // Poste
     private String poste;

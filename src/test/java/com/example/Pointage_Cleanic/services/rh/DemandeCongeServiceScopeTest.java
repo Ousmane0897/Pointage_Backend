@@ -18,8 +18,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 import org.springframework.data.domain.Page;
-import org.springframework.test.util.ReflectionTestUtils;
 
+import java.time.Clock;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Set;
@@ -51,15 +51,18 @@ class DemandeCongeServiceScopeTest {
     @Mock private CongeWorkflowService workflowService;
     @Mock private CongeIdentiteService identite;
 
+    @Mock private ParametresCongesService parametresCongesService;
+
     private DemandeCongeService service;
 
     @BeforeEach
     void setUp() {
-        CongeAcquisCalculator calculator = new CongeAcquisCalculator();
-        // @Value n'est pas résolu hors contexte Spring : on pose la valeur à la main.
-        ReflectionTestUtils.setField(calculator, "joursAcquisParMois", 2);
+        // Le barème n'est plus une valeur injectée par Spring mais un argument du calcul :
+        // le stub suffit, plus de ReflectionTestUtils.
+        when(parametresCongesService.baremeCourant()).thenReturn(BaremeConges.defaut());
         service = new DemandeCongeService(demandeCongeRepository, dossierEmployeRepository,
-                new CongeMapper(), workflowService, identite, calculator);
+                new CongeMapper(), workflowService, identite, new CongeAcquisCalculator(),
+                parametresCongesService, Clock.systemUTC());
     }
 
     // ─── Fixtures ─────────────────────────────────────────────────────────────
