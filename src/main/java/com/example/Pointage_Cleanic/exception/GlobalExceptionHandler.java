@@ -101,6 +101,21 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY).body(body);
     }
 
+    // ─── Calendrier des jours fériés (RH 6.2) ───────────────────────────────
+
+    /**
+     * ⚠ Handler explicite obligatoire, pour la même raison que les précédents : sans lui,
+     * {@link #handleRuntime} attraperait l'exception et rendrait <b>500</b> au lieu de 409,
+     * une annotation {@code @ResponseStatus} n'étant consultée qu'à défaut de handler.
+     */
+    @ExceptionHandler(JourFerieConflitException.class)
+    public ResponseEntity<Map<String, Object>> handleJourFerieConflit(JourFerieConflitException ex) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("error", "JOUR_FERIE_CONFLIT");
+        body.put("message", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(body);
+    }
+
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<Map<String, Object>> handleIllegalArgument(IllegalArgumentException ex) {
         Map<String, Object> body = new HashMap<>();
