@@ -12,9 +12,10 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.test.util.ReflectionTestUtils;
 
+import java.time.Clock;
 import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 
@@ -41,7 +42,10 @@ class DemandeCongeServiceTest {
     @Mock private CongeWorkflowService workflowService;
     @Mock private CongeIdentiteService identite;
 
+    @Mock private ParametresCongesService parametresCongesService;
+
     private final CongeAcquisCalculator calculator = new CongeAcquisCalculator();
+    private final BaremeConges bareme = BaremeConges.defaut();
     private DemandeCongeService service;
 
     /** Droits totaux de l'employé de référence : report des 3 exercices clos + exercice courant. */
@@ -49,22 +53,26 @@ class DemandeCongeServiceTest {
 
     @BeforeEach
     void setUp() {
-        // @Value n'est pas résolu hors contexte Spring : on pose la valeur à la main.
-        ReflectionTestUtils.setField(calculator, "joursAcquisParMois", 2);
-        // Le service a gagné trois dépendances avec le circuit de validation à 3 niveaux, le
-        // périmètre de lecture et le calcul des droits : @InjectMocks les laisserait nulles et
-        // getSolde partirait en NPE.
+        // Le service a gagné cinq dépendances avec le circuit de validation à 3 niveaux, le
+        // périmètre de lecture, le calcul des droits, le barème et l'horloge : @InjectMocks les
+        // laisserait nulles et getSolde partirait en NPE.
+        Clock clock = Clock.fixed(AUJOURDHUI.atStartOfDay(ZoneOffset.UTC).toInstant(), ZoneOffset.UTC);
+        when(parametresCongesService.baremeCourant()).thenReturn(bareme);
         service = new DemandeCongeService(demandeCongeRepository, dossierEmployeRepository,
-                new CongeMapper(), workflowService, identite, calculator);
+                new CongeMapper(), workflowService, identite, calculator,
+                parametresCongesService, clock);
 
-        droitsTotaux = calculator.acquis(ANNEE - 3, ENTREE, AUJOURDHUI)
-                + calculator.acquis(ANNEE - 2, ENTREE, AUJOURDHUI)
-                + calculator.acquis(ANNEE - 1, ENTREE, AUJOURDHUI)
-                + calculator.acquis(ANNEE, ENTREE, AUJOURDHUI);
+        droitsTotaux = acquis(ANNEE - 3) + acquis(ANNEE - 2) + acquis(ANNEE - 1) + acquis(ANNEE);
 
         // Le périmètre est couvert par DemandeCongeServiceScopeTest : ici on se place en RH pour
         // ne mesurer que le calcul du solde.
         when(identite.perimetreLecture()).thenReturn(PerimetreConges.tout());
+    }
+
+    /** Droits d'un exercice pour l'employé de référence — sans genre ni enfants, donc sans majoration. */
+    private int acquis(int annee) {
+        return calculator.acquis(annee, new DroitsEmployeSnapshot(ENTREE, null, List.of()),
+                AUJOURDHUI, bareme).total();
     }
 
     private DossierEmploye employe(String id) {

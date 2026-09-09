@@ -3,6 +3,7 @@ package com.example.Pointage_Cleanic.controllers.rh.gestionpersonnel;
 import com.example.Pointage_Cleanic.Dto.rh.DossierEmployeDto;
 import com.example.Pointage_Cleanic.Enum.rh.GenreEmploye;
 import com.example.Pointage_Cleanic.Enum.rh.StatutDossierEmploye;
+import com.example.Pointage_Cleanic.exception.AffectationInvalideException;
 import com.example.Pointage_Cleanic.security.JwtRequestFilter;
 import com.example.Pointage_Cleanic.security.JwtUtil;
 import com.example.Pointage_Cleanic.services.rh.DossierEmployeService;
@@ -17,6 +18,7 @@ import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.http.HttpMethod;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -80,6 +82,32 @@ class DossierEmployeControllerTest {
         mockMvc.perform(multipart("/api/gestion-personnel/employes").file(dossier))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.matricule").value("M001"));
+    }
+
+    /**
+     * Une écriture qui ferait disparaître une affectation close doit ressortir en
+     * <b>422</b>, et non en 500 : sans handler dédié, l'exception passerait par le
+     * catch-all {@code RuntimeException} du {@code GlobalExceptionHandler}. Le front
+     * affiche le champ {@code message} tel quel.
+     */
+    @Test
+    void update_retourne_422_quand_une_affectation_close_disparait() throws Exception {
+        Mockito.when(service.update(ArgumentMatchers.eq("1"), ArgumentMatchers.any(),
+                        ArgumentMatchers.any()))
+                .thenThrow(new AffectationInvalideException(
+                        "L'affectation close sur Yoff (du 2026-01-01 au 2026-06-30) "
+                                + "ne peut pas être retirée du dossier."));
+
+        MockMultipartFile dossier = new MockMultipartFile(
+                "dossier", "dossier", "application/json",
+                "{\"matricule\":\"M001\",\"nom\":\"DIOP\",\"prenom\":\"Mamadou\"}".getBytes());
+
+        mockMvc.perform(multipart(HttpMethod.PUT, "/api/gestion-personnel/employes/1")
+                        .file(dossier))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.error").value("AFFECTATION_INVALIDE"))
+                .andExpect(jsonPath("$.message").value(
+                        org.hamcrest.Matchers.containsString("Yoff")));
     }
 
     @Test

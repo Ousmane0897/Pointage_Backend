@@ -88,10 +88,25 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY).body(body);
     }
 
+    // ─── Historique des affectations par site (RH 6.1) ──────────────────────
+    // Même raison que ci-dessus : sans cette entrée, la perte d'une affectation
+    // close sortirait en 500 via le handler RuntimeException.
+
+    @ExceptionHandler(AffectationInvalideException.class)
+    public ResponseEntity<Map<String, Object>> handleAffectationInvalide(
+            AffectationInvalideException ex) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("error", "AFFECTATION_INVALIDE");
+        body.put("message", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY).body(body);
+    }
+
+    // ─── Calendrier des jours fériés (RH 6.2) ───────────────────────────────
+
     /**
-     * ⚠ Handler explicite obligatoire : sans lui, {@link #handleRuntime} attraperait
-     * l'exception et rendrait <b>500</b> au lieu de 409, une annotation
-     * {@code @ResponseStatus} n'étant consultée qu'à défaut de handler.
+     * ⚠ Handler explicite obligatoire, pour la même raison que les précédents : sans lui,
+     * {@link #handleRuntime} attraperait l'exception et rendrait <b>500</b> au lieu de 409,
+     * une annotation {@code @ResponseStatus} n'étant consultée qu'à défaut de handler.
      */
     @ExceptionHandler(JourFerieConflitException.class)
     public ResponseEntity<Map<String, Object>> handleJourFerieConflit(JourFerieConflitException ex) {

@@ -3,6 +3,7 @@ package com.example.Pointage_Cleanic.controllers.rh.tempspresences;
 import com.example.Pointage_Cleanic.Dto.rh.CompteursAValiderDto;
 import com.example.Pointage_Cleanic.Dto.rh.DemandeCongeDto;
 import com.example.Pointage_Cleanic.Dto.rh.MonProfilCongeDto;
+import com.example.Pointage_Cleanic.Dto.rh.ParametresCongesDto;
 import com.example.Pointage_Cleanic.Dto.rh.SoldeCongeDto;
 import com.example.Pointage_Cleanic.Enum.rh.NiveauValidationConge;
 import com.example.Pointage_Cleanic.exception.CongeAccesRefuseException;
@@ -15,6 +16,7 @@ import com.example.Pointage_Cleanic.services.MyUserDetailsService;
 import com.example.Pointage_Cleanic.services.rh.CongeIdentiteService;
 import com.example.Pointage_Cleanic.services.rh.CongeWorkflowService;
 import com.example.Pointage_Cleanic.services.rh.DemandeCongeService;
+import com.example.Pointage_Cleanic.services.rh.ParametresCongesService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -47,6 +49,8 @@ class TempsPresencesCongeControllerTest {
     @MockBean private DemandeCongeService demandeCongeService;
     @MockBean private CongeWorkflowService congeWorkflowService;
     @MockBean private CongeIdentiteService congeIdentiteService;
+    // Sans ce mock, le contrôleur ne se construit plus (barème des droits à congés).
+    @MockBean private ParametresCongesService parametresCongesService;
     @MockBean private MyUserDetailsService myUserDetailsService;
     @MockBean private JwtUtil jwtUtil;
     @MockBean private JwtRequestFilter jwtRequestFilter;
@@ -105,6 +109,46 @@ class TempsPresencesCongeControllerTest {
 
         mockMvc.perform(get("/api/temps-presences/conges/soldes/moi"))
                 .andExpect(status().isNoContent());
+    }
+
+    // ─── Barème des droits ────────────────────────────────────────────────────
+
+    @Test
+    void le_bareme_est_lisible_par_tout_compte_authentifie() throws Exception {
+        // Les écrans de solde en ont besoin pour composer leur note explicative, y compris
+        // chez un employé qui ne voit que le sien.
+        when(parametresCongesService.getParametres()).thenReturn(
+                ParametresCongesDto.builder().joursAcquisParMois(2).joursParEnfant(1)
+                        .ageMaxEnfant(14).reserverAuxMeres(true).build());
+
+        mockMvc.perform(get("/api/temps-presences/conges/parametres"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.joursAcquisParMois").value(2))
+                .andExpect(jsonPath("$.ageMaxEnfant").value(14));
+    }
+
+    @Test
+    void modifier_le_bareme_delegue_au_service() throws Exception {
+        when(parametresCongesService.updateParametres(any())).thenReturn(
+                ParametresCongesDto.builder().joursParEnfant(2).build());
+
+        mockMvc.perform(put("/api/temps-presences/conges/parametres")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(
+                                ParametresCongesDto.builder().joursParEnfant(2).build())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.joursParEnfant").value(2));
+    }
+
+    @Test
+    void modifier_le_bareme_sans_habilitation_renvoie_403() throws Exception {
+        when(parametresCongesService.updateParametres(any()))
+                .thenThrow(new CongeAccesRefuseException("Seuls les profils RH et super-administrateur."));
+
+        mockMvc.perform(put("/api/temps-presences/conges/parametres")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"joursParEnfant\":2}"))
+                .andExpect(status().isForbidden());
     }
 
     // ─── Listes ───────────────────────────────────────────────────────────────

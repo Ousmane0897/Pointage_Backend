@@ -1,10 +1,15 @@
 package com.example.Pointage_Cleanic.services.rh;
 
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
 import com.example.Pointage_Cleanic.Dto.rh.DossierEmployeDto;
 import com.example.Pointage_Cleanic.Dto.rh.DossierEmployeStatutRequest;
+import com.example.Pointage_Cleanic.Dto.rh.EnfantEmployeDto;
 import com.example.Pointage_Cleanic.Enum.rh.StatutDossierEmploye;
 import com.example.Pointage_Cleanic.Mapper.rh.DossierEmployeMapper;
 import com.example.Pointage_Cleanic.entities.rh.DossierEmploye;
+import com.example.Pointage_Cleanic.entities.rh.EnfantEmploye;
 import com.example.Pointage_Cleanic.repositories.rh.DossierEmployeRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -16,7 +21,10 @@ import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 import org.springframework.data.mongodb.core.MongoTemplate;
 
+import java.time.Clock;
 import java.time.LocalDate;
+import java.time.ZoneId;
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -45,7 +53,12 @@ class DossierEmployeServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new DossierEmployeService(repository, mapper, mongoTemplate);
+        // Horloge figée : le service s'en sert pour trancher si une affectation est
+        // close et si une date de naissance d'enfant est dans le futur ; une horloge
+        // système rendrait ces tests dépendants du jour d'exécution.
+        service = new DossierEmployeService(repository, mapper, mongoTemplate,
+                Clock.fixed(LocalDate.of(2026, 9, 4).atStartOfDay(ZoneId.of("Africa/Dakar"))
+                        .toInstant(), ZoneId.of("Africa/Dakar")));
 
         // Mapper mock : copie les champs essentiels du DTO vers l'entité.
         when(mapper.toEntity(any(DossierEmployeDto.class))).thenAnswer(inv -> {
@@ -59,6 +72,7 @@ class DossierEmployeServiceTest {
                     .statut(dto.getStatut())
                     .dureeEssaiMois(dto.getDureeEssaiMois())
                     .joursTravail(dto.getJoursTravail())
+                    .nombreEnfants(dto.getNombreEnfants())
                     .build();
         });
         when(mapper.toDto(any(DossierEmploye.class))).thenAnswer(inv -> {
@@ -69,6 +83,17 @@ class DossierEmployeServiceTest {
                     .statut(e.getStatut()).dureeEssaiMois(e.getDureeEssaiMois())
                     .joursTravail(e.getJoursTravail())
                     .build();
+        });
+
+        // ⚠ Le stub doit recopier TOUS les champs : n'en oublier un rendrait verts, pour de
+        // mauvaises raisons, les tests d'identité et de tri des enfants.
+        when(mapper.toEnfantEntities(org.mockito.ArgumentMatchers.anyList())).thenAnswer(inv -> {
+            List<EnfantEmployeDto> dtos = inv.getArgument(0);
+            return new java.util.ArrayList<>(dtos.stream()
+                    .map(d -> EnfantEmploye.builder()
+                            .id(d.getId()).prenom(d.getPrenom()).dateNaissance(d.getDateNaissance())
+                            .build())
+                    .toList());
         });
 
         // save assigne un id par défaut.
@@ -208,6 +233,97 @@ class DossierEmployeServiceTest {
         assertThatThrownBy(() -> service.update("emp9", dto, null))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("joursTravail");
+    }
+
+    // ─── Enfants à charge ─────────────────────────────────────────────────────
+
+    @Test
+    void create_pose_un_id_sur_chaque_enfant_et_derive_le_compteur() throws Exception {
+        DossierEmployeDto dto = actifDto("M10");
+        dto.setNombreEnfants(99); // valeur périmée envoyée par le client
+        dto.setEnfants(List.of(
+                enfant("Awa", LocalDate.of(2020, 6, 1)),
+                enfant("Moussa", LocalDate.of(2015, 3, 12))));
+
+        service.create(dto, null);
+
+        ArgumentCaptor<DossierEmploye> captor = ArgumentCaptor.forClass(DossierEmploye.class);
+        verify(repository).save(captor.capture());
+        assertThat(captor.getValue().getEnfants()).hasSize(2)
+                .allSatisfy(e -> assertThat(e.getId()).isNotBlank());
+        // Le compteur est dérivé, jamais celui du payload.
+        assertThat(captor.getValue().getNombreEnfants()).isEqualTo(2);
+        // Tri par date de naissance croissante (aîné d'abord).
+        assertThat(captor.getValue().getEnfants().get(0).getPrenom()).isEqualTo("Moussa");
+    }
+
+    @Test
+    void un_id_d_enfant_deja_pose_est_conserve() throws Exception {
+        DossierEmployeDto dto = actifDto("M11");
+        EnfantEmployeDto existant = enfant("Awa", LocalDate.of(2020, 6, 1));
+        existant.setId("enfant-1");
+        dto.setEnfants(List.of(existant));
+
+        service.create(dto, null);
+
+        ArgumentCaptor<DossierEmploye> captor = ArgumentCaptor.forClass(DossierEmploye.class);
+        verify(repository).save(captor.capture());
+        assertThat(captor.getValue().getEnfants().get(0).getId()).isEqualTo("enfant-1");
+    }
+
+    @Test
+    void une_liste_d_enfants_absente_laisse_le_compteur_intact() throws Exception {
+        // Import bulk et clients antérieurs : sans cette branche, tout écrit effacerait
+        // les enfants du dossier et son seul compteur.
+        DossierEmployeDto dto = actifDto("M12");
+        dto.setNombreEnfants(3);
+
+        service.create(dto, null);
+
+        ArgumentCaptor<DossierEmploye> captor = ArgumentCaptor.forClass(DossierEmploye.class);
+        verify(repository).save(captor.capture());
+        assertThat(captor.getValue().getEnfants()).isNull();
+    }
+
+    @Test
+    void une_liste_vide_ne_derive_pas_le_compteur() throws Exception {
+        // Retirer toutes les lignes vide la liste, mais le compteur saisi manuellement
+        // reste gouverné par le client — comportement d'avant la saisie datée.
+        DossierEmployeDto dto = actifDto("M13");
+        dto.setNombreEnfants(3);
+        dto.setEnfants(List.of());
+
+        service.create(dto, null);
+
+        ArgumentCaptor<DossierEmploye> captor = ArgumentCaptor.forClass(DossierEmploye.class);
+        verify(repository).save(captor.capture());
+        assertThat(captor.getValue().getEnfants()).isEmpty();
+        assertThat(captor.getValue().getNombreEnfants()).isEqualTo(3);
+    }
+
+    @Test
+    void une_date_de_naissance_dans_le_futur_leve_400() {
+        DossierEmployeDto dto = actifDto("M14");
+        // L'horloge est figée au 04/09/2026.
+        dto.setEnfants(List.of(enfant("Awa", LocalDate.of(2027, 1, 1))));
+
+        assertThatThrownBy(() -> service.create(dto, null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("futur");
+    }
+
+    @Test
+    void une_date_de_naissance_absente_leve_400() {
+        DossierEmployeDto dto = actifDto("M15");
+        dto.setEnfants(List.of(enfant("Awa", null)));
+
+        assertThatThrownBy(() -> service.create(dto, null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("date de naissance");
+    }
+
+    private EnfantEmployeDto enfant(String prenom, LocalDate naissance) {
+        return EnfantEmployeDto.builder().prenom(prenom).dateNaissance(naissance).build();
     }
 
     private DossierEmployeDto actifDto(String matricule) {

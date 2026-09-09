@@ -36,7 +36,14 @@ public class DossierEmployeDto {
     private String photoUrl;
     private String numeroIdentification;
     private SituationMatrimoniale situationMatrimoniale;
+
+    // Dérivé serveur de `enfants` dès que celle-ci est renseignée ; conservé tel quel
+    // sinon (dossiers antérieurs à la saisie datée).
     private Integer nombreEnfants;
+
+    // Enfants à charge (prénom + date de naissance). Remplacés intégralement à chaque
+    // écriture, comme `affectations`. Alimente le droit à congé supplémentaire par enfant.
+    private List<EnfantEmployeDto> enfants;
 
     // Poste
     private String poste;

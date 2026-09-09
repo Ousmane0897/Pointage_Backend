@@ -4,12 +4,15 @@ import com.example.Pointage_Cleanic.Dto.rh.CompteursAValiderDto;
 import com.example.Pointage_Cleanic.Dto.rh.DemandeCongeDto;
 import com.example.Pointage_Cleanic.Dto.rh.EmployeSelectionnableDto;
 import com.example.Pointage_Cleanic.Dto.rh.MonProfilCongeDto;
+import com.example.Pointage_Cleanic.Dto.rh.ParametresCongesDto;
 import com.example.Pointage_Cleanic.Dto.rh.SoldeCongeDto;
 import com.example.Pointage_Cleanic.Enum.rh.NiveauValidationConge;
 import com.example.Pointage_Cleanic.services.rh.CongeIdentiteService;
 import com.example.Pointage_Cleanic.services.rh.CongeWorkflowService;
 import com.example.Pointage_Cleanic.services.rh.DemandeCongeService;
+import com.example.Pointage_Cleanic.services.rh.ParametresCongesService;
 import com.example.Pointage_Cleanic.util.PageResponse;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
@@ -37,6 +40,31 @@ public class TempsPresencesCongeController {
     private final DemandeCongeService demandeCongeService;
     private final CongeWorkflowService congeWorkflowService;
     private final CongeIdentiteService congeIdentiteService;
+    private final ParametresCongesService parametresCongesService;
+
+    // --- Barème des droits ---
+
+    /**
+     * Barème courant. <b>Ouvert à tout compte authentifié</b> : les écrans de solde
+     * l'utilisent pour composer la note qui explique d'où sortent les jours acquis, y
+     * compris chez un employé qui ne voit que le sien.
+     */
+    @GetMapping("/parametres")
+    public ResponseEntity<ParametresCongesDto> getParametres() {
+        return ResponseEntity.ok(parametresCongesService.getParametres());
+    }
+
+    /**
+     * Modification du barème — réservée à {@code RH} / {@code SUPERADMIN}, 403 sinon.
+     * La garde est portée par le service (le projet n'active pas {@code @EnableMethodSecurity}).
+     *
+     * <p>Patch : tout champ absent laisse la valeur en base inchangée.
+     */
+    @PutMapping("/parametres")
+    public ResponseEntity<ParametresCongesDto> updateParametres(
+            @Valid @RequestBody ParametresCongesDto dto) {
+        return ResponseEntity.ok(parametresCongesService.updateParametres(dto));
+    }
 
     // --- Identité de l'appelant ---
 
