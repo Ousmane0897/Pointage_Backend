@@ -40,4 +40,12 @@ public class AffectationSiteDto {
 
     /** Semaine ouvrée propre à ce site : LUN_VEN, LUN_SAM ou LUN_DIM. */
     private String joursTravail;
+
+    /**
+     * Jour de repos hebdomadaire, en indice {@code Date.getDay()} (0 = dimanche … 6 = samedi).
+     * Optionnel — null ⇒ repos implicite du dimanche, et le champ ne vaut que pour les
+     * rythmes de plus de cinq jours. Voir
+     * {@link com.example.Pointage_Cleanic.entities.rh.AffectationSite} pour la règle complète.
+     */
+    private Integer jourRepos;
 }
