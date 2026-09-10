@@ -3,6 +3,7 @@ package com.example.Pointage_Cleanic.services.rh;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDate;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -63,5 +64,39 @@ class CongeCalendrierTest {
         assertThat(CongeCalendrier.estOuvre(VENDREDI)).isTrue();
         assertThat(CongeCalendrier.estOuvre(SAMEDI)).isFalse();
         assertThat(CongeCalendrier.estOuvre(DIMANCHE)).isFalse();
+    }
+
+    // ─── Jours fériés ────────────────────────────────────────────────────────
+
+    @Test
+    void un_ferie_tombant_un_jour_ouvre_n_est_pas_decompte() {
+        // Mercredi 12 août 2026, au milieu de la semaine LUNDI→VENDREDI.
+        LocalDate mercredi = LocalDate.of(2026, 8, 12);
+        assertThat(CongeCalendrier.joursOuvres(LUNDI, VENDREDI, Set.of(mercredi))).isEqualTo(4);
+    }
+
+    @Test
+    void un_ferie_tombant_un_week_end_ne_retire_rien_de_plus() {
+        assertThat(CongeCalendrier.joursOuvres(LUNDI, VENDREDI, Set.of(SAMEDI))).isEqualTo(5);
+    }
+
+    @Test
+    void plusieurs_feries_sur_la_meme_semaine_se_cumulent() {
+        assertThat(CongeCalendrier.joursOuvres(LUNDI, VENDREDI,
+                Set.of(LocalDate.of(2026, 8, 11), LocalDate.of(2026, 8, 12)))).isEqualTo(3);
+    }
+
+    @Test
+    void un_calendrier_vide_ou_absent_reproduit_le_comportement_anterieur() {
+        // C'est ce qui rend le déploiement sans effet tant que la RH n'a rien saisi.
+        assertThat(CongeCalendrier.joursOuvres(LUNDI, VENDREDI, Set.of())).isEqualTo(5);
+        assertThat(CongeCalendrier.joursOuvres(LUNDI, VENDREDI, null)).isEqualTo(5);
+        assertThat(CongeCalendrier.joursOuvres(LUNDI, VENDREDI)).isEqualTo(5);
+    }
+
+    @Test
+    void une_periode_entierement_feriee_vaut_zero() {
+        assertThat(CongeCalendrier.joursOuvres(LUNDI, LUNDI, Set.of(LUNDI))).isZero();
+        assertThat(CongeCalendrier.estOuvre(LUNDI, Set.of(LUNDI))).isFalse();
     }
 }

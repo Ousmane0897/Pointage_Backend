@@ -37,6 +37,7 @@ public class DemandeCongeService {
     private final CongeIdentiteService identite;
     private final CongeAcquisCalculator acquisCalculator;
     private final ParametresCongesService parametresCongesService;
+    private final JourFerieService jourFerieService;
     /** Bean de {@code configurations.TimeConfig} (Africa/Dakar) — « aujourd'hui » testable. */
     private final Clock clock;
 
@@ -385,9 +386,14 @@ public class DemandeCongeService {
                 || (matricule != null && matricule.toLowerCase().contains(s));
     }
 
-    /** Jours ouvrés (week-ends exclus) — même unité que le solde acquis. */
+    /**
+     * Jours ouvrés — week-ends <b>et jours fériés</b> exclus, même unité que le solde acquis.
+     *
+     * <p>⚠ Une lecture du référentiel par appel, bornée à la période de la demande : c'est
+     * un calcul unitaire, il n'y a pas de boucle sur N employés ici.
+     */
     private int computeNombreJours(LocalDate debut, LocalDate fin) {
-        return CongeCalendrier.joursOuvres(debut, fin);
+        return CongeCalendrier.joursOuvres(debut, fin, jourFerieService.datesFeriees(debut, fin));
     }
 
     private DemandeCongeDto toDto(DemandeConge e) {
