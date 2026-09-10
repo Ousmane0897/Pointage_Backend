@@ -20,7 +20,9 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 /**
@@ -60,7 +62,7 @@ class DemandeCongeServiceTest {
         when(parametresCongesService.baremeCourant()).thenReturn(bareme);
         service = new DemandeCongeService(demandeCongeRepository, dossierEmployeRepository,
                 new CongeMapper(), workflowService, identite, calculator,
-                parametresCongesService, clock);
+                parametresCongesService, jourFerieServiceVide(), clock);
 
         droitsTotaux = acquis(ANNEE - 3) + acquis(ANNEE - 2) + acquis(ANNEE - 1) + acquis(ANNEE);
 
@@ -140,5 +142,15 @@ class DemandeCongeServiceTest {
         assertThat(solde.getPris()).isEqualTo(500);
         assertThat(solde.getEnCours()).isEqualTo(3);
         assertThat(solde.getSolde()).isZero();
+    }
+
+    /** Fériés vides : ces tests ne portent pas sur le décompte (cf. CongeCalendrierTest). */
+    private static JourFerieService jourFerieServiceVide() {
+        JourFerieService mockService = mock(JourFerieService.class);
+        // lenient : le calcul du solde ne décompte pas de jours, ce stub n'y est pas
+        // consommé — la stricte l'aurait signalé comme inutile.
+        org.mockito.Mockito.lenient()
+                .when(mockService.datesFeriees(any(), any())).thenReturn(java.util.Set.of());
+        return mockService;
     }
 }

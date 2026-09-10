@@ -57,8 +57,13 @@ class CongeWorkflowServiceTest {
 
     @BeforeEach
     void setUp() {
+        // Calendrier de fériés vide : ces tests portent sur les transitions, pas sur le
+        // décompte. Les fériés sont couverts par CongeCalendrierTest.
+        JourFerieService jourFerieService = mock(JourFerieService.class);
+        org.mockito.Mockito.lenient()
+                .when(jourFerieService.datesFeriees(any(), any())).thenReturn(java.util.Set.of());
         service = new CongeWorkflowService(demandeCongeRepository, dossierEmployeRepository,
-                identite, new CongeMapper(), notificationService, mailService);
+                identite, new CongeMapper(), notificationService, mailService, jourFerieService);
 
         when(demandeCongeRepository.save(any(DemandeConge.class)))
                 .thenAnswer(inv -> inv.getArgument(0));

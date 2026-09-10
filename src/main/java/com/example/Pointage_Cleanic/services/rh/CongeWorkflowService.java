@@ -61,6 +61,7 @@ public class CongeWorkflowService {
     private final CongeMapper mapper;
     private final CongeNotificationService notificationService;
     private final CongeMailNotificationService mailService;
+    private final JourFerieService jourFerieService;
 
     // ─── Profil de l'appelant ─────────────────────────────────────────────────
 
@@ -104,7 +105,11 @@ public class CongeWorkflowService {
         demande.setNom(demandeur.getNom());
         demande.setPrenom(demandeur.getPrenom());
         demande.setDepartement(demandeur.getDepartement());
-        demande.setNombreJours(CongeCalendrier.joursOuvres(dto.getDateDebut(), dto.getDateFin()));
+        // ⚠ Les fériés sortent du décompte : une seule lecture, bornée à la période
+        // demandée. Le solde acquis étant en jours ouvrables, décompter un férié vidait le
+        // solde d'un jour que l'agent n'a pas posé.
+        demande.setNombreJours(CongeCalendrier.joursOuvres(dto.getDateDebut(), dto.getDateFin(),
+                jourFerieService.datesFeriees(dto.getDateDebut(), dto.getDateFin())));
         demande.setDateDemande(LocalDate.now());
 
         // Validateur N1 figé à la création : un changement d'organigramme ne doit pas
