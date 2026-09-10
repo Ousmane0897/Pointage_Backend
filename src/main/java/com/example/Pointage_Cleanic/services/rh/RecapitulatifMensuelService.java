@@ -39,6 +39,33 @@ public class RecapitulatifMensuelService {
     private final PointageRepository pointageRepository;
     private final DemandeCongeRepository demandeCongeRepository;
     private final HeureSupplementaireRepository heureSupplementaireRepository;
+    private final CalendrierTravailService calendrier;
+    private final JourFerieService jourFerieService;
+
+    /**
+     * Jours du mois réellement couverts par un congé approuvé, <b>intersectés avec les
+     * jours ouvrables de l'employé</b>.
+     *
+     * <p>⚠ Remplace la somme des {@code nombreJours} des demandes chevauchant le mois :
+     * une demande à cheval sur deux mois y était comptée <b>en entier dans chacun</b>, ce
+     * qui pouvait ramener les absences à zéro et masquer une absence réelle. On raisonne
+     * désormais jour par jour, sur la seule fenêtre demandée.
+     */
+    private Set<LocalDate> joursDeConge(List<DemandeConge> congesDuMois, DossierEmploye employe,
+                                        LocalDate debut, LocalDate fin, Set<LocalDate> ouvrables) {
+        Set<LocalDate> jours = new HashSet<>();
+        for (DemandeConge c : congesDuMois) {
+            if (!Objects.equals(c.getEmployeId(), employe.getId())) continue;
+            LocalDate d = c.getDateDebut() == null || c.getDateDebut().isBefore(debut)
+                    ? debut : c.getDateDebut();
+            LocalDate f = c.getDateFin() == null || c.getDateFin().isAfter(fin)
+                    ? fin : c.getDateFin();
+            for (; !d.isAfter(f); d = d.plusDays(1)) {
+                if (ouvrables.contains(d)) jours.add(d);
+            }
+        }
+        return jours;
+    }
 
     private static String nomComplet(DossierEmploye e) {
         String prenom = e.getPrenom() == null ? "" : e.getPrenom().trim();
@@ -59,10 +86,11 @@ public class RecapitulatifMensuelService {
                     .collect(Collectors.toList());
         }
 
-        // Pointages du mois
-        List<LocalDate> joursOuvrables = debut.datesUntil(fin.plusDays(1))
-                .filter(d -> d.getDayOfWeek().getValue() < 6)
-                .collect(Collectors.toList());
+        // ⚠ Une seule lecture du calendrier des fériés pour TOUS les employés : une par
+        // employé serait N requêtes Mongo pour une valeur identique, et deux lignes du même
+        // tableau pourraient reposer sur des calendriers différents si l'exécution
+        // chevauchait une saisie RH.
+        Set<LocalDate> feries = jourFerieService.datesFeriees(debut, fin);
 
         // HS validées du mois
         List<HeureSupplementaire> hsDuMois = heureSupplementaireRepository
@@ -74,16 +102,20 @@ public class RecapitulatifMensuelService {
                         StatutDemande.APPROUVE, fin, debut);
 
         return employes.stream().map(e -> {
-            // Jours de présence = jours ouvrables avec un pointage
-            long presences = joursOuvrables.stream()
-                    .filter(d -> pointageRepository.existsByCodeSecretAndDate(e.getAgentId(), d))
-                    .count();
+            // Jours ouvrables PROPRES À CET EMPLOYÉ : rythme du site, jour de repos et
+            // fériés compris. Le calcul lundi-vendredi en dur ignorait les samedis des
+            // agents de terrain, dont les absences étaient donc systématiquement fausses.
+            List<LocalDate> joursOuvrables = calendrier.joursOuvrables(e, debut, fin, feries);
+            Set<LocalDate> ouvrables = new HashSet<>(joursOuvrables);
 
-            // Jours en congé
-            long conge = congesDuMois.stream()
-                    .filter(c -> c.getEmployeId().equals(e.getId()))
-                    .mapToInt(c -> c.getNombreJours() != null ? c.getNombreJours() : 0)
-                    .sum();
+            // Jours pointés, matérialisés une fois : les interroger deux fois doublerait
+            // le nombre de requêtes, déjà d'une par jour et par employé.
+            Set<LocalDate> joursPointes = joursOuvrables.stream()
+                    .filter(d -> pointageRepository.existsByCodeSecretAndDate(e.getAgentId(), d))
+                    .collect(Collectors.toSet());
+            long presences = joursPointes.size();
+
+            Set<LocalDate> joursConge = joursDeConge(congesDuMois, e, debut, fin, ouvrables);
 
             // HS validées (somme des heures)
             double totalHS = hsDuMois.stream()
@@ -91,8 +123,15 @@ public class RecapitulatifMensuelService {
                     .mapToDouble(h -> h.getNombreHeures() != null ? h.getNombreHeures() : 0)
                     .sum();
 
-            long absences = joursOuvrables.size() - presences - conge;
-            if (absences < 0) absences = 0;
+            // Un jour à la fois pointé et en congé ne doit pas être décompté deux fois :
+            // on soustrait le cardinal de l'UNION, jamais deux compteurs indépendants.
+            // Le résultat est positif par construction, aucun plancher n'est nécessaire.
+            long couverts = joursOuvrables.stream()
+                    .filter(d -> joursConge.contains(d) || joursPointes.contains(d))
+                    .count();
+            long absences = joursOuvrables.size() - couverts;
+
+            long conge = joursConge.size();
 
             return LigneRecapDto.builder()
                     .employeId(e.getId())
@@ -101,6 +140,7 @@ public class RecapitulatifMensuelService {
                     .poste(e.getPoste())
                     .departement(e.getDepartement())
                     .joursOuvrables(joursOuvrables.size())
+                    .joursFeries(calendrier.feriesTravailles(e, debut, fin, feries).size())
                     .joursPresents((int) presences)
                     .joursAbsents((int) absences)
                     .joursConge((int) conge)
@@ -130,15 +170,16 @@ public class RecapitulatifMensuelService {
                 .filter(e -> matchesQ(q, e.getNom(), e.getPrenom(), e.getMatricule()))
                 .collect(Collectors.toList());
 
-        List<LocalDate> joursOuvrables = debut.datesUntil(fin.plusDays(1))
-                .filter(d -> d.getDayOfWeek().getValue() < 6)
-                .collect(Collectors.toList());
-        Set<LocalDate> joursOuvrablesSet = new HashSet<>(joursOuvrables);
+        // ⚠ Une seule lecture du calendrier des fériés pour tous les employés (cf.
+        // getRecapitulatif) : jamais une par employé.
+        Set<LocalDate> feries = jourFerieService.datesFeriees(debut, fin);
 
-        // Pointages du mois groupés par codeSecret -> (jour -> liste)
+        // Pointages du mois groupés par codeSecret -> (jour -> liste).
+        // ⚠ Plus de filtrage sur les seuls jours ouvrables : un férié TRAVAILLÉ doit se
+        // voir, et les jours ouvrables ne sont plus les mêmes d'un employé à l'autre.
         Map<String, Map<LocalDate, List<Pointage>>> pointagesParAgent = pointageRepository
                 .findByDateBetween(debut, fin).stream()
-                .filter(p -> p.getCodeSecret() != null && joursOuvrablesSet.contains(p.getDate()))
+                .filter(p -> p.getCodeSecret() != null && p.getDate() != null)
                 .collect(Collectors.groupingBy(Pointage::getCodeSecret,
                         Collectors.groupingBy(Pointage::getDate)));
 
@@ -153,25 +194,47 @@ public class RecapitulatifMensuelService {
             Map<LocalDate, List<Pointage>> pointagesEmploye =
                     pointagesParAgent.getOrDefault(e.getAgentId(), Map.of());
 
-            int joursTravailles = 0;
+            // Jours ouvrables PROPRES À CET EMPLOYÉ (rythme du site, jour de repos, fériés).
+            List<LocalDate> joursOuvrables = calendrier.joursOuvrables(e, debut, fin, feries);
+            Set<LocalDate> ouvrables = new HashSet<>(joursOuvrables);
+
             // Retard non dérivé : DossierEmploye ne porte pas d'heure de début et les
             // horaires sont hétérogènes (même décision que la vue pointage centralisé).
             // Le contrat conserve nombreRetards / minutesRetardTotal, figés à 0.
             int nombreRetards = 0;
             int minutesRetardTotal = 0;
-            for (LocalDate jour : joursOuvrables) {
-                List<Pointage> duJour = pointagesEmploye.get(jour);
-                if (duJour == null || duJour.isEmpty()) continue;
+
+            // ⚠ DEUX compteurs distincts, à ne pas fusionner.
+            // `joursTravailles` compte TOUS les jours pointés du mois, fériés compris : le
+            // travail réellement effectué doit se voir. `travaillesOuvrables` ne sert qu'au
+            // calcul des absences, qui ne se juge que sur les jours dus. Avec un compteur
+            // unique, soit un férié chômé deviendrait une absence, soit un férié travaillé
+            // ferait passer les absences en négatif.
+            int joursTravailles = 0;
+            Set<LocalDate> joursPointes = new HashSet<>();
+            for (Map.Entry<LocalDate, List<Pointage>> entree : pointagesEmploye.entrySet()) {
+                LocalDate jour = entree.getKey();
+                if (jour.isBefore(debut) || jour.isAfter(fin)) continue;
+                if (entree.getValue() == null || entree.getValue().isEmpty()) continue;
                 joursTravailles++;
+                joursPointes.add(jour);
             }
 
-            int joursConge = congesDuMois.stream()
-                    .filter(c -> c.getEmployeId().equals(e.getId()))
-                    .mapToInt(c -> c.getNombreJours() != null ? c.getNombreJours() : 0)
-                    .sum();
+            List<LocalDate> feriesDeLEmploye = calendrier.feriesTravailles(e, debut, fin, feries);
+            int joursFeries = feriesDeLEmploye.size();
+            int joursTravaillesFeries = (int) feriesDeLEmploye.stream()
+                    .filter(joursPointes::contains)
+                    .count();
 
-            int joursAbsence = joursOuvrables.size() - joursTravailles - joursConge;
-            if (joursAbsence < 0) joursAbsence = 0;
+            Set<LocalDate> congesEmploye = joursDeConge(congesDuMois, e, debut, fin, ouvrables);
+            int joursConge = congesEmploye.size();
+
+            // Cardinal de l'UNION : un jour à la fois pointé et en congé ne doit pas être
+            // décompté deux fois. Positif par construction, aucun plancher nécessaire.
+            long couverts = joursOuvrables.stream()
+                    .filter(d -> congesEmploye.contains(d) || joursPointes.contains(d))
+                    .count();
+            int joursAbsence = (int) (joursOuvrables.size() - couverts);
 
             List<HeureSupplementaire> hsEmploye = hsDuMois.stream()
                     .filter(h -> h.getEmployeId().equals(e.getId()))
@@ -202,6 +265,8 @@ public class RecapitulatifMensuelService {
                     .joursTravailles(joursTravailles)
                     .joursAbsence(joursAbsence)
                     .joursConge(joursConge)
+                    .joursFeries(joursFeries)
+                    .joursTravaillesFeries(joursTravaillesFeries)
                     .nombreRetards(nombreRetards)
                     .minutesRetardTotal(minutesRetardTotal)
                     .heuresSupTotal(heuresSupTotal)
@@ -236,7 +301,7 @@ public class RecapitulatifMensuelService {
 
             Row header = sheet.createRow(0);
             String[] cols = {"Matricule", "Nom complet", "Poste", "Département",
-                    "Jours ouvrables", "Présents", "Absents", "Congés", "Heures sup"};
+                    "Jours ouvrables", "Fériés", "Présents", "Absents", "Congés", "Heures sup"};
             for (int i = 0; i < cols.length; i++) {
                 header.createCell(i).setCellValue(cols[i]);
             }
@@ -249,10 +314,11 @@ public class RecapitulatifMensuelService {
                 row.createCell(2).setCellValue(l.getPoste() != null ? l.getPoste() : "");
                 row.createCell(3).setCellValue(l.getDepartement() != null ? l.getDepartement() : "");
                 row.createCell(4).setCellValue(l.getJoursOuvrables());
-                row.createCell(5).setCellValue(l.getJoursPresents());
-                row.createCell(6).setCellValue(l.getJoursAbsents());
-                row.createCell(7).setCellValue(l.getJoursConge());
-                row.createCell(8).setCellValue(l.getTotalHeuresSup());
+                row.createCell(5).setCellValue(l.getJoursFeries());
+                row.createCell(6).setCellValue(l.getJoursPresents());
+                row.createCell(7).setCellValue(l.getJoursAbsents());
+                row.createCell(8).setCellValue(l.getJoursConge());
+                row.createCell(9).setCellValue(l.getTotalHeuresSup());
             }
 
             wb.write(out);
@@ -273,10 +339,10 @@ public class RecapitulatifMensuelService {
             doc.add(new com.lowagie.text.Paragraph("Récapitulatif mensuel — " + moisLabel));
             doc.add(com.lowagie.text.Chunk.NEWLINE);
 
-            com.lowagie.text.pdf.PdfPTable table = new com.lowagie.text.pdf.PdfPTable(9);
+            com.lowagie.text.pdf.PdfPTable table = new com.lowagie.text.pdf.PdfPTable(10);
             table.setWidthPercentage(100);
             String[] cols = {"Matricule", "Nom complet", "Poste", "Département",
-                    "Jours ouv.", "Présents", "Absents", "Congés", "H. sup"};
+                    "Jours ouv.", "Fériés", "Présents", "Absents", "Congés", "H. sup"};
             for (String col : cols) {
                 table.addCell(col);
             }
@@ -286,6 +352,7 @@ public class RecapitulatifMensuelService {
                 table.addCell(l.getPoste() != null ? l.getPoste() : "");
                 table.addCell(l.getDepartement() != null ? l.getDepartement() : "");
                 table.addCell(String.valueOf(l.getJoursOuvrables()));
+                table.addCell(String.valueOf(l.getJoursFeries()));
                 table.addCell(String.valueOf(l.getJoursPresents()));
                 table.addCell(String.valueOf(l.getJoursAbsents()));
                 table.addCell(String.valueOf(l.getJoursConge()));
@@ -306,6 +373,8 @@ public class RecapitulatifMensuelService {
         private String poste;
         private String departement;
         private int joursOuvrables;
+        /** Fériés du mois tombant un jour que l'employé aurait travaillé. */
+        private int joursFeries;
         private int joursPresents;
         private int joursAbsents;
         private int joursConge;
