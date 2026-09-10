@@ -96,10 +96,17 @@ class PointageCentraliseServiceTest {
     // =====================================================================
 
     private void rebuildService(LocalDate jour, LocalTime heure) {
+        rebuildService(jour, heure, java.util.Set.of());
+    }
+
+    /** Variante avec un calendrier de jours fériés imposé. */
+    private void rebuildService(LocalDate jour, LocalTime heure, java.util.Set<LocalDate> feries) {
         Clock clock = Clock.fixed(jour.atTime(heure).atZone(ZONE).toInstant(), ZONE);
+        JourFerieService jourFerieService = mock(JourFerieService.class);
+        when(jourFerieService.datesFeriees(any(), any())).thenReturn(feries);
         service = new PointageCentraliseService(
                 dossierEmployeRepository, pointageRepository, demandeCongeRepository,
-                new PlanningAffectationResolver(), clock, 15);
+                new PlanningAffectationResolver(), jourFerieService, clock, 15);
     }
 
     private static AffectationSite affectation(String site, String debut, String fin, String jours) {
@@ -634,5 +641,68 @@ class PointageCentraliseServiceTest {
                 JOUR, JOUR.minusDays(1), null, null, null, null, 0, 20))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("dateFin");
+    }
+
+    // =====================================================================
+    //  Jours fériés
+    // =====================================================================
+
+    @Test
+    void un_creneau_non_pointe_un_jour_ferie_est_FERIE_et_non_ABSENT() {
+        // Journée terminée : sans le férié, ces créneaux seraient ABSENT.
+        rebuildService(JOUR, LocalTime.of(23, 0), java.util.Set.of(JOUR));
+        stubPointages(JOUR);
+
+        Page<PointageCentraliseDto> page =
+                service.getPointages(JOUR, null, null, null, null, 0, 20);
+
+        assertThat(page.getContent())
+                .filteredOn(d -> "emp3".equals(d.getEmployeId()))
+                .extracting(PointageCentraliseDto::getStatut)
+                .containsExactly("FERIE");
+    }
+
+    @Test
+    void un_ferie_TRAVAILLE_reste_un_pointage_normal() {
+        // « Non chômé possible » : l'agent est venu, sa présence doit se voir — et
+        // surtout ne pas retomber en HORS_PLAN, la tuile d'alerte.
+        rebuildService(JOUR, LocalTime.of(23, 0), java.util.Set.of(JOUR));
+
+        Page<PointageCentraliseDto> page =
+                service.getPointages(JOUR, null, null, null, null, 0, 20);
+
+        assertThat(page.getContent())
+                .filteredOn(d -> "emp1".equals(d.getEmployeId()))
+                .extracting(PointageCentraliseDto::getStatut)
+                .containsExactly("PRESENT");
+    }
+
+    @Test
+    void le_resume_isole_les_feries_sans_fausser_le_denominateur() {
+        rebuildService(JOUR, LocalTime.of(23, 0), java.util.Set.of(JOUR));
+
+        ResumeJourneeDto resume = service.getResume(JOUR);
+
+        // emp1 pointé (PRESENT), emp2 en congé (personne), emp3 non pointé (FERIE).
+        assertThat(resume.getFeries()).isEqualTo(1);
+        assertThat(resume.getAbsents()).isZero();
+        // ⚠ L'invariant gagne un terme : FERIE est un créneau prévu comme un autre.
+        assertThat(resume.getCreneauxPrevus()).isEqualTo(
+                resume.getPresents() + resume.getRetards() + resume.getAbsents()
+                        + resume.getEnAttente() + resume.getNeutres() + resume.getFeries());
+    }
+
+    @Test
+    void un_conge_reste_prioritaire_sur_un_jour_ferie() {
+        // Le congé est un fait de la journée : une seule ligne, comme toujours.
+        rebuildService(JOUR, LocalTime.of(23, 0), java.util.Set.of(JOUR));
+
+        Page<PointageCentraliseDto> page =
+                service.getPointages(JOUR, null, null, null, null, 0, 20);
+
+        assertThat(page.getContent())
+                .filteredOn(d -> "emp2".equals(d.getEmployeId()))
+                .extracting(PointageCentraliseDto::getStatut)
+                .containsExactly("CONGE");
     }
 }

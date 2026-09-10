@@ -149,10 +149,12 @@ public class TableauBordRhService {
                 // Un créneau non encore commencé (NEUTRE) ou en cours (EN_ATTENTE) n'est
                 // pas une observation : son sort n'est pas tranché. Un pointage hors
                 // planning (HORS_PLAN) n'en est pas une non plus — aucun créneau attendu
-                // ne lui correspond. Les compter gonflerait le dénominateur et diluerait
-                // le taux d'absentéisme sans qu'aucune absence n'ait disparu.
+                // ne lui correspond. Un créneau de jour férié (FERIE) non plus : le jour
+                // n'étant pas dû, l'agent n'avait rien à honorer. Les compter gonflerait le
+                // dénominateur et diluerait le taux d'absentéisme sans qu'aucune absence
+                // n'ait disparu.
                 if ("NEUTRE".equals(statut) || "EN_ATTENTE".equals(statut)
-                        || "HORS_PLAN".equals(statut)) {
+                        || "HORS_PLAN".equals(statut) || "FERIE".equals(statut)) {
                     continue;
                 }
                 totalObservations++;
