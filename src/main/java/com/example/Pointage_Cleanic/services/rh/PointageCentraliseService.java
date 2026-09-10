@@ -76,11 +76,17 @@ public class PointageCentraliseService {
     static final String NEUTRE = "NEUTRE";
     static final String EN_ATTENTE = "EN_ATTENTE";
     static final String HORS_PLAN = "HORS_PLAN";
+    /**
+     * Créneau d'un jour férié resté non pointé. Ce n'est ni une absence (le jour n'est pas
+     * dû) ni un « à venir » : le créneau ne sera jamais honoré et il ne doit pas l'être.
+     */
+    static final String FERIE = "FERIE";
 
     private final DossierEmployeRepository dossierEmployeRepository;
     private final PointageRepository pointageRepository;
     private final DemandeCongeRepository demandeCongeRepository;
     private final PlanningAffectationResolver planning;
+    private final JourFerieService jourFerieService;
     /** Horloge métier (Africa/Dakar) : jamais de {@code now()} en dur dans ce service. */
     private final Clock clock;
 
@@ -92,12 +98,14 @@ public class PointageCentraliseService {
             PointageRepository pointageRepository,
             DemandeCongeRepository demandeCongeRepository,
             PlanningAffectationResolver planning,
+            JourFerieService jourFerieService,
             Clock clock,
             @Value("${rh.pointage.tolerance-retard-minutes:15}") int toleranceRetardMinutes) {
         this.dossierEmployeRepository = dossierEmployeRepository;
         this.pointageRepository = pointageRepository;
         this.demandeCongeRepository = demandeCongeRepository;
         this.planning = planning;
+        this.jourFerieService = jourFerieService;
         this.clock = clock;
         this.toleranceRetardMinutes = toleranceRetardMinutes;
     }
@@ -109,7 +117,8 @@ public class PointageCentraliseService {
         LocalDate targetDate = date != null ? date : LocalDate.now(clock);
 
         List<DossierEmploye> employes = dossierEmployeRepository.findByStatutIn(STATUTS_ACTIFS);
-        List<PointageCentraliseDto> result = buildForDate(targetDate, employes, departement, site, q).stream()
+        Set<LocalDate> feries = jourFerieService.datesFeriees(targetDate, targetDate);
+        List<PointageCentraliseDto> result = buildForDate(targetDate, employes, departement, site, q, feries).stream()
                 .filter(dto -> statut == null || statut.isBlank() || dto.getStatut().equals(statut))
                 .collect(Collectors.toList());
 
@@ -131,8 +140,11 @@ public class PointageCentraliseService {
 
         List<DossierEmploye> employes = dossierEmployeRepository.findByStatutIn(STATUTS_ACTIFS);
 
+        // Une seule lecture pour toute la plage — jamais une par jour.
+        Set<LocalDate> feries = jourFerieService.datesFeriees(dateDebut, dateFin);
+
         List<PointageCentraliseDto> result = dateDebut.datesUntil(dateFin.plusDays(1))
-                .flatMap(jour -> buildForDate(jour, employes, departement, site, q).stream())
+                .flatMap(jour -> buildForDate(jour, employes, departement, site, q, feries).stream())
                 .filter(dto -> statut == null || statut.isBlank() || dto.getStatut().equals(statut))
                 .collect(Collectors.toList());
 
@@ -149,7 +161,13 @@ public class PointageCentraliseService {
      * rendrait aussi les lignes de tous ses autres sites.
      */
     private List<PointageCentraliseDto> buildForDate(
-            LocalDate jour, List<DossierEmploye> employes, String departement, String site, String q) {
+            LocalDate jour, List<DossierEmploye> employes, String departement, String site, String q,
+            Set<LocalDate> feries) {
+
+        // ⚠ Le calendrier est chargé UNE fois par méthode publique et descend ici : sur une
+        // plage de 92 jours, une lecture par jour serait 92 requêtes Mongo pour une valeur
+        // que le référentiel ne fait pas varier. Même discipline que le récapitulatif.
+        boolean jourFerie = feries != null && feries.contains(jour);
 
         Map<String, List<Pointage>> pointagesParCode = pointageRepository.findAllByDate(jour).stream()
                 .filter(p -> p.getCodeSecret() != null)
@@ -166,7 +184,7 @@ public class PointageCentraliseService {
                 .filter(e -> matchesFiltres(e, departement, q))
                 .flatMap(e -> buildLignes(e, jour,
                         pointagesParCode.getOrDefault(e.getAgentId(), List.of()),
-                        congeParEmploye.get(e.getId()), maintenant).stream())
+                        congeParEmploye.get(e.getId()), maintenant, jourFerie).stream())
                 .filter(dto -> matchesSite(dto, site))
                 .collect(Collectors.toList());
     }
@@ -178,7 +196,7 @@ public class PointageCentraliseService {
      */
     private List<PointageCentraliseDto> buildLignes(DossierEmploye e, LocalDate jour,
                                                     List<Pointage> pointages, DemandeConge conge,
-                                                    LocalDateTime maintenant) {
+                                                    LocalDateTime maintenant, boolean jourFerie) {
         // Le congé est un fait de la JOURNÉE, pas du créneau : une seule ligne, sinon la
         // tuile « En congé » compterait un multi-sites autant de fois qu'il a de sites.
         if (conge != null) {
@@ -192,7 +210,7 @@ public class PointageCentraliseService {
         for (int i = 0; i < prevues.size(); i++) {
             AffectationSite affectation = prevues.get(i);
             lignes.add(buildLigneCreneau(
-                    e, jour, affectation, i, attribues.get(affectation), maintenant));
+                    e, jour, affectation, i, attribues.get(affectation), maintenant, jourFerie));
         }
 
         // Pointages qu'aucun créneau n'explique : plus de pointages que de créneaux,
@@ -325,10 +343,11 @@ public class PointageCentraliseService {
         LocalDate targetDate = date != null ? date : LocalDate.now(clock);
 
         List<DossierEmploye> employes = dossierEmployeRepository.findByStatutIn(STATUTS_ACTIFS);
-        List<PointageCentraliseDto> lignes = buildForDate(targetDate, employes, null, null, null);
+        List<PointageCentraliseDto> lignes = buildForDate(targetDate, employes, null, null, null,
+                jourFerieService.datesFeriees(targetDate, targetDate));
 
         int presents = 0, absents = 0, retards = 0, enConge = 0;
-        int enAttente = 0, neutres = 0, horsPlan = 0;
+        int enAttente = 0, neutres = 0, horsPlan = 0, feries = 0;
         for (PointageCentraliseDto dto : lignes) {
             switch (dto.getStatut()) {
                 case PRESENT    -> presents++;
@@ -337,6 +356,7 @@ public class PointageCentraliseService {
                 case EN_ATTENTE -> enAttente++;
                 case NEUTRE     -> neutres++;
                 case HORS_PLAN  -> horsPlan++;
+                case FERIE      -> feries++;
                 case CONGE      -> enConge++;
                 // Pas de branche attrape-tout : c'est elle qui, en rangeant l'inattendu
                 // dans « absents », a masqué le rattachement défaillant jusqu'ici.
@@ -347,13 +367,16 @@ public class PointageCentraliseService {
         return ResumeJourneeDto.builder()
                 .date(targetDate)
                 .totalEmployes(employes.size())
-                .creneauxPrevus(presents + retards + absents + enAttente + neutres)
+                // ⚠ L'invariant gagne un terme : FERIE est un créneau prévu comme un
+                // autre, simplement non dû. L'omettre ferait mentir le dénominateur.
+                .creneauxPrevus(presents + retards + absents + enAttente + neutres + feries)
                 .presents(presents)
                 .absents(absents)
                 .retards(retards)
                 .enAttente(enAttente)
                 .neutres(neutres)
                 .horsPlan(horsPlan)
+                .feries(feries)
                 .enConge(enConge)
                 .build();
     }
@@ -378,7 +401,8 @@ public class PointageCentraliseService {
     /** Ligne d'un créneau attendu, avec le pointage qui s'y rattache s'il existe. */
     private PointageCentraliseDto buildLigneCreneau(DossierEmploye e, LocalDate date,
                                                     AffectationSite affectation, int ordinal,
-                                                    Pointage pointage, LocalDateTime maintenant) {
+                                                    Pointage pointage, LocalDateTime maintenant,
+                                                    boolean jourFerie) {
         LocalTime debut = planning.parseHeure(affectation.getHoraireDebut());
         LocalTime fin = planning.parseHeure(affectation.getHoraireFin());
 
@@ -408,8 +432,15 @@ public class PointageCentraliseService {
         LocalDateTime debutCreneau = date.atTime(debut != null ? debut : LocalTime.MIN);
         LocalDateTime finCreneau = date.atTime(fin != null ? fin : LocalTime.MAX);
 
+        // ⚠ Un férié non pointé n'est ni ABSENT (le jour n'est pas dû) ni NEUTRE/EN_ATTENTE
+        // (le créneau ne sera pas honoré, et n'a pas à l'être). Les créneaux restent
+        // GÉNÉRÉS un jour férié : les supprimer ferait retomber tout pointage de ce jour en
+        // HORS_PLAN, c'est-à-dire dans la tuile d'alerte, alors qu'un férié travaillé est
+        // parfaitement légitime.
         String statut;
-        if (maintenant.isBefore(debutCreneau)) {
+        if (jourFerie) {
+            statut = FERIE;
+        } else if (maintenant.isBefore(debutCreneau)) {
             statut = NEUTRE;
         } else if (maintenant.isBefore(finCreneau)) {
             statut = EN_ATTENTE;

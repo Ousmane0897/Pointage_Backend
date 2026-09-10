@@ -14,7 +14,7 @@ import java.time.LocalDate;
  * fois dans {@code retards} mais une seule dans {@code totalEmployes}.
  *
  * <p>L'invariant utile est donc :
- * {@code presents + retards + absents + enAttente + neutres == creneauxPrevus}.
+ * {@code presents + retards + absents + enAttente + neutres + feries == creneauxPrevus}.
  * L'ancien {@code presents + absents + retards + enConge == totalEmployes} était déjà
  * faux pour les agents multi-pointages : il est abandonné, pas réparé.
  */
@@ -50,6 +50,14 @@ public class ResumeJourneeDto {
      * branche par défaut de l'ancien comptage — est ce qui a masqué le problème.
      */
     private int horsPlan;
+
+    /**
+     * Créneaux d'un jour férié restés non pointés. Ni des absences (le jour n'est pas dû),
+     * ni des « à venir » (le créneau ne sera pas honoré, et n'a pas à l'être). Ils comptent
+     * dans {@code creneauxPrevus} : les créneaux d'un férié sont bien générés, sans quoi
+     * tout pointage de ce jour retomberait en {@code horsPlan}.
+     */
+    private int feries;
 
     /** Employés en congé approuvé (personnes : une seule ligne congé par employé). */
     private int enConge;
