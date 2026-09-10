@@ -85,25 +85,57 @@ public class PlanningAffectationResolver {
      * d'<i>affichage</i> du front, ce qui n'en fait pas une règle de filtrage serveur.
      *
      * <p>Une valeur non reconnue (donnée corrompue) suit la même règle prudente.
+     *
+     * <p>Le <b>jour de repos hebdomadaire</b> du site ({@code AffectationSite.jourRepos})
+     * est retiré <i>après</i> la semaine ouvrée — voir {@link #estJourDeRepos}.
      */
     public boolean jourOuvre(AffectationSite affectation, DossierEmploye employe, DayOfWeek jour) {
         String rythme = affectation.getJoursTravail();
         if (rythme == null || rythme.isBlank()) {
             rythme = employe != null ? employe.getJoursTravail() : null;
         }
-        if (rythme == null || rythme.isBlank()) return true;
+        // ⚠ Le repos est évalué même sans rythme connu (échelon permissif) : un site qui
+        // porte un jour de repos explicite l'a fait saisir par la RH, c'est une information
+        // sûre, contrairement à un rythme absent.
+        if (rythme == null || rythme.isBlank()) return !estJourDeRepos(affectation, rythme, jour);
 
         JoursTravail valeur;
         try {
             valeur = JoursTravail.valueOf(rythme.trim());
         } catch (IllegalArgumentException ignored) {
-            return true;
+            return !estJourDeRepos(affectation, null, jour);
         }
-        return switch (valeur) {
+        boolean dansLaSemaineOuvree = switch (valeur) {
             case LUN_VEN -> jour.getValue() <= DayOfWeek.FRIDAY.getValue();
             case LUN_SAM -> jour.getValue() <= DayOfWeek.SATURDAY.getValue();
             case LUN_DIM -> true;
         };
+        return dansLaSemaineOuvree && !estJourDeRepos(affectation, rythme, jour);
+    }
+
+    /**
+     * Ce jour est-il le repos hebdomadaire du site ?
+     *
+     * <p>Le champ n'existe que pour les sites qui dérogent au repos dominical implicite —
+     * un restaurant ouvert le dimanche, dont les agents se reposent un autre jour.
+     * <b>Null ⇒ rien n'est retiré</b>, ce qui laisse tout le parc existant inchangé.
+     *
+     * <p>⚠ <b>Sans effet sur {@code LUN_VEN}</b> : la semaine y porte déjà ses deux jours de
+     * repos, en retirer un troisième donnerait une semaine de quatre jours. La garde est ici
+     * plutôt que dans le formulaire seul, pour qu'une valeur restée en base sur un dossier
+     * dont le rythme a changé après coup reste sans effet.
+     *
+     * <p>⚠ La convention est celle de {@code Date.getDay()} côté front (0 = dimanche), qui
+     * coïncide avec l'ISO de lundi à samedi. Le 7 ISO est accepté pour dimanche : une
+     * écriture directe en base à ce format ne doit pas passer inaperçue.
+     */
+    private boolean estJourDeRepos(AffectationSite affectation, String rythme, DayOfWeek jour) {
+        Integer repos = affectation.getJourRepos();
+        if (repos == null) return false;
+        if (rythme != null && JoursTravail.LUN_VEN.name().equals(rythme.trim())) return false;
+        int normalise = repos == 7 ? 0 : repos;
+        int jourFront = jour == DayOfWeek.SUNDAY ? 0 : jour.getValue();
+        return normalise == jourFront;
     }
 
     /**

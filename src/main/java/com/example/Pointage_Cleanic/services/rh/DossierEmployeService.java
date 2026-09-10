@@ -488,6 +488,17 @@ public class DossierEmployeService {
                             + " (valeurs autorisées : LUN_VEN, LUN_SAM, LUN_DIM)");
         }
 
+        // Jour de repos hebdomadaire : facultatif (null ⇒ repos dominical implicite), mais
+        // une valeur hors intervalle serait silencieusement sans effet dans le résolveur —
+        // et donc indétectable. 0 = dimanche … 6 = samedi, 7 toléré pour dimanche (ISO).
+        Integer jourRepos = affectation.getJourRepos();
+        if (jourRepos != null && (jourRepos < 0 || jourRepos > 7)) {
+            throw new IllegalArgumentException(
+                    "jourRepos invalide pour le site " + affectation.getSite()
+                            + " : " + jourRepos
+                            + " (0 = dimanche … 6 = samedi)");
+        }
+
         // Période de présence sur le site. Les deux bornes restent FACULTATIVES :
         // l'import bulk et SiteAffecteUtils.affectationsDepuisSiteAffecte produisent
         // des affectations sans aucune date, les exiger casserait ces deux flux.

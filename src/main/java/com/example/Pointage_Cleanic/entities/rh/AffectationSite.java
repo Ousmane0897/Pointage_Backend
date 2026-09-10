@@ -68,4 +68,34 @@ public class AffectationSite {
 
     /** Semaine ouvrée PROPRE À CE SITE : LUN_VEN, LUN_SAM ou LUN_DIM. Nullable. */
     private String joursTravail;
+
+    /**
+     * Jour de repos hebdomadaire sur ce site.
+     *
+     * <p><b>Convention : celle de {@code Date.getDay()} côté front</b> — 0 = dimanche,
+     * 1 = lundi … 6 = samedi. Elle coïncide avec {@link java.time.DayOfWeek#getValue()} pour lundi à
+     * samedi ; seul dimanche diffère (0 ici, 7 en ISO). Les deux valeurs sont acceptées en
+     * lecture, ce qui évite qu'une écriture directe en base au format ISO ne passe
+     * inaperçue.
+     *
+     * <p>⚠ <b>Null ⇒ rien n'est retiré.</b> Un site en {@code LUN_SAM} conserve donc son
+     * repos implicite du dimanche, et tout le parc existant garde le comportement qu'il
+     * avait avant l'introduction du champ. Il n'est saisi que pour les sites qui dérogent —
+     * un restaurant ouvert le dimanche, dont les agents se reposent un autre jour.
+     *
+     * <p>⚠ Sans {@code @NotNull}, pour la même raison que {@code dateEntree} et
+     * {@code joursTravail} : l'import bulk et le repli {@code affectationsDepuisSiteAffecte}
+     * produisent des affectations incomplètes, et l'exiger casserait ces deux flux.
+     *
+     * <p>⚠ <b>Ne s'applique qu'aux rythmes de plus de cinq jours.</b> En {@code LUN_VEN}, la
+     * semaine porte déjà ses deux jours de repos ; en retirer un troisième donnerait une
+     * semaine de quatre jours. La garde est dans
+     * {@link com.example.Pointage_Cleanic.services.rh.PlanningAffectationResolver}, pour
+     * qu'une valeur restée en base sur un rythme changé après coup reste sans effet.
+     *
+     * <p>⚠ Le jour de repos est <b>fixe</b> par agent et par site : il ne tourne pas d'une
+     * semaine à l'autre. Un roulement demanderait un planning de repos hebdomadaire, qui
+     * rendrait ce champ caduc plutôt que faux.
+     */
+    private Integer jourRepos;
 }
