@@ -52,6 +52,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -333,6 +334,11 @@ public class DossierEmployeService {
      * Valide que {@code joursTravail}, s'il est présent, appartient à l'ensemble
      * des valeurs de {@link JoursTravail} ({@code LUN_VEN, LUN_SAM, LUN_DIM}).
      * Champ optionnel / nullable (rétro-compat) : {@code null}/blank est accepté.
+     * <p>
+     * ⚠ {@code PERSONNALISE} est refusé <b>à ce niveau</b> : le marqueur désigne la liste
+     * {@code joursSemaine} d'une <i>affectation</i>, et au niveau du dossier il ne désigne
+     * rien. {@code AffectationSiteBackfillRunner} le recopierait alors sur des affectations
+     * dépourvues de liste, qui basculeraient toutes en échelon permissif — silencieusement.
      */
     private void validerJoursTravail(String joursTravail) {
         if (joursTravail == null || joursTravail.isBlank()) return;
@@ -341,6 +347,23 @@ public class DossierEmployeService {
                     "joursTravail invalide : " + joursTravail
                             + " (valeurs autorisées : LUN_VEN, LUN_SAM, LUN_DIM)");
         }
+        if (estMarqueurPersonnalise(joursTravail)) {
+            throw new IllegalArgumentException(
+                    "joursTravail = PERSONNALISE ne vaut que pour une affectation site "
+                            + "(il désigne sa liste joursSemaine), pas pour le dossier employé");
+        }
+    }
+
+    /**
+     * {@code joursTravail} vaut-il le marqueur de jours explicites ?
+     * <p>
+     * ⚠ Volontairement <b>hors</b> de {@link #estJoursTravailValide}, qui doit rester
+     * l'oracle brut de l'enum : il sert aussi à {@link #validerAffectation}, où
+     * {@code PERSONNALISE} est parfaitement légitime.
+     */
+    private boolean estMarqueurPersonnalise(String joursTravail) {
+        return joursTravail != null
+                && JoursTravail.PERSONNALISE.name().equals(joursTravail.trim());
     }
 
     private boolean estJoursTravailValide(String joursTravail) {
@@ -398,6 +421,52 @@ public class DossierEmployeService {
         // que MapStruct a recopié. Les affectations dérivées de `siteAffecte` en
         // reçoivent un ici plutôt que dans SiteAffecteUtils, qui doit rester pure.
         AffectationSiteUtils.assurerIds(entity.getAffectations());
+        // Après la dérivation de `siteAffecte` : la canonicalisation ne touche qu'au rythme,
+        // jamais au site, l'ordre entre les deux est donc indifférent — mais elle doit voir
+        // TOUTES les affectations, y compris celles dérivées de la branche rétro-compat.
+        if (entity.getAffectations() != null) {
+            entity.getAffectations().forEach(this::canonicaliserJoursSemaine);
+        }
+    }
+
+    /**
+     * Met la semaine ouvrée d'une affectation sous forme canonique.
+     * <p>
+     * Liste non vide ⇒ elle fait autorité : on l'écrit normalisée (7 ISO ramené à 0, doublons
+     * retirés, tri croissant), on pose le marqueur {@code PERSONNALISE} et on <b>efface</b>
+     * {@code jourRepos}. Sans cela une affectation pourrait porter à la fois « LUN_VEN » et
+     * « [0, 6] » — deux vérités contradictoires en base, dont seule la seconde compte, et un
+     * relecteur de la collection Mongo croirait la première.
+     * <p>
+     * ⚠ Doublons et 7 ISO sont <b>normalisés, pas refusés</b> : ils sont sans conséquence
+     * fonctionnelle (le test du résolveur est un OU) et bloquer l'enregistrement du dossier
+     * entier pour cela serait disproportionné. Une valeur hors intervalle, elle, est refusée
+     * en amont par {@link #validerAffectation}.
+     * <p>
+     * ⚠ Liste vide ou nulle ⇒ remise à {@code null} et <b>rien d'autre n'est touché</b> :
+     * {@code null} reste ainsi le seul état « pas de jours explicites », et le comportement du
+     * parc existant est strictement inchangé.
+     */
+    private void canonicaliserJoursSemaine(AffectationSite affectation) {
+        if (affectation == null) return;
+        List<Integer> jours = affectation.getJoursSemaine();
+        if (jours == null || jours.isEmpty()) {
+            affectation.setJoursSemaine(null);
+            return;
+        }
+        List<Integer> normalises = jours.stream()
+                .filter(Objects::nonNull)
+                .map(j -> j == 7 ? 0 : j)
+                .distinct()
+                .sorted()
+                .collect(Collectors.toList());
+        if (normalises.isEmpty()) {
+            affectation.setJoursSemaine(null);
+            return;
+        }
+        affectation.setJoursSemaine(normalises);
+        affectation.setJoursTravail(JoursTravail.PERSONNALISE.name());
+        affectation.setJourRepos(null);
     }
 
     /**
@@ -478,14 +547,42 @@ public class DossierEmployeService {
             }
         }
 
-        // Semaine ouvrée du site : même oracle que le champ homonyme de l'employé.
+        // Semaine ouvrée du site : même oracle que le champ homonyme de l'employé, mais
+        // PERSONNALISE y est légitime — c'est justement le niveau auquel il désigne
+        // quelque chose (la liste joursSemaine ci-dessous).
         String joursTravail = affectation.getJoursTravail();
         if (joursTravail != null && !joursTravail.isBlank()
                 && !estJoursTravailValide(joursTravail)) {
             throw new IllegalArgumentException(
                     "joursTravail invalide pour le site " + affectation.getSite()
                             + " : " + joursTravail
-                            + " (valeurs autorisées : LUN_VEN, LUN_SAM, LUN_DIM)");
+                            + " (valeurs autorisées : LUN_VEN, LUN_SAM, LUN_DIM, PERSONNALISE)");
+        }
+
+        // Jours travaillés explicites : 0 = dimanche … 6 = samedi (7 toléré pour dimanche,
+        // comme jourRepos). Une valeur hors intervalle serait silencieusement ignorée par le
+        // résolveur — donc indétectable, exactement le piège déjà traité pour jourRepos.
+        List<Integer> joursSemaine = affectation.getJoursSemaine();
+        if (joursSemaine != null) {
+            for (Integer j : joursSemaine) {
+                if (j == null || j < 0 || j > 7) {
+                    throw new IllegalArgumentException(
+                            "joursSemaine invalide pour le site " + affectation.getSite()
+                                    + " : " + j
+                                    + " (0 = dimanche … 6 = samedi)");
+                }
+            }
+        }
+
+        // PERSONNALISE sans aucun jour : le marqueur promet une liste qui n'existe pas, et le
+        // résolveur ne peut alors QUE tomber en échelon permissif (site réputé travaillé tous
+        // les jours) — soit l'inverse de ce que la RH croit avoir saisi. Refusé à l'ÉCRITURE ;
+        // la lecture, elle, reste permissive pour une donnée déjà présente en base.
+        if (estMarqueurPersonnalise(joursTravail)
+                && (joursSemaine == null || joursSemaine.isEmpty())) {
+            throw new IllegalArgumentException(
+                    "Au moins un jour travaillé est requis pour le site "
+                            + affectation.getSite() + " lorsque joursTravail = PERSONNALISE");
         }
 
         // Jour de repos hebdomadaire : facultatif (null ⇒ repos dominical implicite), mais
@@ -772,8 +869,15 @@ public class DossierEmployeService {
 
         // joursTravail : optionnel (le front ne l'importe pas). Validé seulement
         // s'il est présent, pour ne pas casser le template existant.
+        //
+        // ⚠ PERSONNALISE est refusé ici comme au niveau du dossier : l'import ne construit
+        // que des affectations dérivées de `siteAffecte`, donc dépourvues de `joursSemaine`.
+        // L'accepter poserait un marqueur ne désignant aucune liste, et le message annoncé à
+        // l'utilisateur ne propose de toute façon que les trois préréglages.
         String joursTravail = dto.getJoursTravail();
-        if (joursTravail != null && !joursTravail.isBlank() && !estJoursTravailValide(joursTravail)) {
+        boolean joursTravailInvalide = joursTravail != null && !joursTravail.isBlank()
+                && (!estJoursTravailValide(joursTravail) || estMarqueurPersonnalise(joursTravail));
+        if (joursTravailInvalide) {
             errorsByLine.get(index).add(new DossierEmployeImportError(
                     index, dto.getMatricule(), "joursTravail", "VALEUR_INVALIDE",
                     "joursTravail invalide (valeurs autorisées : LUN_VEN, LUN_SAM, LUN_DIM)"));

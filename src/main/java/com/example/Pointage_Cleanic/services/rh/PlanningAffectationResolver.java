@@ -68,7 +68,9 @@ public class PlanningAffectationResolver {
 
     /**
      * Le site est-il travaillé ce jour de la semaine ? Échelle de replis :
-     * <ol>
+     * <ol start="0">
+     *   <li>les <b>jours explicites du site</b> ({@code AffectationSite.joursSemaine}),
+     *       quand la liste est renseignée ;</li>
      *   <li>la semaine ouvrée <b>du site</b> ({@code AffectationSite.joursTravail}) ;</li>
      *   <li>à défaut celle <b>de l'employé</b> ({@code DossierEmploye.joursTravail},
      *       antérieure au rattachement par site) ;</li>
@@ -90,6 +92,15 @@ public class PlanningAffectationResolver {
      * est retiré <i>après</i> la semaine ouvrée — voir {@link #estJourDeRepos}.
      */
     public boolean jourOuvre(AffectationSite affectation, DossierEmploye employe, DayOfWeek jour) {
+        // ── Échelon 0 : les jours explicites du site, quand ils sont renseignés.
+        // Ils font SEULS autorité — ni le rythme préréglé, ni le jour de repos ne s'y
+        // ajoutent : la liste EST la semaine ouvrée. C'est ce qui permet d'exprimer
+        // « lundi, mercredi, vendredi », rythme que JoursTravail ne sait pas décrire et
+        // qui faisait compter l'agent ABSENT les quatre autres jours.
+        if (aDesJoursExplicites(affectation)) {
+            return contientJour(affectation.getJoursSemaine(), jour);
+        }
+
         String rythme = affectation.getJoursTravail();
         if (rythme == null || rythme.isBlank()) {
             rythme = employe != null ? employe.getJoursTravail() : null;
@@ -109,8 +120,50 @@ public class PlanningAffectationResolver {
             case LUN_VEN -> jour.getValue() <= DayOfWeek.FRIDAY.getValue();
             case LUN_SAM -> jour.getValue() <= DayOfWeek.SATURDAY.getValue();
             case LUN_DIM -> true;
+            // ⚠ PERSONNALISE sans jours exploitables : AUCUN filtrage, et non « aucun
+            // jour ». Le marqueur promet une liste dans joursSemaine ; si elle est absente,
+            // on ne sait rien du rythme, et déclarer la semaine fermée mettrait les jours
+            // ouvrables — donc les absences — à zéro. Le faux négatif reste ici le pire
+            // mode de défaillance. Le service refuse cette combinaison à l'écriture : cette
+            // branche ne couvre qu'une écriture directe en base.
+            case PERSONNALISE -> true;
         };
         return dansLaSemaineOuvree && !estJourDeRepos(affectation, rythme, jour);
+    }
+
+    /**
+     * La semaine ouvrée du site est-elle donnée en clair, sous une forme exploitable ?
+     *
+     * <p>⚠ Une liste ne contenant <b>que</b> des valeurs inutilisables (nulles ou hors
+     * intervalle, cas d'une corruption) est réputée <b>absente</b> : on retombe alors sur le
+     * rythme, plutôt que de fermer la semaine entière. Même prudence que le rythme corrompu
+     * ci-dessus — une donnée illisible ne doit pas faire disparaître des créneaux.
+     */
+    private boolean aDesJoursExplicites(AffectationSite affectation) {
+        List<Integer> jours = affectation.getJoursSemaine();
+        if (jours == null) return false;
+        for (Integer j : jours) {
+            if (j != null && j >= 0 && j <= 7) return true;
+        }
+        return false;
+    }
+
+    /**
+     * Ce jour figure-t-il dans la liste explicite ?
+     *
+     * <p>Convention {@code Date.getDay()} du front (0 = dimanche), 7 ISO toléré — mêmes
+     * règles que {@link #estJourDeRepos}. Les entrées nulles ou hors intervalle sont
+     * ignorées plutôt que refusées : le résolveur est un lecteur, la validation vit dans
+     * {@code DossierEmployeService}.
+     */
+    private boolean contientJour(List<Integer> jours, DayOfWeek jour) {
+        int jourFront = jour == DayOfWeek.SUNDAY ? 0 : jour.getValue();
+        for (Integer j : jours) {
+            if (j == null) continue;
+            int normalise = j == 7 ? 0 : j;
+            if (normalise == jourFront) return true;
+        }
+        return false;
     }
 
     /**

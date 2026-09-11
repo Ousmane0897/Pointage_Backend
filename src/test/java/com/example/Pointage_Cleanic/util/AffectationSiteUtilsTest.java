@@ -131,4 +131,20 @@ class AffectationSiteUtilsTest {
         assertThat(AffectationSiteUtils.signature(sans))
                 .isEqualTo(AffectationSiteUtils.signature(avec));
     }
+
+    @Test
+    void la_signature_ignore_les_jours_explicites() {
+        // Même raison, et le piège est ici plus vif encore : `null` et `[]` disent la même
+        // chose, et l'ordre des jours n'est pas garanti d'un aller-retour à l'autre. Inclure
+        // la liste dans la clé bloquerait l'enregistrement du dossier entier sur un écart
+        // sans signification.
+        AffectationSite sans = AffectationSite.builder().site("Yoff")
+                .dateEntree(LocalDate.of(2026, 1, 1)).build();
+        AffectationSite avec = AffectationSite.builder().site("Yoff")
+                .dateEntree(LocalDate.of(2026, 1, 1))
+                .joursTravail("PERSONNALISE").joursSemaine(List.of(1, 3, 5)).build();
+
+        assertThat(AffectationSiteUtils.signature(sans))
+                .isEqualTo(AffectationSiteUtils.signature(avec));
+    }
 }

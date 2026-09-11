@@ -130,6 +130,72 @@ class CalendrierTravailServiceTest {
         assertThat(calendrier.estFerie(FERIE_MERCREDI, null)).isFalse();
     }
 
+    // --- Jours travaillés explicites (agents 2-3 jours par semaine) ----------
+
+    /** Affectation à jours explicites, marqueur compris. */
+    private static AffectationSite sitePersonnalise(String nom, List<Integer> jours) {
+        return AffectationSite.builder()
+                .site(nom).joursTravail("PERSONNALISE").joursSemaine(jours).build();
+    }
+
+    @Test
+    void un_agent_trois_jours_par_semaine_ne_compte_que_ses_jours() {
+        // Septembre 2026 : 4 lundis (7, 14, 21, 28), 5 mercredis (2, 9, 16, 23, 30) et
+        // 4 vendredis (4, 11, 18, 25) — soit 13 jours dus au lieu des 22 de LUN_VEN. Ce
+        // sont exactement les 9 jours d'écart qui étaient comptés comme des absences.
+        assertThat(compte(employe(sitePersonnalise("Praline", List.of(1, 3, 5))), Set.of()))
+                .isEqualTo(13);
+    }
+
+    @Test
+    void un_agent_deux_jours_par_semaine_ne_compte_que_ses_jours() {
+        // Mardis (1, 8, 15, 22, 29) + jeudis (3, 10, 17, 24) = 9.
+        assertThat(compte(employe(sitePersonnalise("Praline", List.of(2, 4))), Set.of()))
+                .isEqualTo(9);
+    }
+
+    @Test
+    void un_ferie_tombant_sur_un_jour_explicite_le_retire() {
+        // Le mercredi 16 est dû : 13 − 1 = 12. Un férié n'est jamais ouvrable.
+        assertThat(compte(employe(sitePersonnalise("Praline", List.of(1, 3, 5))),
+                Set.of(FERIE_MERCREDI))).isEqualTo(12);
+    }
+
+    @Test
+    void un_ferie_hors_des_jours_explicites_ne_change_rien() {
+        // Le dimanche 20 n'était pas dû : le retirer serait le décompter deux fois.
+        assertThat(compte(employe(sitePersonnalise("Praline", List.of(1, 3, 5))),
+                Set.of(FERIE_DIMANCHE))).isEqualTo(13);
+    }
+
+    @Test
+    void feriesTravailles_ignore_un_ferie_hors_des_jours_explicites() {
+        DossierEmploye e = employe(sitePersonnalise("Praline", List.of(1, 3, 5)));
+        assertThat(calendrier.feriesTravailles(e, DEBUT, FIN,
+                Set.of(FERIE_MERCREDI, FERIE_DIMANCHE)))
+                .containsExactly(FERIE_MERCREDI);
+    }
+
+    @Test
+    void multi_sites_la_regle_reste_le_ou_avec_des_jours_explicites() {
+        // 3 j/semaine sur un site + LUN_VEN sur l'autre : l'agent doit bien 22 jours, ses
+        // mardis et jeudis étant honorés ailleurs.
+        DossierEmploye e = employe(
+                sitePersonnalise("Praline", List.of(1, 3, 5)),
+                site("Siège", "LUN_VEN", null));
+        assertThat(compte(e, Set.of())).isEqualTo(22);
+    }
+
+    @Test
+    void la_periode_de_presence_s_applique_aussi_aux_jours_explicites() {
+        AffectationSite arriveeEnCoursDeMois = AffectationSite.builder()
+                .site("Praline").joursTravail("PERSONNALISE").joursSemaine(List.of(1, 3, 5))
+                .dateEntree(LocalDate.of(2026, 9, 16))
+                .build();
+        // Du mercredi 16 au 30 : mercredis 16, 23, 30 + vendredis 18, 25 + lundis 21, 28 = 7.
+        assertThat(compte(employe(arriveeEnCoursDeMois), Set.of())).isEqualTo(7);
+    }
+
     // --- Replis prudents ------------------------------------------------------
 
     @Test

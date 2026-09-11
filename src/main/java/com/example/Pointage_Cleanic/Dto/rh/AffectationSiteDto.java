@@ -5,6 +5,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import lombok.*;
 
 import java.time.LocalDate;
+import java.util.List;
 
 /**
  * DTO d'une affectation site : tranche horaire, période de présence et semaine
@@ -38,7 +39,10 @@ public class AffectationSiteDto {
     @JsonFormat(pattern = "yyyy-MM-dd")
     private LocalDate dateSortie;
 
-    /** Semaine ouvrée propre à ce site : LUN_VEN, LUN_SAM ou LUN_DIM. */
+    /**
+     * Semaine ouvrée propre à ce site : LUN_VEN, LUN_SAM, LUN_DIM ou PERSONNALISE.
+     * {@code PERSONNALISE} n'est pas un rythme mais un marqueur désignant {@link #joursSemaine}.
+     */
     private String joursTravail;
 
     /**
@@ -48,4 +52,13 @@ public class AffectationSiteDto {
      * {@link com.example.Pointage_Cleanic.entities.rh.AffectationSite} pour la règle complète.
      */
     private Integer jourRepos;
+
+    /**
+     * Jours travaillés explicites sur ce site, en indices {@code Date.getDay()}
+     * (0 = dimanche … 6 = samedi). <b>Non vide ⇒ fait seule autorité</b>, ni
+     * {@code joursTravail} ni {@code jourRepos} ne s'y appliquent ; null ou vide ⇒
+     * comportement antérieur inchangé. Voir
+     * {@link com.example.Pointage_Cleanic.entities.rh.AffectationSite} pour la règle complète.
+     */
+    private List<Integer> joursSemaine;
 }
