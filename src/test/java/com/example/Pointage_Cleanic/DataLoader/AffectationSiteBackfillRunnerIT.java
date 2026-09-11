@@ -210,6 +210,51 @@ class AffectationSiteBackfillRunnerIT extends MongoTestContainer {
         assertThat(affectation.getDateEntree()).isEqualTo(LocalDate.of(2026, 6, 1));
     }
 
+    @Test
+    void backfill_ne_touche_pas_une_affectation_a_jours_explicites() {
+        // ⚠ Une affectation dont la liste fait autorité n'a pas de rythme à recevoir : y
+        // poser celui de l'employé écrirait une seconde vérité contradictoire. Et surtout,
+        // le runner ne DÉRIVE jamais `joursSemaine` — personne ne connaît les jours réels
+        // d'un agent legacy, et les inventer recréerait les fausses absences.
+        DossierEmploye explicite = DossierEmploye.builder()
+                .matricule("MAT-EXPL").agentId("1913").nom("Expl").prenom("Ite")
+                .dateEmbauche(LocalDate.of(2025, 1, 1)).statut(StatutDossierEmploye.ACTIF)
+                .joursTravail("LUN_SAM")
+                .siteAffecte("Praline")
+                .affectations(List.of(AffectationSite.builder()
+                        .site("Praline").joursSemaine(List.of(1, 3, 5))
+                        .dateEntree(LocalDate.of(2026, 6, 1)).build()))
+                .build();
+        repository.save(explicite);
+
+        runner.run();
+
+        AffectationSite affectation =
+                repository.findByMatricule("MAT-EXPL").orElseThrow().getAffectations().get(0);
+        assertThat(affectation.getJoursTravail()).isNull();
+        assertThat(affectation.getJoursSemaine()).containsExactly(1, 3, 5);
+    }
+
+    @Test
+    void backfill_ne_derive_jamais_de_jours_explicites() {
+        // Un dossier legacy sort du backfill avec un rythme, jamais avec une liste : c'est
+        // ce qui garantit que rien ne bouge pour le parc existant.
+        DossierEmploye legacy = DossierEmploye.builder()
+                .matricule("MAT-LEG").agentId("1914").nom("Leg").prenom("Acy")
+                .dateEmbauche(LocalDate.of(2025, 1, 1)).statut(StatutDossierEmploye.ACTIF)
+                .joursTravail("LUN_SAM")
+                .siteAffecte("Yoff")
+                .build();
+        repository.save(legacy);
+
+        runner.run();
+
+        AffectationSite affectation =
+                repository.findByMatricule("MAT-LEG").orElseThrow().getAffectations().get(0);
+        assertThat(affectation.getJoursTravail()).isEqualTo("LUN_SAM");
+        assertThat(affectation.getJoursSemaine()).isNull();
+    }
+
     // ---- Identité de ligne -------------------------------------------------------------
 
     /**

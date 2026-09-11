@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonFormat;
 import lombok.*;
 
 import java.time.LocalDate;
+import java.util.List;
 
 /**
  * Affectation d'un employé à un site : tranche horaire, période de présence et
@@ -98,4 +99,33 @@ public class AffectationSite {
      * rendrait ce champ caduc plutôt que faux.
      */
     private Integer jourRepos;
+
+    /**
+     * Jours travaillés explicites sur ce site, en indices {@code Date.getDay()} côté front
+     * (0 = dimanche, 1 = lundi … 6 = samedi) — la convention de {@link #jourRepos}.
+     *
+     * <p>⚠ <b>Non vide ⇒ fait seule autorité.</b> Ni {@code joursTravail} ni
+     * {@code jourRepos} ne s'y appliquent : la liste <i>est</i> la semaine ouvrée. C'est le
+     * cas de l'agent qui ne vient que le lundi, le mercredi et le vendredi — un rythme que
+     * les trois valeurs préréglées ne peuvent pas exprimer, et qui le faisait compter
+     * ABSENT les quatre autres jours.
+     *
+     * <p>⚠ <b>Null ou vide ⇒ comportement antérieur strictement inchangé</b> (échelle de
+     * replis « par site → par employé → aucun filtrage »). Tout le parc existant est donc
+     * neutre, sans migration.
+     *
+     * <p>⚠ Sans {@code @NotNull}, pour la même raison que {@code dateEntree} et
+     * {@code joursTravail} : l'import bulk et le repli {@code affectationsDepuisSiteAffecte}
+     * produisent des affectations incomplètes, et l'exiger casserait ces deux flux.
+     *
+     * <p>⚠ Le 7 ISO est toléré en lecture pour dimanche, comme {@link #jourRepos} : une
+     * écriture directe en base à ce format ne doit pas passer inaperçue. Les écritures
+     * passant par l'API sont normalisées (7 → 0, dédoublonnées, triées) par
+     * {@code DossierEmployeService}.
+     *
+     * <p>⚠ Jours <b>fixes</b>, comme {@link #jourRepos} : aucune rotation d'une semaine à
+     * l'autre. Un roulement demanderait un planning hebdomadaire, qui rendrait ce champ
+     * caduc plutôt que faux.
+     */
+    private List<Integer> joursSemaine;
 }

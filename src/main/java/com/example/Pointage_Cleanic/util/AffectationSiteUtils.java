@@ -96,9 +96,10 @@ public final class AffectationSiteUtils {
      * autrement la garde anti-perte, et celle-ci doit valoir <b>dès le premier
      * déploiement</b>, avant que le backfill n'ait posé le moindre id.
      * <p>
-     * Les horaires et la semaine ouvrée n'en font délibérément pas partie : les y
-     * inclure rendrait le rapprochement sensible au moindre écart d'aller-retour
-     * ({@code ""} vs {@code null}, {@code "6:00"} vs {@code "06:00"}) et bloquerait
+     * Les horaires et la semaine ouvrée — <b>liste de jours explicites comprise</b> —
+     * n'en font délibérément pas partie : les y inclure rendrait le rapprochement sensible
+     * au moindre écart d'aller-retour ({@code ""} vs {@code null}, {@code "6:00"} vs
+     * {@code "06:00"}, {@code null} vs {@code []}, ordre des jours) et bloquerait
      * l'enregistrement du dossier entier.
      */
     public static String signature(AffectationSite affectation) {

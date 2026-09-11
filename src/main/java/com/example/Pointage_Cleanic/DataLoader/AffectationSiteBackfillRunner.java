@@ -103,7 +103,18 @@ public class AffectationSiteBackfillRunner implements CommandLineRunner {
         boolean modifie = AffectationSiteUtils.assurerIds(affectations);
         for (AffectationSite affectation : affectations) {
             if (affectation == null) continue;
-            if (affectation.getJoursTravail() == null && dossier.getJoursTravail() != null) {
+            // ⚠ Une affectation portant des jours explicites n'a pas de rythme à recevoir :
+            // sa liste fait déjà seule autorité, et y poser le rythme de l'employé écrirait
+            // une seconde vérité contradictoire en base. En pratique la canonicalisation du
+            // service pose toujours PERSONNALISE, mais la garde protège d'une écriture
+            // directe — et ce runner doit rester purement additif.
+            //
+            // ⚠ On ne dérive JAMAIS `joursSemaine` : personne ne connaît les jours réels
+            // d'un agent legacy, et les inventer recréerait les fausses absences que ce
+            // champ existe précisément pour supprimer.
+            if (affectation.getJoursTravail() == null
+                    && affectation.getJoursSemaine() == null
+                    && dossier.getJoursTravail() != null) {
                 affectation.setJoursTravail(dossier.getJoursTravail());
                 modifie = true;
             }

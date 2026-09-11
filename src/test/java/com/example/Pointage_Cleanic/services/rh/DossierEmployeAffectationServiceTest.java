@@ -24,6 +24,7 @@ import org.springframework.data.mongodb.core.MongoTemplate;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -84,8 +85,13 @@ class DossierEmployeAffectationServiceTest {
         });
         // Conversion réelle DTO → entité pour les affectations.
         // ⚠ Recopier TOUS les champs, comme le fait MapStruct : un stub partiel
-        // (id/dates/joursTravail oubliés) rendrait verts, pour de mauvaises raisons,
-        // les tests qui portent justement sur l'identité et la période des lignes.
+        // (id/dates/joursTravail/jourRepos/joursSemaine oubliés) rendrait verts, pour de
+        // mauvaises raisons, les tests qui portent justement sur l'identité, la période et
+        // le rythme des lignes.
+        //
+        // ⚠ Liste **mutable** pour `joursSemaine` : la canonicalisation du service la
+        // remplace, mais un `List.of()` immuable ferait échouer toute évolution qui la
+        // trierait en place — et le vrai mapper produit bien un `new ArrayList<>(…)`.
         when(mapper.toAffectationEntities(any())).thenAnswer(inv -> {
             List<AffectationSiteDto> dtos = inv.getArgument(0);
             if (dtos == null) return null;
@@ -98,6 +104,10 @@ class DossierEmployeAffectationServiceTest {
                             .dateEntree(d.getDateEntree())
                             .dateSortie(d.getDateSortie())
                             .joursTravail(d.getJoursTravail())
+                            .jourRepos(d.getJourRepos())
+                            .joursSemaine(d.getJoursSemaine() == null
+                                    ? null
+                                    : new ArrayList<>(d.getJoursSemaine()))
                             .build())
                     .toList();
         });
@@ -426,6 +436,108 @@ class DossierEmployeAffectationServiceTest {
         service.update("emp1", dto, null);
 
         assertThat(captureSaved().getSiteAffecte()).isEmpty();
+    }
+
+    // ─── Jours travaillés explicites (agents 2-3 jours par semaine) ───────────
+
+    @Test
+    void joursSemaine_hors_intervalle_est_refuse() {
+        // Une valeur hors 0..7 serait silencieusement ignorée par le résolveur, donc
+        // indétectable — même piège que jourRepos.
+        DossierEmployeDto dto = baseDto("M1", "0001");
+        dto.setAffectations(List.of(AffectationSiteDto.builder()
+                .site("Praline").joursTravail("PERSONNALISE").joursSemaine(List.of(1, 8)).build()));
+
+        assertThatThrownBy(() -> service.create(dto, null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("joursSemaine invalide");
+    }
+
+    @Test
+    void personnalise_sans_jours_est_refuse_a_l_ecriture() {
+        // Le marqueur promet une liste absente : l'enregistrement ne dirait pas ce que la RH
+        // croit avoir saisi, puisque le résolveur tomberait en échelon permissif.
+        DossierEmployeDto dto = baseDto("M1", "0001");
+        dto.setAffectations(List.of(AffectationSiteDto.builder()
+                .site("Praline").joursTravail("PERSONNALISE").build()));
+
+        assertThatThrownBy(() -> service.create(dto, null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Au moins un jour travaillé est requis");
+    }
+
+    @Test
+    void joursSemaine_non_vide_canonicalise_le_rythme_et_efface_le_repos() throws Exception {
+        // Sans cette canonicalisation, l'affectation porterait « LUN_SAM » ET « [1,3,5] » :
+        // deux vérités contradictoires en base, dont seule la seconde compte.
+        DossierEmployeDto dto = baseDto("M1", "0001");
+        dto.setAffectations(List.of(AffectationSiteDto.builder()
+                .site("Praline").joursTravail("LUN_SAM").jourRepos(2)
+                .joursSemaine(List.of(1, 3, 5)).build()));
+
+        service.create(dto, null);
+
+        AffectationSite a = captureSaved().getAffectations().get(0);
+        assertThat(a.getJoursTravail()).isEqualTo("PERSONNALISE");
+        assertThat(a.getJoursSemaine()).containsExactly(1, 3, 5);
+        assertThat(a.getJourRepos()).isNull();
+    }
+
+    @Test
+    void joursSemaine_est_normalise() throws Exception {
+        // 7 ISO ramené à 0, doublons retirés, tri croissant : normalisé et non refusé, car
+        // sans conséquence fonctionnelle (le test du résolveur est un OU).
+        DossierEmployeDto dto = baseDto("M1", "0001");
+        dto.setAffectations(List.of(AffectationSiteDto.builder()
+                .site("Praline").joursTravail("PERSONNALISE")
+                .joursSemaine(List.of(5, 7, 1, 1, 3)).build()));
+
+        service.create(dto, null);
+
+        assertThat(captureSaved().getAffectations().get(0).getJoursSemaine())
+                .containsExactly(0, 1, 3, 5);
+    }
+
+    @Test
+    void une_liste_vide_est_persistee_nulle() throws Exception {
+        // `null` doit rester le seul état « pas de jours explicites », sans quoi le
+        // résolveur aurait deux formes à distinguer pour le même sens.
+        DossierEmployeDto dto = baseDto("M1", "0001");
+        dto.setAffectations(List.of(AffectationSiteDto.builder()
+                .site("Praline").joursTravail("LUN_VEN").joursSemaine(List.of()).build()));
+
+        service.create(dto, null);
+
+        AffectationSite a = captureSaved().getAffectations().get(0);
+        assertThat(a.getJoursSemaine()).isNull();
+        assertThat(a.getJoursTravail()).isEqualTo("LUN_VEN");
+    }
+
+    @Test
+    void joursTravail_PERSONNALISE_est_refuse_au_niveau_dossier() {
+        // À ce niveau le marqueur ne désigne aucune liste, et le backfill le recopierait sur
+        // des affectations vides — donc en échelon permissif silencieux.
+        DossierEmployeDto dto = baseDto("M1", "0001");
+        dto.setJoursTravail("PERSONNALISE");
+
+        assertThatThrownBy(() -> service.create(dto, null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("PERSONNALISE ne vaut que pour une affectation site");
+    }
+
+    @Test
+    void une_affectation_sans_joursSemaine_est_persistee_inchangee() throws Exception {
+        // Garde de non-régression : tout le parc existant passe par ce chemin.
+        DossierEmployeDto dto = baseDto("M1", "0001");
+        dto.setAffectations(List.of(AffectationSiteDto.builder()
+                .site("Praline").joursTravail("LUN_SAM").jourRepos(2).build()));
+
+        service.create(dto, null);
+
+        AffectationSite a = captureSaved().getAffectations().get(0);
+        assertThat(a.getJoursTravail()).isEqualTo("LUN_SAM");
+        assertThat(a.getJourRepos()).isEqualTo(2);
+        assertThat(a.getJoursSemaine()).isNull();
     }
 
     // ─── Fixtures ─────────────────────────────────────────────────────────────
