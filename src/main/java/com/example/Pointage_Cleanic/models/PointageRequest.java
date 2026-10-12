@@ -20,4 +20,14 @@ public class PointageRequest {
 
     private Double latitude;
     private Double longitude;
+
+    /** Précision annoncée par l'appareil (mètres), informative. */
+    private Double precisionMetres;
+
+    /**
+     * Contenu du QR code d'agence ({@code POINTIC:AG:<token>}), relayé tel quel par le
+     * front depuis l'URL scannée. Absent ⇒ flux historique tant que le paramètre
+     * {@code qrObligatoire} est faux.
+     */
+    private String qrPayload;
 }

@@ -5,6 +5,7 @@ import com.example.Pointage_Cleanic.entities.rh.DossierEmploye;
 import com.example.Pointage_Cleanic.exception.ResourceNotFoundException;
 import com.example.Pointage_Cleanic.repositories.PointageRepository;
 import com.example.Pointage_Cleanic.repositories.rh.DossierEmployeRepository;
+import com.example.Pointage_Cleanic.services.pointage.PointageScanService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.*;
@@ -30,6 +31,10 @@ class PointageServicesTest {
 
     @Mock
     private DossierEmployeRepository dossierEmployeRepository;
+
+    // Mock par défaut : evaluer() rend Optional.empty() ⇒ pointage sans QR, flux historique.
+    @Mock
+    private PointageScanService pointageScanService;
 
     private DossierEmploye agent(String agentId, String siteAffecte) {
         DossierEmploye d = new DossierEmploye();

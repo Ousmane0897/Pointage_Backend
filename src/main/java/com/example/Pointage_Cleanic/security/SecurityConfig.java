@@ -82,6 +82,8 @@ public class SecurityConfig {
 
                         // 🔹 Pointages — mobile public (pointage sans token)
                         .requestMatchers(HttpMethod.POST, "/api/pointages").permitAll()
+                        // Nom de l'agence d'un QR, affiché avant la saisie du PIN (kiosque sans token).
+                        .requestMatchers(HttpMethod.GET, "/api/pointages/agence-qr").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/pointages/{codeSecret}").permitAll() // statut consulté par le mobile
                         .requestMatchers("/pointages/**").permitAll() // chemin legacy mobile inchangé
 

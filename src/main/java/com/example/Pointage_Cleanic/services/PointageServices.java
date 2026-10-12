@@ -1,11 +1,15 @@
 package com.example.Pointage_Cleanic.services;
 
 
+import com.example.Pointage_Cleanic.Dto.pointage.PointageResponse;
+import com.example.Pointage_Cleanic.Enum.pointage.AnomaliePointage;
 import com.example.Pointage_Cleanic.entities.Pointage;
 import com.example.Pointage_Cleanic.entities.rh.DossierEmploye;
 import com.example.Pointage_Cleanic.exception.ResourceNotFoundException;
 import com.example.Pointage_Cleanic.repositories.PointageRepository;
 import com.example.Pointage_Cleanic.repositories.rh.DossierEmployeRepository;
+import com.example.Pointage_Cleanic.services.pointage.PointageScanService;
+import com.example.Pointage_Cleanic.services.pointage.PointageScanService.ScanAgence;
 import com.example.Pointage_Cleanic.util.SiteAffecteUtils;
 import com.lowagie.text.PageSize;
 import com.lowagie.text.Phrase;
@@ -33,6 +37,7 @@ import java.io.ByteArrayOutputStream;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
@@ -56,6 +61,8 @@ public class PointageServices {
     // 4 chiffres envoyé par le mobile) dans dossiers_employes. Les modèles legacy
     // Employe / EmployeComplet ne sont plus consultés par le flux de pointage.
     private final DossierEmployeRepository dossierEmployeRepository;
+    // Contrôle du QR code d'agence : purement en lecture, appelé AVANT toute écriture.
+    private final PointageScanService pointageScanService;
 
     Pointage save(Pointage pointage) {
 
@@ -266,17 +273,46 @@ public class PointageServices {
             return SiteAffecteUtils.decouper(siteAffecte).toArray(new String[0]);
         }
 
+        /**
+         * Signature historique (sans QR d'agence), conservée pour les appelants existants.
+         * Suit les mêmes règles que {@link #pointer} : si le QR est rendu obligatoire, elle
+         * est refusée comme un pointage sans QR.
+         */
         public Pointage enregistrerPointage(
                 String codeSecret,
                 String deviceId,
                 Double latitude,
                 Double longitude
         ) {
+            return pointer(codeSecret, deviceId, latitude, longitude, null, null).getPointage();
+        }
+
+        /**
+         * Pointage kiosque : arrivée si aucun pointage n'est ouvert aujourd'hui, départ sinon.
+         * <p>
+         * Avec un QR d'agence, le scan est <b>entièrement validé avant toute écriture</b>
+         * (QR, géofence de l'agence scannée, affectation) : une sortie refusée laisse le
+         * pointage ouvert. Entrée et sortie sont jugées chacune contre l'agence de son
+         * propre QR — un agent peut arriver dans une agence et repartir d'une autre.
+         */
+        public PointageResponse pointer(
+                String codeSecret,
+                String deviceId,
+                Double latitude,
+                Double longitude,
+                Double precisionMetres,
+                String qrPayload
+        ) {
 
             // 1️⃣ Vérifier l’employé (référentiel dossier-employé, clé = agentId).
             // Code vide / inconnu → 404 NOT_FOUND JSON via GlobalExceptionHandler.
             DossierEmploye agent = dossierEmployeRepository.findByAgentId(codeSecret)
                     .orElseThrow(() -> new ResourceNotFoundException("Employé introuvable"));
+
+            // 1️⃣bis QR d'agence — lève PointageRefuseException (422) sans rien écrire.
+            ScanAgence scan = pointageScanService
+                    .evaluer(agent, qrPayload, latitude, longitude, precisionMetres)
+                    .orElse(null);
 
             LocalDate today = LocalDate.now();
             LocalTime now = LocalTime.now();
@@ -294,6 +330,19 @@ public class PointageServices {
             Update closeUpdate = new Update()
                     .set("heureDepart", currentTime)
                     .set("status", "TERMINÉ");
+            List<String> anomaliesSortie = anomalies(scan, true);
+            if (scan != null) {
+                // Agence de SORTIE : celle du QR scanné maintenant, jamais celle d'entrée.
+                closeUpdate
+                        .set("agenceIdSortie", scan.agence().getId())
+                        .set("latitudeSortie", scan.latitude())
+                        .set("longitudeSortie", scan.longitude())
+                        .set("precisionMetresSortie", scan.precisionMetres())
+                        .set("distanceMetresSortie", scan.distanceMetres());
+                if (!anomaliesSortie.isEmpty()) {
+                    closeUpdate.push("anomalies").each(anomaliesSortie.toArray());
+                }
+            }
             Pointage ouvert = mongoTemplate.findAndModify(
                     openQuery, closeUpdate,
                     FindAndModifyOptions.options().returnNew(false),
@@ -319,7 +368,22 @@ public class PointageServices {
                 ouvert.setHeureDepart(currentTime);
                 ouvert.setStatus("TERMINÉ");
                 ouvert.setDuree(formattedDuration);
-                return ouvert;
+                if (scan != null) {
+                    // returnNew(false) renvoie l'état pré-update : on reporte ici ce qui
+                    // vient d'être écrit, pour que la réponse reflète la base.
+                    ouvert.setAgenceIdSortie(scan.agence().getId());
+                    ouvert.setLatitudeSortie(scan.latitude());
+                    ouvert.setLongitudeSortie(scan.longitude());
+                    ouvert.setPrecisionMetresSortie(scan.precisionMetres());
+                    ouvert.setDistanceMetresSortie(scan.distanceMetres());
+                    if (!anomaliesSortie.isEmpty()) {
+                        List<String> toutes = new ArrayList<>(
+                                ouvert.getAnomalies() == null ? List.of() : ouvert.getAnomalies());
+                        toutes.addAll(anomaliesSortie);
+                        ouvert.setAnomalies(toutes);
+                    }
+                }
+                return reponse(ouvert, "SORTIE", today, now, scan);
             }
 
             // 3️⃣ ARRIVÉE (aucun pointage ouvert → nouveau pointage).
@@ -336,6 +400,7 @@ public class PointageServices {
                 log.warn("Reverse geocoding échoué", e);
             }
 
+            List<String> anomaliesEntree = anomalies(scan, false);
             Pointage pointage = Pointage.builder()
                     .codeSecret(agent.getAgentId())
                     .prenom(agent.getPrenom())
@@ -347,9 +412,48 @@ public class PointageServices {
                     .deviceId(deviceId)
                     .timestamp(Instant.now())
                     .adresse(adresse)
+                    .agenceId(scan == null ? null : scan.agence().getId())
+                    .latitude(scan == null ? null : scan.latitude())
+                    .longitude(scan == null ? null : scan.longitude())
+                    .precisionMetres(scan == null ? null : scan.precisionMetres())
+                    .distanceMetres(scan == null ? null : scan.distanceMetres())
+                    .anomalies(anomaliesEntree.isEmpty() ? null : anomaliesEntree)
                     .build();
 
-            return pointageRepository.save(pointage);
+            return reponse(pointageRepository.save(pointage), "ENTREE", today, now, scan);
+        }
+
+        /** Nom d'agence d'un payload QR (écran d'accueil public), vide si invalide. */
+        public Optional<String> nomAgenceQr(String qrPayload) {
+            return pointageScanService.nomAgence(qrPayload);
+        }
+
+        /** Anomalies du scan, suffixées par le moment désormais connu. */
+        private static List<String> anomalies(ScanAgence scan, boolean sortie) {
+            List<String> liste = new ArrayList<>();
+            if (scan == null) {
+                return liste;
+            }
+            if (scan.horsAffectation()) {
+                liste.add(AnomaliePointage.horsAffectation(sortie).name());
+            }
+            if (scan.precisionFaible()) {
+                liste.add(AnomaliePointage.precisionFaible(sortie).name());
+            }
+            return liste;
+        }
+
+        private static PointageResponse reponse(Pointage pointage, String type,
+                                                LocalDate date, LocalTime heure, ScanAgence scan) {
+            return PointageResponse.builder()
+                    .pointage(pointage)
+                    .type(type)
+                    .horodatage(LocalDateTime.of(date, heure.withSecond(0).withNano(0)))
+                    .agenceId(scan == null ? null : scan.agence().getId())
+                    .agenceNom(scan == null ? null : scan.agence().getNom())
+                    .distanceMetres(scan == null ? null : scan.distanceMetres())
+                    .avertissement(scan == null ? null : scan.avertissement())
+                    .build();
         }
 
 

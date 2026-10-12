@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/pointages")
@@ -43,13 +44,27 @@ public class PointagesController {
 
         // Employé introuvable / code invalide → ResourceNotFoundException (404 JSON) géré
         // par GlobalExceptionHandler ; pas de try/catch local.
-        Pointage pointage = pointageServices.enregistrerPointage(
+        // Refus du scan QR d'agence → PointageRefuseException (422 JSON, message pour l'agent).
+        return ResponseEntity.ok(pointageServices.pointer(
                 cleanCode,
                 request.getDeviceId(),
                 request.getLatitude(),
-                request.getLongitude()
-        );
-        return ResponseEntity.ok(pointage);
+                request.getLongitude(),
+                request.getPrecisionMetres(),
+                request.getQrPayload()
+        ));
+    }
+
+    /**
+     * Nom de l'agence désignée par un QR, affiché sur l'écran d'accueil avant la saisie du
+     * PIN. Public (pas de token sur le kiosque) ; ne révèle que le nom, et un payload
+     * invalide rend un 404 sans motif.
+     */
+    @GetMapping("/agence-qr")
+    public ResponseEntity<Map<String, String>> agenceQr(@RequestParam String payload) {
+        return pointageServices.nomAgenceQr(payload)
+                .map(nom -> ResponseEntity.ok(Map.of("nom", nom)))
+                .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
     @GetMapping

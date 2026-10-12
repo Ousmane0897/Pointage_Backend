@@ -1,6 +1,8 @@
 package com.example.Pointage_Cleanic.controllers;
 
+import com.example.Pointage_Cleanic.Dto.pointage.PointageResponse;
 import com.example.Pointage_Cleanic.entities.Pointage;
+import com.example.Pointage_Cleanic.exception.PointageRefuseException;
 import com.example.Pointage_Cleanic.exception.ResourceNotFoundException;
 import com.example.Pointage_Cleanic.models.PointageRequest;
 import com.example.Pointage_Cleanic.repositories.PointageRepository;
@@ -27,6 +29,7 @@ import static org.mockito.ArgumentMatchers.eq;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -65,8 +68,8 @@ class PointagesControllerTest {
         Pointage pointage = new Pointage();
 
         Mockito.when(pointageServices.canPoint(eq("DEV-1"), Mockito.anyInt())).thenReturn(true);
-        Mockito.when(pointageServices.enregistrerPointage(eq("1234"), eq("DEV-1"), any(), any()))
-                .thenReturn(pointage);
+        Mockito.when(pointageServices.pointer(eq("1234"), eq("DEV-1"), any(), any(), any(), any()))
+                .thenReturn(PointageResponse.builder().pointage(pointage).type("ENTREE").build());
 
         mockMvc.perform(post("/api/pointages")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -136,7 +139,7 @@ class PointagesControllerTest {
         request.setDeviceId("DEV-1");
 
         Mockito.when(pointageServices.canPoint(eq("DEV-1"), Mockito.anyInt())).thenReturn(true);
-        Mockito.when(pointageServices.enregistrerPointage(eq("9999"), eq("DEV-1"), any(), any()))
+        Mockito.when(pointageServices.pointer(eq("9999"), eq("DEV-1"), any(), any(), any(), any()))
                 .thenThrow(new ResourceNotFoundException("Employé introuvable"));
 
         mockMvc.perform(post("/api/pointages")
@@ -144,6 +147,80 @@ class PointagesControllerTest {
                         .content(objectMapper.writeValueAsBytes(request)))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.error").value("NOT_FOUND"));
+    }
+
+    // ==========================================
+    // POST /api/pointages — QR D'AGENCE
+    // ==========================================
+
+    @Test
+    void should_relay_qr_payload_and_return_agence() throws Exception {
+
+        PointageRequest request = new PointageRequest();
+        request.setCodeSecret("1234");
+        request.setDeviceId("DEV-1");
+        request.setLatitude(14.7);
+        request.setLongitude(-17.4);
+        request.setPrecisionMetres(12.0);
+        request.setQrPayload("POINTIC:AG:abc");
+
+        Pointage pointage = new Pointage();
+        pointage.setHeureArrive("08:00");
+
+        Mockito.when(pointageServices.canPoint(eq("DEV-1"), Mockito.anyInt())).thenReturn(true);
+        Mockito.when(pointageServices.pointer("1234", "DEV-1", 14.7, -17.4, 12.0, "POINTIC:AG:abc"))
+                .thenReturn(PointageResponse.builder()
+                        .pointage(pointage).type("ENTREE")
+                        .agenceId("ag-1").agenceNom("SGS Mermoz").distanceMetres(18.0)
+                        .build());
+
+        mockMvc.perform(post("/api/pointages")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsBytes(request)))
+                .andExpect(status().isOk())
+                // Le pointage est déplié à la racine : l'ancien contrat reste lisible.
+                .andExpect(jsonPath("$.heureArrive").value("08:00"))
+                .andExpect(jsonPath("$.type").value("ENTREE"))
+                .andExpect(jsonPath("$.agenceNom").value("SGS Mermoz"));
+    }
+
+    @Test
+    void should_return_422_with_message_when_scan_refused() throws Exception {
+
+        PointageRequest request = new PointageRequest();
+        request.setCodeSecret("1234");
+        request.setDeviceId("DEV-1");
+        request.setQrPayload("autre-chose");
+
+        Mockito.when(pointageServices.canPoint(eq("DEV-1"), Mockito.anyInt())).thenReturn(true);
+        Mockito.when(pointageServices.pointer(eq("1234"), eq("DEV-1"), any(), any(), any(), eq("autre-chose")))
+                .thenThrow(new PointageRefuseException("QR code non reconnu."));
+
+        mockMvc.perform(post("/api/pointages")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsBytes(request)))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.error").value("POINTAGE_REFUSE"))
+                .andExpect(jsonPath("$.message").value("QR code non reconnu."));
+    }
+
+    @Test
+    void should_return_agence_name_for_valid_qr() throws Exception {
+
+        Mockito.when(pointageServices.nomAgenceQr("POINTIC:AG:abc")).thenReturn(Optional.of("BGFI Tann"));
+
+        mockMvc.perform(get("/api/pointages/agence-qr").param("payload", "POINTIC:AG:abc"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.nom").value("BGFI Tann"));
+    }
+
+    @Test
+    void should_return_404_for_unknown_qr() throws Exception {
+
+        Mockito.when(pointageServices.nomAgenceQr(any())).thenReturn(Optional.empty());
+
+        mockMvc.perform(get("/api/pointages/agence-qr").param("payload", "POINTIC:AG:zzz"))
+                .andExpect(status().isNotFound());
     }
 
     // ==========================================
