@@ -79,6 +79,9 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/pointages/today").authenticated()
                         .requestMatchers("/api/pointages/historique/**").authenticated() // search + exports excel/pdf
                         .requestMatchers(HttpMethod.GET, "/api/pointages").authenticated() // getAll
+                        // Paramètres du pointage (lecture authentifiée, écriture RH/SUPERADMIN en service).
+                        // ⚠ Avant /api/pointages/{codeSecret}, qui matcherait sinon le GET en public.
+                        .requestMatchers("/api/pointages/parametres").authenticated()
 
                         // 🔹 Pointages — mobile public (pointage sans token)
                         .requestMatchers(HttpMethod.POST, "/api/pointages").permitAll()
