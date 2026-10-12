@@ -20,6 +20,9 @@ public interface SiteClientMapper {
     @Mapping(target = "cahierDesChargesMimeType", ignore = true)
     @Mapping(target = "createdAt", ignore = true)
     @Mapping(target = "updatedAt", ignore = true)
+    @Mapping(target = "qrToken", ignore = true)
+    @Mapping(target = "qrVersion", ignore = true)
+    @Mapping(target = "qrGenereLe", ignore = true)
     SiteClient toEntity(SiteClientDto dto);
 
     @BeanMapping(nullValuePropertyMappingStrategy = NullValuePropertyMappingStrategy.IGNORE)
@@ -29,6 +32,9 @@ public interface SiteClientMapper {
     @Mapping(target = "cahierDesChargesMimeType", ignore = true)
     @Mapping(target = "createdAt", ignore = true)
     @Mapping(target = "updatedAt", ignore = true)
+    @Mapping(target = "qrToken", ignore = true)
+    @Mapping(target = "qrVersion", ignore = true)
+    @Mapping(target = "qrGenereLe", ignore = true)
     void updateEntityFromDto(SiteClientDto dto, @MappingTarget SiteClient entity);
 
     @Named("buildCahierUrl")

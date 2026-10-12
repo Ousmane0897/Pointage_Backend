@@ -9,6 +9,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.List;
 
 @Data
 @NoArgsConstructor
@@ -54,4 +55,31 @@ public class Pointage {
     private Instant timestamp;
 
     private String adresse;
+
+    // --- QR code d'agence (null sur les pointages antérieurs et ceux sans QR) ---
+    // ⚠ L'agence est stockée par RÉFÉRENCE, jamais par nom : le nom est résolu à la
+    // lecture. `site[]` reste la copie des sites de l'agent, pour compatibilité.
+
+    /** Agence du scan d'ARRIVÉE (SiteClient.id). */
+    @Indexed
+    private String agenceId;
+    private Double latitude;
+    private Double longitude;
+    private Double precisionMetres;
+    /** Distance mesurée entre la position du scan d'arrivée et l'agence. */
+    private Double distanceMetres;
+
+    /**
+     * Agence du scan de DÉPART. Peut légitimement différer de {@link #agenceId} : un agent
+     * arrive dans une agence et repart d'une autre. Aucune anomalie n'en découle.
+     */
+    @Indexed
+    private String agenceIdSortie;
+    private Double latitudeSortie;
+    private Double longitudeSortie;
+    private Double precisionMetresSortie;
+    private Double distanceMetresSortie;
+
+    /** Codes {@code AnomaliePointage} (informatifs, consultables par la RH). */
+    private List<String> anomalies;
 }

@@ -13,4 +13,8 @@ public interface SiteClientRepository extends MongoRepository<SiteClient, String
     Optional<SiteClient> findByCode(String code);
 
     List<SiteClient> findByActifTrue();
+
+    Optional<SiteClient> findByQrToken(String qrToken);
+
+    List<SiteClient> findByQrTokenIsNull();
 }

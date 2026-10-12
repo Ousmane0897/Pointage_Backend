@@ -57,6 +57,20 @@ public class SiteClient {
 
     private boolean actif;
 
+    // --- QR code de pointage de l'agence ---
+    // ⚠ Jamais l'id Mongo dans le QR : le jeton est aléatoire, révocable par
+    // régénération (l'ancien QR imprimé cesse alors de fonctionner). Champs gérés
+    // exclusivement par AgenceQrService, ignorés par le mapper (un PUT ne les touche pas).
+
+    /** Jeton opaque du QR (24 octets SecureRandom, Base64 URL-safe sans padding). */
+    @Indexed(unique = true, sparse = true)
+    private String qrToken;
+
+    /** Incrémentée à chaque régénération ; imprimée sur l'affiche pour repérer un QR périmé. */
+    private Integer qrVersion;
+
+    private LocalDateTime qrGenereLe;
+
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

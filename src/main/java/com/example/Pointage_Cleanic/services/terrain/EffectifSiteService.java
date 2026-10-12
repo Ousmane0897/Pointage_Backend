@@ -4,15 +4,13 @@ import com.example.Pointage_Cleanic.Dto.terrain.EffectifSiteDto;
 import com.example.Pointage_Cleanic.Enum.rh.StatutDossierEmploye;
 import com.example.Pointage_Cleanic.Enum.terrain.PerimetreEffectif;
 import com.example.Pointage_Cleanic.Enum.terrain.StatutAffectation;
-import com.example.Pointage_Cleanic.entities.rh.AffectationSite;
 import com.example.Pointage_Cleanic.entities.rh.DossierEmploye;
 import com.example.Pointage_Cleanic.entities.terrain.AffectationAgent;
 import com.example.Pointage_Cleanic.entities.terrain.SiteClient;
 import com.example.Pointage_Cleanic.exception.ResourceNotFoundException;
 import com.example.Pointage_Cleanic.repositories.terrain.AffectationAgentRepository;
 import com.example.Pointage_Cleanic.repositories.terrain.SiteClientRepository;
-import com.example.Pointage_Cleanic.util.AffectationSiteUtils;
-import com.example.Pointage_Cleanic.util.SiteAffecteUtils;
+import com.example.Pointage_Cleanic.util.RattachementSiteUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
@@ -120,31 +118,12 @@ public class EffectifSiteService {
      * Vrai si le dossier est <b>actuellement rattaché</b> à ce site. Ne dit rien du statut
      * de l'employé : « est-il sur ce site ? » et « occupe-t-il un poste ? » sont deux
      * questions distinctes, la seconde étant tranchée par {@link #occupeUnPoste}.
-     * <p>
-     * ⚠ Deux règles, dans cet ordre, et l'ordre compte :
-     * <ol>
-     *   <li>dossier doté d'affectations structurées ⇒ <b>elles seules font foi</b>,
-     *       les closes exclues ;</li>
-     *   <li>sinon seulement, repli sur {@code siteAffecte} (dossiers antérieurs, sans
-     *       aucune date).</li>
-     * </ol>
-     * Sans la borne de l'étape 1, un agent parti resterait compté — il l'était jusqu'ici,
-     * ce qui ne se voyait pas tant que les affectations closes étaient supprimées à la
-     * main. Sans la subordination de l'étape 2, il le resterait tout autant : son
-     * affectation close ne matchant plus, le code retomberait sur {@code siteAffecte}.
+     * La règle (affectations actives d'abord, repli {@code siteAffecte} ensuite) est
+     * portée par {@link RattachementSiteUtils#estAffecteAuSite}, partagée avec le scan
+     * QR d'agence.
      */
     private boolean estRattacheAuSite(DossierEmploye dossier, String nom) {
-        List<AffectationSite> affectations = dossier.getAffectations();
-        if (affectations != null && !affectations.isEmpty()) {
-            return AffectationSiteUtils.actives(affectations, LocalDate.now(clock)).stream()
-                    .anyMatch(a -> memeSite(a.getSite(), nom));
-        }
-        return SiteAffecteUtils.decouper(dossier.getSiteAffecte()).stream()
-                .anyMatch(s -> memeSite(s, nom));
-    }
-
-    private boolean memeSite(String candidat, String nom) {
-        return candidat != null && candidat.trim().equalsIgnoreCase(nom.trim());
+        return RattachementSiteUtils.estAffecteAuSite(dossier, nom, LocalDate.now(clock));
     }
 
     /**

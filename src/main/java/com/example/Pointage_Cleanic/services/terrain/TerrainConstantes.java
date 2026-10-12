@@ -20,6 +20,13 @@ public final class TerrainConstantes {
     /** Précision GPS au-delà de laquelle un pointage est jugé imprécis (mètres). */
     public static final double PRECISION_GPS_MAX_M = 50d;
 
+    /**
+     * Précision GPS (mètres) au-delà de laquelle un pointage par QR d'agence est marqué
+     * {@code PRECISION_FAIBLE_*}. Purement informatif : n'élargit jamais la tolérance
+     * de distance de l'agence.
+     */
+    public static final double PRECISION_GPS_ANOMALIE_M = 100d;
+
     /** Seuil de conformité par défaut d'un contrôle qualité (note /5). */
     public static final double NOTE_SEUIL_CONFORMITE_DEFAUT = 3.5d;
 }

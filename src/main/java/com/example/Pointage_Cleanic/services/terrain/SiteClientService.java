@@ -7,6 +7,7 @@ import com.example.Pointage_Cleanic.entities.terrain.SiteClient;
 import com.example.Pointage_Cleanic.exception.ResourceNotFoundException;
 import com.example.Pointage_Cleanic.exception.TerrainConflitException;
 import com.example.Pointage_Cleanic.repositories.terrain.SiteClientRepository;
+import com.example.Pointage_Cleanic.services.pointage.AgenceQrService;
 import com.example.Pointage_Cleanic.util.PageResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
@@ -30,6 +31,7 @@ public class SiteClientService {
     private final SiteClientRepository repository;
     private final SiteClientMapper mapper;
     private final MongoTemplate mongoTemplate;
+    private final AgenceQrService agenceQrService;
 
     public PageResponse<SiteClientDto> list(int page, int size, String q, String ville,
                                             FrequencePassage frequencePassage, Boolean actif) {
@@ -78,6 +80,8 @@ public class SiteClientService {
         LocalDateTime now = LocalDateTime.now();
         entity.setCreatedAt(now);
         entity.setUpdatedAt(now);
+        // Toute nouvelle agence naît avec son QR de pointage.
+        agenceQrService.assurerToken(entity);
         return mapper.toDto(repository.save(entity));
     }
 

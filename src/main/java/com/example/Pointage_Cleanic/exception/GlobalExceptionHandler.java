@@ -116,6 +116,26 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(body);
     }
 
+    // ─── Pointage par QR code d'agence ───────────────────────────────────────
+    // Même raison que ci-dessus : sans ces entrées, le handler RuntimeException
+    // rendrait 500 et l'agent ne verrait pas le motif du refus.
+
+    @ExceptionHandler(PointageRefuseException.class)
+    public ResponseEntity<Map<String, Object>> handlePointageRefuse(PointageRefuseException ex) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("error", "POINTAGE_REFUSE");
+        body.put("message", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY).body(body);
+    }
+
+    @ExceptionHandler(PointageAccesRefuseException.class)
+    public ResponseEntity<Map<String, Object>> handlePointageAccesRefuse(PointageAccesRefuseException ex) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("error", "POINTAGE_ACCES_REFUSE");
+        body.put("message", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(body);
+    }
+
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<Map<String, Object>> handleIllegalArgument(IllegalArgumentException ex) {
         Map<String, Object> body = new HashMap<>();
