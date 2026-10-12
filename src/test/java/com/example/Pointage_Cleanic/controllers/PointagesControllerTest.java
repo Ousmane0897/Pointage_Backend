@@ -1,5 +1,6 @@
 package com.example.Pointage_Cleanic.controllers;
 
+import com.example.Pointage_Cleanic.Dto.pointage.PointageLectureDto;
 import com.example.Pointage_Cleanic.Dto.pointage.PointageResponse;
 import com.example.Pointage_Cleanic.entities.Pointage;
 import com.example.Pointage_Cleanic.exception.PointageRefuseException;
@@ -241,6 +242,15 @@ class PointagesControllerTest {
     // ==========================================
     // GET /api/pointages/today
     // ==========================================
+
+    /** Le contrôleur délègue l'enrichissement des noms d'agence au service (mocké ici). */
+    @org.junit.jupiter.api.BeforeEach
+    @SuppressWarnings("unchecked")
+    void lectureSansAgence() {
+        Mockito.when(pointageServices.lecture(any())).thenAnswer(inv ->
+                ((org.springframework.data.domain.Page<Pointage>) inv.getArgument(0))
+                        .map(p -> PointageLectureDto.builder().pointage(p).build()));
+    }
 
     @Test
     void should_return_paginated_today_pointages() throws Exception {

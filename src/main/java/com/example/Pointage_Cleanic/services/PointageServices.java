@@ -8,6 +8,8 @@ import com.example.Pointage_Cleanic.entities.rh.DossierEmploye;
 import com.example.Pointage_Cleanic.exception.ResourceNotFoundException;
 import com.example.Pointage_Cleanic.repositories.PointageRepository;
 import com.example.Pointage_Cleanic.repositories.rh.DossierEmployeRepository;
+import com.example.Pointage_Cleanic.Dto.pointage.PointageLectureDto;
+import com.example.Pointage_Cleanic.services.pointage.AgenceNomResolver;
 import com.example.Pointage_Cleanic.services.pointage.PointageScanService;
 import com.example.Pointage_Cleanic.services.pointage.PointageScanService.ScanAgence;
 import com.example.Pointage_Cleanic.util.SiteAffecteUtils;
@@ -63,6 +65,8 @@ public class PointageServices {
     private final DossierEmployeRepository dossierEmployeRepository;
     // Contrôle du QR code d'agence : purement en lecture, appelé AVANT toute écriture.
     private final PointageScanService pointageScanService;
+    // Noms d'agence résolus à la lecture (le pointage ne stocke que l'id).
+    private final AgenceNomResolver agenceNomResolver;
 
     Pointage save(Pointage pointage) {
 
@@ -82,10 +86,46 @@ public class PointageServices {
         return mongoTemplate.findOne(query, Pointage.class);
     }
 
+    /** Valeur du filtre agence désignant les pointages sans agence (avant QR, ou sans QR). */
+    public static final String AGENCE_AUCUNE = "AUCUNE";
+
+    /**
+     * Pointages enrichis des noms d'agence d'arrivée et de départ, résolus en une seule
+     * requête pour toute la page.
+     */
+    public Page<PointageLectureDto> lecture(Page<Pointage> page) {
+        List<String> ids = new ArrayList<>();
+        for (Pointage p : page.getContent()) {
+            ids.add(p.getAgenceId());
+            ids.add(p.getAgenceIdSortie());
+        }
+        Map<String, String> noms = agenceNomResolver.noms(ids);
+        return page.map(p -> PointageLectureDto.builder()
+                .pointage(p)
+                .agenceArriveeNom(p.getAgenceId() == null ? null : noms.get(p.getAgenceId()))
+                .agenceDepartNom(p.getAgenceIdSortie() == null ? null : noms.get(p.getAgenceIdSortie()))
+                .build());
+    }
+
     public Page<Pointage> searchHistorique(
             String search,
             String dateDebut,
             String dateFin,
+            int page,
+            int size
+    ) {
+        return searchHistorique(search, dateDebut, dateFin, null, page, size);
+    }
+
+    /**
+     * @param agenceId agence d'arrivée <b>ou</b> de départ ({@link #AGENCE_AUCUNE} : ni
+     *                 l'une ni l'autre renseignée).
+     */
+    public Page<Pointage> searchHistorique(
+            String search,
+            String dateDebut,
+            String dateFin,
+            String agenceId,
             int page,
             int size
     ) {
@@ -119,6 +159,19 @@ public class PointageServices {
                     Criteria.where("site").regex(regexPattern, "i")
             );
             criteria = new Criteria().andOperator(criteria, searchCriteria);
+        }
+
+        // Filtre agence : un pointage « appartient » à une agence par son arrivée OU son
+        // départ — un agent peut arriver dans une agence et repartir d'une autre.
+        if (agenceId != null && !agenceId.isBlank()) {
+            Criteria agenceCriteria = AGENCE_AUCUNE.equals(agenceId)
+                    ? new Criteria().andOperator(
+                            Criteria.where("agenceId").is(null),
+                            Criteria.where("agenceIdSortie").is(null))
+                    : new Criteria().orOperator(
+                            Criteria.where("agenceId").is(agenceId),
+                            Criteria.where("agenceIdSortie").is(agenceId));
+            criteria = new Criteria().andOperator(criteria, agenceCriteria);
         }
 
         query.addCriteria(criteria);

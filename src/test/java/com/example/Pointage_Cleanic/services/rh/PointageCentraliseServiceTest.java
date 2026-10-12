@@ -12,6 +12,7 @@ import com.example.Pointage_Cleanic.entities.rh.DossierEmploye;
 import com.example.Pointage_Cleanic.repositories.PointageRepository;
 import com.example.Pointage_Cleanic.repositories.rh.DemandeCongeRepository;
 import com.example.Pointage_Cleanic.repositories.rh.DossierEmployeRepository;
+import com.example.Pointage_Cleanic.services.pointage.AgenceNomResolver;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -33,6 +34,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.anyCollection;
 
 /**
  * Vue pointage centralisé — une ligne par <b>créneau</b> (employé × jour × site attendu).
@@ -54,6 +56,7 @@ class PointageCentraliseServiceTest {
     private PointageRepository pointageRepository;
     private DemandeCongeRepository demandeCongeRepository;
     private PointageCentraliseService service;
+    private final AgenceNomResolver agenceNomResolver = mock(AgenceNomResolver.class);
 
     // emp1 = a pointé, emp2 = en congé, emp3 = rien. Tous trois ont désormais une
     // affectation : sans créneau attendu, aucune ligne ne serait produite.
@@ -106,7 +109,8 @@ class PointageCentraliseServiceTest {
         when(jourFerieService.datesFeriees(any(), any())).thenReturn(feries);
         service = new PointageCentraliseService(
                 dossierEmployeRepository, pointageRepository, demandeCongeRepository,
-                new PlanningAffectationResolver(), jourFerieService, clock, 15);
+                new PlanningAffectationResolver(), jourFerieService, clock,
+                agenceNomResolver, 15);
     }
 
     private static AffectationSite affectation(String site, String debut, String fin, String jours) {
@@ -175,6 +179,34 @@ class PointageCentraliseServiceTest {
     // =====================================================================
     //  Socle : une ligne par créneau attendu
     // =====================================================================
+
+    @Test
+    void agences_d_arrivee_et_de_depart_du_pointage_rattache_sont_nommees() {
+        Pointage p1 = Pointage.builder()
+                .id("p1").codeSecret("1001").date(JOUR).heureArrive("08:05").heureDepart("16:00")
+                .agenceId("ag-A").agenceIdSortie("ag-B")
+                .anomalies(List.of("HORS_AFFECTATION_SORTIE"))
+                .build();
+        stubPointages(JOUR, p1);
+        when(agenceNomResolver.noms(anyCollection()))
+                .thenReturn(Map.of("ag-A", "SGS Mermoz", "ag-B", "BGFI Tann"));
+
+        PointageCentraliseDto ligne = lignes(JOUR).stream()
+                .filter(d -> "emp1".equals(d.getEmployeId())).findFirst().orElseThrow();
+
+        // Le créneau reste celui de l'affectation : l'agence n'intervient pas dans le
+        // rattachement, elle est seulement affichée.
+        assertThat(ligne.getSite()).isEqualTo("Keur Gorgui");
+        assertThat(ligne.getAgenceArriveeId()).isEqualTo("ag-A");
+        assertThat(ligne.getAgenceArriveeNom()).isEqualTo("SGS Mermoz");
+        assertThat(ligne.getAgenceDepartNom()).isEqualTo("BGFI Tann");
+        assertThat(ligne.getAnomalies()).containsExactly("HORS_AFFECTATION_SORTIE");
+
+        // Pointage sans agence (antérieur au QR) : noms nuls.
+        PointageCentraliseDto absent = lignes(JOUR).stream()
+                .filter(d -> "emp3".equals(d.getEmployeId())).findFirst().orElseThrow();
+        assertThat(absent.getAgenceArriveeNom()).isNull();
+    }
 
     @Test
     void derive_present_conge_absent() {

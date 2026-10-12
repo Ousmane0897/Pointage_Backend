@@ -2,6 +2,7 @@ package com.example.Pointage_Cleanic.controllers;
 
 
 
+import com.example.Pointage_Cleanic.Dto.pointage.PointageLectureDto;
 import com.example.Pointage_Cleanic.entities.Pointage;
 import com.example.Pointage_Cleanic.models.PointageRequest;
 import com.example.Pointage_Cleanic.repositories.PointageRepository;
@@ -74,7 +75,7 @@ public class PointagesController {
     }
 
     @GetMapping("/today")
-    public ResponseEntity<Page<Pointage>> getTodayPointages(
+    public ResponseEntity<Page<PointageLectureDto>> getTodayPointages(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size
     ) {
@@ -82,27 +83,30 @@ public class PointagesController {
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "timestamp"));
         Page<Pointage> pointages = pointageRepository.findByDate(today, pageable);
 
-        return ResponseEntity.ok(pointages);
+        return ResponseEntity.ok(pointageServices.lecture(pointages));
     }
 
     // Affiche l'historique dans la possibilité de recherche et de filtrage par période dans l'historique des pointages.
     @GetMapping("/historique/search")
-    public ResponseEntity<Page<Pointage>> searchHistorique(
+    public ResponseEntity<Page<PointageLectureDto>> searchHistorique(
             @RequestParam(required = false) String search,
             @RequestParam(required = false) String dateDebut,
             @RequestParam(required = false) String dateFin,
+            // Agence d'arrivée ou de départ ; "AUCUNE" = pointages sans agence.
+            @RequestParam(required = false) String agenceId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size
     ) {
-        return ResponseEntity.ok(
+        return ResponseEntity.ok(pointageServices.lecture(
                 pointageServices.searchHistorique(
                         search,
                         dateDebut,
                         dateFin,
+                        agenceId,
                         page,
                         size
                 )
-        );
+        ));
     }
 
     @GetMapping("/historique/export/excel")

@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonFormat;
 import lombok.*;
 
 import java.time.LocalDate;
+import java.util.List;
 
 /**
  * Une ligne de la vue « pointage centralisé ». Depuis le rattachement des horaires au
@@ -59,4 +60,18 @@ public class PointageCentraliseDto {
      * normale, et c'est le symptôme direct d'affectations non tenues à jour.
      */
     private boolean planifie;
+
+    /**
+     * Agences du pointage rattaché (QR code d'agence), arrivée et départ — elles peuvent
+     * différer. Ids pour le filtrage, noms résolus à la lecture ; {@code null} ⇒ pointage
+     * sans agence. Purement informatif : le rattachement au créneau se fait toujours par
+     * plage horaire, jamais par agence.
+     */
+    private String agenceArriveeId;
+    private String agenceDepartId;
+    private String agenceArriveeNom;
+    private String agenceDepartNom;
+
+    /** Anomalies du pointage rattaché (codes {@code AnomaliePointage}). */
+    private List<String> anomalies;
 }

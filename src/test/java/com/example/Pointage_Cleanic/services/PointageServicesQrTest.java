@@ -11,6 +11,7 @@ import com.example.Pointage_Cleanic.exception.PointageRefuseException;
 import com.example.Pointage_Cleanic.repositories.PointageRepository;
 import com.example.Pointage_Cleanic.repositories.rh.DossierEmployeRepository;
 import com.example.Pointage_Cleanic.repositories.terrain.SiteClientRepository;
+import com.example.Pointage_Cleanic.services.pointage.AgenceNomResolver;
 import com.example.Pointage_Cleanic.services.pointage.AgenceQrService;
 import com.example.Pointage_Cleanic.services.pointage.ParametresPointageService;
 import com.example.Pointage_Cleanic.services.pointage.PointageScanService;
@@ -76,7 +77,8 @@ class PointageServicesQrTest {
         PointageScanService scan = new PointageScanService(
                 agenceQrService, parametresPointageService, new HaversineService(), CLOCK);
         // GeocodingService nul : l'appel est protégé par un try/catch (cf. PointageServicesTest).
-        service = new PointageServices(mongoTemplate, pointageRepository, null, dossierEmployeRepository, scan);
+        service = new PointageServices(mongoTemplate, pointageRepository, null, dossierEmployeRepository, scan,
+                new AgenceNomResolver(siteClientRepository));
 
         parametres = ParametresPointage.builder()
                 .horsAffectation(ModeHorsAffectation.AVERTIR).qrObligatoire(false).build();

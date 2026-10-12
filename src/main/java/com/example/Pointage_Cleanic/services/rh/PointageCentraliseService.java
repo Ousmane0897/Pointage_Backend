@@ -11,6 +11,7 @@ import com.example.Pointage_Cleanic.entities.Pointage;
 import com.example.Pointage_Cleanic.repositories.rh.DemandeCongeRepository;
 import com.example.Pointage_Cleanic.repositories.rh.DossierEmployeRepository;
 import com.example.Pointage_Cleanic.repositories.PointageRepository;
+import com.example.Pointage_Cleanic.services.pointage.AgenceNomResolver;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
@@ -89,6 +90,7 @@ public class PointageCentraliseService {
     private final JourFerieService jourFerieService;
     /** Horloge métier (Africa/Dakar) : jamais de {@code now()} en dur dans ce service. */
     private final Clock clock;
+    private final AgenceNomResolver agenceNomResolver;
 
     /** Seuil de tolérance de retard (minutes). Retard marqué seulement si retardBrut > seuil. */
     private final int toleranceRetardMinutes;
@@ -100,6 +102,7 @@ public class PointageCentraliseService {
             PlanningAffectationResolver planning,
             JourFerieService jourFerieService,
             Clock clock,
+            AgenceNomResolver agenceNomResolver,
             @Value("${rh.pointage.tolerance-retard-minutes:15}") int toleranceRetardMinutes) {
         this.dossierEmployeRepository = dossierEmployeRepository;
         this.pointageRepository = pointageRepository;
@@ -107,6 +110,7 @@ public class PointageCentraliseService {
         this.planning = planning;
         this.jourFerieService = jourFerieService;
         this.clock = clock;
+        this.agenceNomResolver = agenceNomResolver;
         this.toleranceRetardMinutes = toleranceRetardMinutes;
     }
 
@@ -122,7 +126,7 @@ public class PointageCentraliseService {
                 .filter(dto -> statut == null || statut.isBlank() || dto.getStatut().equals(statut))
                 .collect(Collectors.toList());
 
-        return paginate(result, page, size);
+        return nommerAgences(paginate(result, page, size));
     }
 
     /**
@@ -148,7 +152,7 @@ public class PointageCentraliseService {
                 .filter(dto -> statut == null || statut.isBlank() || dto.getStatut().equals(statut))
                 .collect(Collectors.toList());
 
-        return paginate(result, page, size);
+        return nommerAgences(paginate(result, page, size));
     }
 
     /**
@@ -419,6 +423,9 @@ public class PointageCentraliseService {
             int retard = computeRetardMinutes(heureArrivee, debut);
             return dto
                     .pointageId(pointage.getId())
+                    .agenceArriveeId(pointage.getAgenceId())
+                    .agenceDepartId(pointage.getAgenceIdSortie())
+                    .anomalies(pointage.getAnomalies())
                     .heureArrivee(heureArrivee)
                     .heureDepart(pointage.getHeureDepart())
                     .dureeMinutes(computeDureeMinutes(heureArrivee, pointage.getHeureDepart()))
@@ -450,6 +457,28 @@ public class PointageCentraliseService {
         return dto.retardMinutes(0).statut(statut).build();
     }
 
+    /**
+     * Noms des agences d'arrivée et de départ, pour la <b>seule page</b> renvoyée :
+     * une requête par page, jamais une par ligne ni sur la liste complète.
+     */
+    private Page<PointageCentraliseDto> nommerAgences(Page<PointageCentraliseDto> page) {
+        List<String> ids = new ArrayList<>();
+        for (PointageCentraliseDto dto : page.getContent()) {
+            ids.add(dto.getAgenceArriveeId());
+            ids.add(dto.getAgenceDepartId());
+        }
+        Map<String, String> noms = agenceNomResolver.noms(ids);
+        if (!noms.isEmpty()) {
+            for (PointageCentraliseDto dto : page.getContent()) {
+                // ⚠ id nul (pointage sans agence) : jamais de get(null), qui lève une NPE
+                // sur une Map immuable.
+                dto.setAgenceArriveeNom(dto.getAgenceArriveeId() == null ? null : noms.get(dto.getAgenceArriveeId()));
+                dto.setAgenceDepartNom(dto.getAgenceDepartId() == null ? null : noms.get(dto.getAgenceDepartId()));
+            }
+        }
+        return page;
+    }
+
     /** Pointage qu'aucun créneau attendu n'explique — conservé, jamais fondu ailleurs. */
     private PointageCentraliseDto buildLigneHorsPlan(DossierEmploye e, LocalDate date, Pointage pointage) {
         String heureArrivee = pointage.getHeureArrive();
@@ -459,6 +488,9 @@ public class PointageCentraliseService {
                 // seule indication de lieu disponible (même si elle liste tous les sites).
                 .site(joinSites(pointage.getSite()))
                 .pointageId(pointage.getId())
+                .agenceArriveeId(pointage.getAgenceId())
+                .agenceDepartId(pointage.getAgenceIdSortie())
+                .anomalies(pointage.getAnomalies())
                 .heureArrivee(heureArrivee)
                 .heureDepart(pointage.getHeureDepart())
                 .dureeMinutes(computeDureeMinutes(heureArrivee, pointage.getHeureDepart()))
