@@ -484,6 +484,8 @@ public class DossierEmployeService {
                 .map(AffectationSite::getSite)
                 .filter(s -> s != null && !s.isBlank())
                 .map(String::trim)
+                // Deux créneaux sur un même site (06-10 et 15-19) ne font qu'un site.
+                .distinct()
                 .collect(Collectors.joining(SiteAffecteUtils.SEPARATEUR));
     }
 
@@ -511,15 +513,21 @@ public class DossierEmployeService {
             return;
         }
 
-        Set<String> signaturesEntrantes = (entrantes == null ? List.<AffectationSiteDto>of() : entrantes)
+        // ⚠ Multiset et non Set : deux créneaux clos d'un même site sur la même période
+        // (06-10 et 15-19) partagent la même signature — les horaires en sont exclus à
+        // dessein. Avec un Set, le retrait de l'un des deux passerait inaperçu.
+        Map<String, Long> signaturesEntrantes = (entrantes == null ? List.<AffectationSiteDto>of() : entrantes)
                 .stream()
                 .filter(a -> a != null)
                 .map(a -> AffectationSiteUtils.signature(
                         a.getSite(), a.getDateEntree(), a.getDateSortie()))
-                .collect(Collectors.toSet());
+                .collect(Collectors.groupingBy(s -> s, HashMap::new, Collectors.counting()));
 
         for (AffectationSite close : closes) {
-            if (!signaturesEntrantes.contains(AffectationSiteUtils.signature(close))) {
+            String signature = AffectationSiteUtils.signature(close);
+            long restantes = signaturesEntrantes.getOrDefault(signature, 0L);
+            signaturesEntrantes.put(signature, restantes - 1);
+            if (restantes <= 0) {
                 throw new AffectationInvalideException(
                         "L'affectation close sur " + close.getSite()
                                 + " (du " + close.getDateEntree() + " au " + close.getDateSortie()
