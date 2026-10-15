@@ -1,5 +1,6 @@
 package com.example.Pointage_Cleanic.Dto.rh;
 
+import com.example.Pointage_Cleanic.Enum.rh.TypeConge;
 import com.fasterxml.jackson.annotation.JsonFormat;
 import lombok.*;
 
@@ -45,6 +46,8 @@ public class PointageCentraliseDto {
     private Integer retardMinutes;
     private String statut;
     private String motif;
+    /** Type du congé, sur les seules lignes {@code CONGE} (repos médical, congé annuel…). */
+    private TypeConge typeConge;
 
     /** Horaire attendu sur ce site, "HH:mm" — permet d'afficher « prévu 08:00 ». */
     private String siteHoraireDebut;

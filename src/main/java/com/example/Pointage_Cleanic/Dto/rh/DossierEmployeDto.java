@@ -8,6 +8,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import lombok.*;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Getter
@@ -23,6 +24,13 @@ public class DossierEmployeDto {
 
     // Code agent à 4 chiffres = clé du pointage (^\d{4}$, unique)
     private String agentId;
+
+    /** Lecture seule : date d'attribution du code, posée serveur (ignorée en écriture). */
+    @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss")
+    private LocalDateTime dateCreationAgentId;
+
+    /** Lecture seule : vrai si la date ci-dessus est reconstituée par le backfill. */
+    private Boolean dateCreationAgentIdEstimee;
 
     // Identité
     private String nom;

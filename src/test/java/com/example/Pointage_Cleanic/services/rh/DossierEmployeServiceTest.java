@@ -65,6 +65,8 @@ class DossierEmployeServiceTest {
             DossierEmployeDto dto = inv.getArgument(0);
             return DossierEmploye.builder()
                     .matricule(dto.getMatricule())
+                    // Sans lui, l'horodatage du code ne serait jamais exercé.
+                    .agentId(dto.getAgentId())
                     .nom(dto.getNom())
                     .prenom(dto.getPrenom())
                     .poste(dto.getPoste())
@@ -104,6 +106,58 @@ class DossierEmployeServiceTest {
         });
 
         when(repository.existsByMatricule(anyString())).thenReturn(false);
+    }
+
+    // ─── Date d'attribution du code agent ─────────────────────────────────────
+
+    private static final java.time.LocalDateTime MAINTENANT = LocalDate.of(2026, 9, 4).atStartOfDay();
+
+    private DossierEmploye existantAvecCode(String code) {
+        DossierEmploye e = DossierEmploye.builder()
+                .id("emp1").matricule("M1").agentId(code).nom("X").prenom("Y").poste("Op")
+                .statut(StatutDossierEmploye.ACTIF)
+                .dateCreationAgentId(java.time.LocalDateTime.of(2024, 1, 10, 8, 0))
+                .dateCreationAgentIdEstimee(true)
+                .build();
+        when(repository.findById("emp1")).thenReturn(Optional.of(e));
+        return e;
+    }
+
+    @Test
+    void la_creation_horodate_le_code_agent() throws Exception {
+        service.create(actifDto("M20"), null);
+
+        ArgumentCaptor<DossierEmploye> captor = ArgumentCaptor.forClass(DossierEmploye.class);
+        verify(repository).save(captor.capture());
+        assertThat(captor.getValue().getDateCreationAgentId()).isEqualTo(MAINTENANT);
+        assertThat(captor.getValue().getDateCreationAgentIdEstimee()).isFalse();
+    }
+
+    @Test
+    void changer_de_code_le_rehorodate() throws Exception {
+        existantAvecCode("0001");
+        DossierEmployeDto dto = actifDto("M1");
+        dto.setAgentId("0002");
+
+        service.update("emp1", dto, null);
+
+        ArgumentCaptor<DossierEmploye> captor = ArgumentCaptor.forClass(DossierEmploye.class);
+        verify(repository).save(captor.capture());
+        assertThat(captor.getValue().getDateCreationAgentId()).isEqualTo(MAINTENANT);
+        assertThat(captor.getValue().getDateCreationAgentIdEstimee()).isFalse();
+    }
+
+    @Test
+    void une_modification_sans_changement_de_code_conserve_sa_date() throws Exception {
+        existantAvecCode("0009");
+
+        service.update("emp1", actifDto("M1"), null);   // agentId "0009" inchangé
+
+        ArgumentCaptor<DossierEmploye> captor = ArgumentCaptor.forClass(DossierEmploye.class);
+        verify(repository).save(captor.capture());
+        assertThat(captor.getValue().getDateCreationAgentId())
+                .isEqualTo(java.time.LocalDateTime.of(2024, 1, 10, 8, 0));
+        assertThat(captor.getValue().getDateCreationAgentIdEstimee()).isTrue();
     }
 
     @Test

@@ -42,6 +42,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
 import java.time.Clock;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
@@ -146,6 +147,7 @@ public class DossierEmployeService {
         validerCoherenceEnfants(dto.getEnfants());
 
         DossierEmploye entity = mapper.toEntity(dto);
+        horodaterCode(entity);
         nettoyerChampsOptionnels(entity);
         appliquerAffectations(entity, dto);
         appliquerEnfants(entity, dto);
@@ -179,7 +181,13 @@ public class DossierEmployeService {
         validerJoursTravail(dto.getJoursTravail());
         validerCoherenceEnfants(dto.getEnfants());
 
+        // Capturé AVANT le merge, qui écrase l'ancien code.
+        boolean codeChange = dto.getAgentId() != null && !dto.getAgentId().equals(existing.getAgentId());
+
         mapper.updateEntityFromDto(dto, existing);
+        if (codeChange) {
+            horodaterCode(existing);
+        }
         // Règles de cohérence post-mise-à-jour
         validerCoherenceDureeEssai(existing.getStatut(), existing.getDureeEssaiMois());
         validerCoherenceNombreEnfants(existing.getSituationMatrimoniale(), existing.getNombreEnfants());
@@ -238,6 +246,16 @@ public class DossierEmployeService {
             dto.setPhotoUrl("/api/dossier-employe/" + entity.getId() + "/photo");
         }
         return dto;
+    }
+
+    /**
+     * Date d'attribution du code de pointage : posée à la création, à l'import et à chaque
+     * changement de code. Jamais acceptée du client (ignorée par le mapper).
+     */
+    private void horodaterCode(DossierEmploye entity) {
+        if (entity.getAgentId() == null || entity.getAgentId().isBlank()) return;
+        entity.setDateCreationAgentId(LocalDateTime.now(clock));
+        entity.setDateCreationAgentIdEstimee(false);
     }
 
     private void validerAgentId(String agentId) {
@@ -721,6 +739,7 @@ public class DossierEmployeService {
         for (int i : indicesValides) {
             DossierEmployeBulkLigneDto dto = lignes.get(i);
             DossierEmploye entity = mapper.toEntity(dto);
+            horodaterCode(entity);
             // Résolution du supérieur en base (connu à cette étape).
             if (dto.getSuperieurHierarchiqueMatricule() != null
                     && superieursBaseParMatricule.containsKey(dto.getSuperieurHierarchiqueMatricule())) {

@@ -11,6 +11,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
 import org.springframework.data.mongodb.core.mapping.Field;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Getter
@@ -32,6 +33,19 @@ public class DossierEmploye {
     // dossiers historiques peuvent ne pas encore le porter.
     @Indexed(unique = true, sparse = true)
     private String agentId;
+
+    /**
+     * Date d'attribution du code {@link #agentId}. Posée serveur à la création, à l'import
+     * et à chaque <b>changement</b> de code — jamais acceptée du client.
+     */
+    private LocalDateTime dateCreationAgentId;
+
+    /**
+     * Vrai quand {@link #dateCreationAgentId} a été reconstituée par le backfill depuis la
+     * date de création du dossier (horodatage de l'ObjectId) : pour un dossier antérieur,
+     * c'est la meilleure approximation disponible, pas une mesure.
+     */
+    private Boolean dateCreationAgentIdEstimee;
 
     // Identité
     private String nom;

@@ -17,6 +17,9 @@ import java.util.List;
 public interface DossierEmployeMapper {
 
     @Mapping(target = "photo", ignore = true)
+    // Posées serveur (DossierEmployeService.horodaterCode), jamais acceptées du client.
+    @Mapping(target = "dateCreationAgentId", ignore = true)
+    @Mapping(target = "dateCreationAgentIdEstimee", ignore = true)
     DossierEmploye toEntity(DossierEmployeDto dto);
 
     @Mapping(target = "photoUrl", ignore = true)
@@ -32,6 +35,8 @@ public interface DossierEmployeMapper {
     @Mapping(target = "affectations", ignore = true)
     @Mapping(target = "siteAffecte", ignore = true)
     @Mapping(target = "enfants", ignore = true)
+    @Mapping(target = "dateCreationAgentId", ignore = true)
+    @Mapping(target = "dateCreationAgentIdEstimee", ignore = true)
     void updateEntityFromDto(DossierEmployeDto dto, @MappingTarget DossierEmploye entity);
 
     ContactUrgence toEntity(ContactUrgenceDto dto);
