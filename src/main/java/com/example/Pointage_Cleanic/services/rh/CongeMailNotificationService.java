@@ -95,6 +95,17 @@ public class CongeMailNotificationService {
                 "Votre demande a été validée au niveau %s.".formatted(libelle(niveauFranchi)), "");
     }
 
+    /** Repos médical saisi par la RH : aucune action attendue, simple information. */
+    public void notifierReposMedicalDirect(DemandeConge demande) {
+        envoyer(demande, destinataires.optionnel(destinataires.demandeur(demande)),
+                "Votre repos médical a été enregistré",
+                "Les Ressources humaines ont enregistré votre repos médical.", "");
+        envoyer(demande, destinataires.optionnel(destinataires.superieur(demande)),
+                "Repos médical enregistré",
+                "Un repos médical a été enregistré pour %s : aucune action n'est attendue de votre part."
+                        .formatted(nomComplet(demande)), "");
+    }
+
     public void notifierRefus(DemandeConge demande, NiveauValidationConge niveau, String motif) {
         envoyer(demande, destinataires.optionnel(destinataires.demandeur(demande)),
                 "Votre demande de congé a été refusée",

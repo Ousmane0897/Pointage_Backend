@@ -402,6 +402,49 @@ class DossierEmployeAffectationServiceTest {
         assertThat(captureSaved().getAffectations()).hasSize(2);
     }
 
+    // ─── Deux créneaux sur un même site ───────────────────────────────────────
+
+    /** Cas remonté par la RH : 06:00–10:00 et 15:00–19:00 sur le même site. */
+    @Test
+    void create_accepte_deux_creneaux_sur_un_meme_site() throws Exception {
+        DossierEmployeDto dto = baseDto("M1", "0001");
+        dto.setAffectations(List.of(
+                AffectationSiteDto.builder().site("Yoff").horaireDebut("06:00").horaireFin("10:00").build(),
+                AffectationSiteDto.builder().site("Yoff").horaireDebut("15:00").horaireFin("19:00").build()));
+
+        service.create(dto, null);
+
+        DossierEmploye saved = captureSaved();
+        assertThat(saved.getAffectations()).hasSize(2);
+        // Un site, pas deux : le champ dérivé alimente le filtre « Site » et l'affichage.
+        assertThat(saved.getSiteAffecte()).isEqualTo("Yoff");
+    }
+
+    /**
+     * Deux créneaux clos d'un même site partagent la même signature (les horaires en
+     * sont exclus) : la garde doit compter, pas seulement tester la présence.
+     */
+    @Test
+    void update_refuse_la_disparition_d_un_des_deux_creneaux_clos_d_un_meme_site() {
+        AffectationSite matin = closeSurYoff();
+        matin.setHoraireDebut("06:00");
+        matin.setHoraireFin("10:00");
+        AffectationSite soir = closeSurYoff();
+        soir.setHoraireDebut("15:00");
+        soir.setHoraireFin("19:00");
+        when(repository.findById("emp1")).thenReturn(Optional.of(existantAvec(matin, soir)));
+
+        DossierEmployeDto dto = baseDto("M1", "0001");
+        dto.setAffectations(List.of(AffectationSiteDto.builder().site("Yoff")
+                .horaireDebut("06:00").horaireFin("10:00")
+                .dateEntree(LocalDate.of(2026, 1, 1))
+                .dateSortie(LocalDate.of(2026, 6, 30)).build()));
+
+        assertThatThrownBy(() -> service.update("emp1", dto, null))
+                .isInstanceOf(AffectationInvalideException.class)
+                .hasMessageContaining("Yoff");
+    }
+
     // ─── siteAffecte dérivé ───────────────────────────────────────────────────
 
     @Test

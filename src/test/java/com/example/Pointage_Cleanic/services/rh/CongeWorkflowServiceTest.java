@@ -227,6 +227,63 @@ class CongeWorkflowServiceTest {
             assertThatThrownBy(() -> service.creer(dto))
                     .isInstanceOf(CongeInvalideException.class);
         }
+
+        // ─── Repos médical saisi par la RH ────────────────────────────────────
+
+        private DossierEmploye agentAvecChef() {
+            return DossierEmploye.builder().id("emp-autre").nom("Sow")
+                    .superieurHierarchiqueId("emp-chef").build();
+        }
+
+        /** RH sans dossier employé : le cas réel remonté par les Ressources humaines. */
+        private void connecteRhSansDossier() {
+            when(identite.employeCourant()).thenReturn(Optional.empty());
+            when(identite.perimetreDepot((DossierEmploye) null)).thenReturn(PerimetreConges.tout());
+            when(identite.peutCreerPourAutrui()).thenReturn(true);
+            when(dossierEmployeRepository.findById("emp-autre"))
+                    .thenReturn(Optional.of(agentAvecChef()));
+        }
+
+        @Test
+        void repos_medical_saisi_par_la_rh_est_approuve_sans_circuit() {
+            connecteRhSansDossier();
+            DemandeCongeDto dto = payload("emp-autre");
+            dto.setType(TypeConge.REPOS_MEDICAL);
+
+            DemandeCongeDto res = service.creer(dto);
+
+            assertThat(res.getStatut()).isEqualTo(StatutDemande.APPROUVE);
+            assertThat(res.getDecisionRh().getDecideurNom()).isEqualTo("Awa Ndiaye");
+            assertThat(res.getHistorique()).extracting("action")
+                    .containsExactly(ActionValidationConge.CREATION, ActionValidationConge.VALIDATION);
+            // Le supérieur est figé quand même : la fiche doit rester lisible.
+            assertThat(res.getSuperieurHierarchiqueId()).isEqualTo("emp-chef");
+            verify(mailService).notifierReposMedicalDirect(any());
+            verify(mailService, never()).notifierCreation(any());
+        }
+
+        @Test
+        void un_autre_type_saisi_par_la_rh_suit_le_circuit() {
+            connecteRhSansDossier();
+
+            DemandeCongeDto res = service.creer(payload("emp-autre"));   // ANNUEL
+
+            assertThat(res.getStatut()).isEqualTo(StatutDemande.EN_ATTENTE_SUPERIEUR);
+        }
+
+        @Test
+        void repos_medical_depose_par_l_agent_lui_meme_suit_le_circuit() {
+            DossierEmploye moi = DossierEmploye.builder().id(MOI)
+                    .superieurHierarchiqueId("emp-chef").build();
+            when(identite.employeCourant()).thenReturn(Optional.of(moi));
+            when(identite.peutCreerPourAutrui()).thenReturn(false);
+            DemandeCongeDto dto = payload(null);
+            dto.setType(TypeConge.REPOS_MEDICAL);
+
+            DemandeCongeDto res = service.creer(dto);
+
+            assertThat(res.getStatut()).isEqualTo(StatutDemande.EN_ATTENTE_SUPERIEUR);
+        }
     }
 
     // ─── Transitions ──────────────────────────────────────────────────────────

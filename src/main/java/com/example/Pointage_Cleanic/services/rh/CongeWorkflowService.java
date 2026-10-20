@@ -6,6 +6,7 @@ import com.example.Pointage_Cleanic.Dto.rh.MonProfilCongeDto;
 import com.example.Pointage_Cleanic.Enum.rh.ActionValidationConge;
 import com.example.Pointage_Cleanic.Enum.rh.NiveauValidationConge;
 import com.example.Pointage_Cleanic.Enum.rh.StatutDemande;
+import com.example.Pointage_Cleanic.Enum.rh.TypeConge;
 import com.example.Pointage_Cleanic.entities.rh.DecisionNiveau;
 import com.example.Pointage_Cleanic.entities.rh.DemandeConge;
 import com.example.Pointage_Cleanic.entities.rh.DossierEmploye;
@@ -54,6 +55,11 @@ public class CongeWorkflowService {
 
     /** Longueur minimale du motif de refus — il part par e-mail au demandeur. */
     public static final int MOTIF_REFUS_MIN_LENGTH = 10;
+
+    /** Trace d'un repos médical saisi par la RH, approuvé sans circuit. */
+    static final String COMMENTAIRE_REPOS_MEDICAL_DIRECT =
+            "Repos médical enregistré directement par les Ressources humaines — "
+                    + "circuit de validation non requis.";
 
     private final DemandeCongeRepository demandeCongeRepository;
     private final DossierEmployeRepository dossierEmployeRepository;
@@ -120,6 +126,10 @@ public class CongeWorkflowService {
         boolean sansSuperieur = demandeur.getSuperieurHierarchiqueId() == null
                 || demandeur.getSuperieurHierarchiqueId().isBlank();
         demande.setNiveauSuperieurIgnore(sansSuperieur);
+
+        if (dto.getType() == TypeConge.REPOS_MEDICAL && identite.peutCreerPourAutrui()) {
+            return enregistrerReposMedicalDirect(demande);
+        }
         demande.setStatut(sansSuperieur
                 ? StatutDemande.EN_ATTENTE_RH
                 : StatutDemande.EN_ATTENTE_SUPERIEUR);
@@ -135,6 +145,44 @@ public class CongeWorkflowService {
         notifier(sauvee, "DEMANDE_SOUMISE", "Nouvelle demande de congé",
                 "%s a déposé une demande de congé.".formatted(nomComplet(sauvee)));
         mailService.notifierCreation(sauvee);
+
+        return decorer(mapper.toDto(sauvee));
+    }
+
+    /**
+     * Repos médical saisi par la RH ou le super-admin : il est <b>approuvé d'emblée</b>.
+     *
+     * <p>Un repos médical est un fait constaté par un certificat, pas une demande à
+     * arbitrer : le faire remonter jusqu'à la DG le laissait hors du pointage et du
+     * récapitulatif (qui ne lisent que {@code APPROUVE}) pendant toute la durée du circuit,
+     * et le jour était compté absent. Un agent qui dépose lui-même son repos médical suit,
+     * lui, le circuit normal.
+     *
+     * <p>La saisie est tracée comme une décision du niveau RH, pour que la fiche dise qui
+     * l'a enregistrée et pourquoi le circuit n'a pas été parcouru.
+     */
+    private DemandeCongeDto enregistrerReposMedicalDirect(DemandeConge demande) {
+        DecisionNiveau decision = DecisionNiveau.builder()
+                .decideurId(identite.idUtilisateurCourant())
+                .decideurNom(identite.nomCourant())
+                .date(LocalDateTime.now())
+                .commentaire(COMMENTAIRE_REPOS_MEDICAL_DIRECT)
+                .build();
+        demande.setDecisionRh(decision);
+        demande.setStatut(StatutDemande.APPROUVE);
+        demande.setDateDecision(LocalDate.now());
+        demande.setDecideurId(decision.getDecideurId());
+        demande.setDecideurNom(decision.getDecideurNom());
+        demande.setCommentaireDecision(COMMENTAIRE_REPOS_MEDICAL_DIRECT);
+
+        demande.tracer(entree(ActionValidationConge.CREATION, null, null));
+        demande.tracer(entree(ActionValidationConge.VALIDATION, NiveauValidationConge.RH,
+                COMMENTAIRE_REPOS_MEDICAL_DIRECT));
+
+        DemandeConge sauvee = demandeCongeRepository.save(demande);
+        notifier(sauvee, "DEMANDE_APPROUVEE", "Repos médical enregistré",
+                "Un repos médical a été enregistré pour %s.".formatted(nomComplet(sauvee)));
+        mailService.notifierReposMedicalDirect(sauvee);
 
         return decorer(mapper.toDto(sauvee));
     }
