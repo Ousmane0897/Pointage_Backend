@@ -1,6 +1,9 @@
 package com.example.Pointage_Cleanic.services.rh;
 
+import com.example.Pointage_Cleanic.Dto.rh.PointageCentraliseDto;
 import com.example.Pointage_Cleanic.Dto.rh.RecapitulatifMensuelDto;
+import com.example.Pointage_Cleanic.Dto.rh.RecapitulatifMensuelDto.RecapSiteDto;
+import com.example.Pointage_Cleanic.Enum.rh.TypeConge;
 import com.example.Pointage_Cleanic.Enum.rh.StatutDemande;
 import com.example.Pointage_Cleanic.Enum.rh.StatutValidationHS;
 import com.example.Pointage_Cleanic.Enum.rh.TypeMajoration;
@@ -21,6 +24,7 @@ import org.springframework.stereotype.Service;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.time.Clock;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.time.format.TextStyle;
@@ -41,6 +45,13 @@ public class RecapitulatifMensuelService {
     private final HeureSupplementaireRepository heureSupplementaireRepository;
     private final CalendrierTravailService calendrier;
     private final JourFerieService jourFerieService;
+    /** Source des créneaux (employé × jour × site) : mêmes règles que la vue jour. */
+    private final PointageCentraliseService pointageCentralise;
+    /** Horloge métier (Africa/Dakar) : un jour à venir n'est jamais une absence. */
+    private final Clock clock;
+
+    /** Libellé de la ligne qui regroupe les pointages qu'aucun créneau n'explique. */
+    static final String SITE_HORS_PLANNING = "Hors planning";
 
     /**
      * Jours du mois réellement couverts par un congé approuvé, <b>intersectés avec les
@@ -164,9 +175,7 @@ public class RecapitulatifMensuelService {
         List<DossierEmploye> employes = dossierEmployeRepository.findByStatutIn(STATUTS_ACTIFS).stream()
                 .filter(e -> departement == null || departement.isBlank()
                         || departement.equalsIgnoreCase(e.getDepartement()))
-                .filter(e -> site == null || site.isBlank()
-                        || (e.getSiteAffecte() != null
-                            && e.getSiteAffecte().toLowerCase().contains(site.toLowerCase())))
+                .filter(e -> matchesSite(e, site))
                 .filter(e -> matchesQ(q, e.getNom(), e.getPrenom(), e.getMatricule()))
                 .collect(Collectors.toList());
 
@@ -177,8 +186,8 @@ public class RecapitulatifMensuelService {
         // Pointages du mois groupés par codeSecret -> (jour -> liste).
         // ⚠ Plus de filtrage sur les seuls jours ouvrables : un férié TRAVAILLÉ doit se
         // voir, et les jours ouvrables ne sont plus les mêmes d'un employé à l'autre.
-        Map<String, Map<LocalDate, List<Pointage>>> pointagesParAgent = pointageRepository
-                .findByDateBetween(debut, fin).stream()
+        List<Pointage> pointagesDuMois = pointageRepository.findByDateBetween(debut, fin);
+        Map<String, Map<LocalDate, List<Pointage>>> pointagesParAgent = pointagesDuMois.stream()
                 .filter(p -> p.getCodeSecret() != null && p.getDate() != null)
                 .collect(Collectors.groupingBy(Pointage::getCodeSecret,
                         Collectors.groupingBy(Pointage::getDate)));
@@ -190,6 +199,17 @@ public class RecapitulatifMensuelService {
                 .findByStatutAndDateDebutLessThanEqualAndDateFinGreaterThanEqual(
                         StatutDemande.APPROUVE, fin, debut);
 
+        // Créneaux du mois (employé × jour × site) : rattachement par plage horaire, retard
+        // au-delà de la tolérance, congé prioritaire — exactement les règles de la vue
+        // « Pointage centralisé », avec les données déjà chargées ci-dessus.
+        Map<String, List<PointageCentraliseDto>> creneauxParEmploye = pointageCentralise
+                .lignesPlage(debut, fin, employes, feries, pointagesDuMois, congesDuMois).stream()
+                .collect(Collectors.groupingBy(PointageCentraliseDto::getEmployeId));
+
+        // ⚠ Un jour dû mais encore à venir n'est pas une absence : sur le mois en cours,
+        // l'ancien calcul comptait absents tous les jours ouvrables restants.
+        LocalDate aujourdhui = LocalDate.now(clock);
+
         return employes.stream().map(e -> {
             Map<LocalDate, List<Pointage>> pointagesEmploye =
                     pointagesParAgent.getOrDefault(e.getAgentId(), Map.of());
@@ -198,11 +218,16 @@ public class RecapitulatifMensuelService {
             List<LocalDate> joursOuvrables = calendrier.joursOuvrables(e, debut, fin, feries);
             Set<LocalDate> ouvrables = new HashSet<>(joursOuvrables);
 
-            // Retard non dérivé : DossierEmploye ne porte pas d'heure de début et les
-            // horaires sont hétérogènes (même décision que la vue pointage centralisé).
-            // Le contrat conserve nombreRetards / minutesRetardTotal, figés à 0.
-            int nombreRetards = 0;
-            int minutesRetardTotal = 0;
+            // Détail par site, puis cumuls de l'agent. Les retards ne sont plus figés à 0 :
+            // les affectations portent leur horaire, chaque créneau est jugé sur le sien.
+            List<PointageCentraliseDto> creneaux = creneauxParEmploye.getOrDefault(e.getId(), List.of());
+            List<RecapSiteDto> tousLesSites = agregerParSite(creneaux);
+            int nombreRetards = tousLesSites.stream().mapToInt(RecapSiteDto::getNombreRetards).sum();
+            int minutesRetardTotal = tousLesSites.stream().mapToInt(RecapSiteDto::getMinutesRetardTotal).sum();
+            int minutesTravaillees = tousLesSites.stream().mapToInt(RecapSiteDto::getMinutesTravaillees).sum();
+            int creneauxSansDepart = tousLesSites.stream().mapToInt(RecapSiteDto::getCreneauxSansDepart).sum();
+            int horsPlan = (int) creneaux.stream()
+                    .filter(l -> PointageCentraliseService.HORS_PLAN.equals(l.getStatut())).count();
 
             // ⚠ DEUX compteurs distincts, à ne pas fusionner.
             // `joursTravailles` compte TOUS les jours pointés du mois, fériés compris : le
@@ -226,15 +251,25 @@ public class RecapitulatifMensuelService {
                     .filter(joursPointes::contains)
                     .count();
 
-            Set<LocalDate> congesEmploye = joursDeConge(congesDuMois, e, debut, fin, ouvrables);
+            // Congés ventilés par nature. ⚠ Une absence non justifiée « approuvée » reste une
+            // ABSENCE : elle ne couvre pas le jour (elle était jusqu'ici comptée en congé).
+            Set<LocalDate> reposMedical = joursDeConge(
+                    filtrerType(congesDuMois, t -> t == TypeConge.REPOS_MEDICAL), e, debut, fin, ouvrables);
+            Set<LocalDate> congesEmploye = joursDeConge(
+                    filtrerType(congesDuMois, t -> t != TypeConge.REPOS_MEDICAL
+                            && t != TypeConge.ABSENCE_NON_JUSTIFIEE), e, debut, fin, ouvrables);
             int joursConge = congesEmploye.size();
 
             // Cardinal de l'UNION : un jour à la fois pointé et en congé ne doit pas être
             // décompté deux fois. Positif par construction, aucun plancher nécessaire.
-            long couverts = joursOuvrables.stream()
-                    .filter(d -> congesEmploye.contains(d) || joursPointes.contains(d))
+            List<LocalDate> joursDus = joursOuvrables.stream()
+                    .filter(d -> !d.isAfter(aujourdhui))
+                    .toList();
+            long couverts = joursDus.stream()
+                    .filter(d -> congesEmploye.contains(d) || reposMedical.contains(d)
+                            || joursPointes.contains(d))
                     .count();
-            int joursAbsence = (int) (joursOuvrables.size() - couverts);
+            int joursAbsence = (int) (joursDus.size() - couverts);
 
             List<HeureSupplementaire> hsEmploye = hsDuMois.stream()
                     .filter(h -> h.getEmployeId().equals(e.getId()))
@@ -265,6 +300,16 @@ public class RecapitulatifMensuelService {
                     .joursTravailles(joursTravailles)
                     .joursAbsence(joursAbsence)
                     .joursConge(joursConge)
+                    .joursReposMedical(reposMedical.size())
+                    .minutesTravaillees(minutesTravaillees)
+                    .creneauxSansDepart(creneauxSansDepart)
+                    .horsPlan(horsPlan)
+                    .agentId(e.getAgentId())
+                    .dateCreationAgentId(e.getDateCreationAgentId())
+                    .dateCreationAgentIdEstimee(Boolean.TRUE.equals(e.getDateCreationAgentIdEstimee()))
+                    // Filtre « Site » : n'affiche que les lignes du site demandé, les cumuls
+                    // de l'agent restant tous sites confondus.
+                    .sites(tousLesSites.stream().filter(r -> siteCorrespond(r, site)).toList())
                     .joursFeries(joursFeries)
                     .joursTravaillesFeries(joursTravaillesFeries)
                     .nombreRetards(nombreRetards)
@@ -274,6 +319,94 @@ public class RecapitulatifMensuelService {
                     .heuresSupParType(parType)
                     .build();
         }).collect(Collectors.toList());
+    }
+
+    private static List<DemandeConge> filtrerType(List<DemandeConge> conges,
+                                                  java.util.function.Predicate<TypeConge> garder) {
+        // Type nul (données antérieures) ⇒ congé ordinaire : même arbitrage prudent que
+        // TypeConge.decompteSoldeAnnuel, on ne requalifie rien sur la foi d'une donnée absente.
+        return conges.stream()
+                .filter(c -> garder.test(c.getType() == null ? TypeConge.ANNUEL : c.getType()))
+                .toList();
+    }
+
+    /**
+     * Agrège les créneaux d'un agent par site. Les pointages hors planning forment une
+     * ligne à part, en dernier ; les lignes {@code CONGE} n'appartiennent à aucun site (un
+     * congé est un fait de la journée) et sont comptées au niveau de l'agent.
+     */
+    List<RecapSiteDto> agregerParSite(List<PointageCentraliseDto> creneaux) {
+        Map<String, List<PointageCentraliseDto>> parSite = new LinkedHashMap<>();
+        for (PointageCentraliseDto l : creneaux) {
+            if (PointageCentraliseService.CONGE.equals(l.getStatut())) continue;
+            String cle = PointageCentraliseService.HORS_PLAN.equals(l.getStatut())
+                    ? SITE_HORS_PLANNING
+                    : (l.getSite() == null || l.getSite().isBlank() ? "—" : l.getSite().trim());
+            parSite.computeIfAbsent(cle, k -> new ArrayList<>()).add(l);
+        }
+        return parSite.entrySet().stream()
+                .map(en -> agregerSite(en.getKey(), en.getValue()))
+                .sorted(Comparator.comparing(RecapSiteDto::isHorsPlanning)
+                        .thenComparing(RecapSiteDto::getSite, String.CASE_INSENSITIVE_ORDER))
+                .toList();
+    }
+
+    private RecapSiteDto agregerSite(String site, List<PointageCentraliseDto> lignes) {
+        Set<LocalDate> joursPointes = new HashSet<>();
+        Set<LocalDate> joursAbsents = new HashSet<>();
+        Set<String> horaires = new TreeSet<>();
+        int prevus = 0, minutes = 0, sansDepart = 0, absents = 0, retards = 0, minutesRetard = 0;
+
+        for (PointageCentraliseDto l : lignes) {
+            if (l.isPlanifie()) {
+                prevus++;
+                if (l.getSiteHoraireDebut() != null && l.getSiteHoraireFin() != null) {
+                    horaires.add(l.getSiteHoraireDebut() + "–" + l.getSiteHoraireFin());
+                }
+            }
+            if (l.getHeureArrivee() != null) {
+                joursPointes.add(l.getDate());
+                // Durée inconnue (départ non pointé) : signalée, jamais inventée.
+                if (l.getDureeMinutes() != null) minutes += l.getDureeMinutes();
+                else sansDepart++;
+            }
+            if (PointageCentraliseService.ABSENT.equals(l.getStatut())) {
+                absents++;
+                joursAbsents.add(l.getDate());
+            }
+            if (PointageCentraliseService.RETARD.equals(l.getStatut())) {
+                retards++;
+                minutesRetard += l.getRetardMinutes() != null ? l.getRetardMinutes() : 0;
+            }
+        }
+
+        return RecapSiteDto.builder()
+                .site(site)
+                .horsPlanning(SITE_HORS_PLANNING.equals(site))
+                .horaires(horaires.isEmpty() ? null : String.join(", ", horaires))
+                .creneauxPrevus(prevus)
+                .joursTravailles(joursPointes.size())
+                .minutesTravaillees(minutes)
+                .creneauxSansDepart(sansDepart)
+                .creneauxAbsents(absents)
+                .joursAbsence(joursAbsents.size())
+                .nombreRetards(retards)
+                .minutesRetardTotal(minutesRetard)
+                .build();
+    }
+
+    /** Filtre employé : site affecté (chaîne legacy) ou l'une de ses affectations. */
+    private static boolean matchesSite(DossierEmploye e, String site) {
+        if (site == null || site.isBlank()) return true;
+        String cherche = site.toLowerCase();
+        if (e.getSiteAffecte() != null && e.getSiteAffecte().toLowerCase().contains(cherche)) return true;
+        return e.getAffectations() != null && e.getAffectations().stream()
+                .anyMatch(a -> a != null && a.getSite() != null && a.getSite().toLowerCase().contains(cherche));
+    }
+
+    private static boolean siteCorrespond(RecapSiteDto ligne, String site) {
+        if (site == null || site.isBlank()) return true;
+        return !ligne.isHorsPlanning() && ligne.getSite().toLowerCase().contains(site.toLowerCase());
     }
 
     private double sommeHeuresParType(List<HeureSupplementaire> hs, TypeMajoration type) {

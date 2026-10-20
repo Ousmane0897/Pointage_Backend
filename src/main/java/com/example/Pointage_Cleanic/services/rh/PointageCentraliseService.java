@@ -190,6 +190,53 @@ public class PointageCentraliseService {
     }
 
     /**
+     * Lignes de créneaux d'une plage, à partir de données <b>déjà chargées</b> par
+     * l'appelant — consommé par le récapitulatif mensuel, qui agrège ces lignes par agent
+     * et par site.
+     *
+     * <p>⚠ Mêmes règles que la vue jour (rattachement par plage horaire, retard avec
+     * tolérance, statuts, congé prioritaire) : c'est {@link #buildLignes} lui-même qui est
+     * appelé, rien n'est dupliqué. Seul le chargement diffère — pointages et congés sont
+     * lus <b>une fois pour toute la plage</b> par l'appelant, au lieu de deux requêtes par
+     * jour.
+     *
+     * @param pointages         pointages de la plage (tous agents)
+     * @param congesApprouves   congés {@code APPROUVE} chevauchant la plage
+     */
+    public List<PointageCentraliseDto> lignesPlage(LocalDate debut, LocalDate fin,
+                                                   List<DossierEmploye> employes, Set<LocalDate> feries,
+                                                   List<Pointage> pointages,
+                                                   List<DemandeConge> congesApprouves) {
+        Map<LocalDate, Map<String, List<Pointage>>> pointagesParJour = pointages.stream()
+                .filter(p -> p.getCodeSecret() != null && p.getDate() != null)
+                .collect(Collectors.groupingBy(Pointage::getDate,
+                        Collectors.groupingBy(Pointage::getCodeSecret)));
+        LocalDateTime maintenant = LocalDateTime.now(clock);
+
+        List<PointageCentraliseDto> lignes = new ArrayList<>();
+        for (LocalDate jour = debut; !jour.isAfter(fin); jour = jour.plusDays(1)) {
+            boolean jourFerie = feries != null && feries.contains(jour);
+            Map<String, List<Pointage>> pointagesParCode = pointagesParJour.getOrDefault(jour, Map.of());
+            Map<String, DemandeConge> congeParEmploye = congesDuJour(congesApprouves, jour);
+            for (DossierEmploye e : employes) {
+                lignes.addAll(buildLignes(e, jour,
+                        pointagesParCode.getOrDefault(e.getAgentId(), List.of()),
+                        congeParEmploye.get(e.getId()), maintenant, jourFerie));
+            }
+        }
+        return lignes;
+    }
+
+    /** Congé couvrant {@code jour}, par employé — même règle « premier gagnant » que la vue jour. */
+    private static Map<String, DemandeConge> congesDuJour(List<DemandeConge> conges, LocalDate jour) {
+        return conges.stream()
+                .filter(c -> c.getEmployeId() != null)
+                .filter(c -> c.getDateDebut() == null || !c.getDateDebut().isAfter(jour))
+                .filter(c -> c.getDateFin() == null || !c.getDateFin().isBefore(jour))
+                .collect(Collectors.toMap(DemandeConge::getEmployeId, c -> c, (a, b) -> a));
+    }
+
+    /**
      * Lignes de la vue pour un employé et un jour : une ligne {@code CONGE} si congé
      * approuvé (prioritaire), sinon une ligne par créneau attendu — enrichie du pointage
      * qui s'y rattache — plus une ligne {@code HORS_PLAN} par pointage inexpliqué.
@@ -395,6 +442,8 @@ public class PointageCentraliseService {
                 // Libellé lisible plutôt que le nom brut de l'enum : le motif est affiché
                 // tel quel dans le tableau (« Absence non justifiée », pas l'enum).
                 .motif(conge.getType() != null ? conge.getType().getLibelle() : null)
+                // L'enum, pour les agrégations : le libellé ne doit jamais servir de clé.
+                .typeConge(conge.getType())
                 .build();
     }
 
