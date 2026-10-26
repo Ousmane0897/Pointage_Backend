@@ -4,12 +4,12 @@ import com.example.Pointage_Cleanic.Enum.rh.NiveauValidationConge;
 import com.example.Pointage_Cleanic.entities.rh.DossierEmploye;
 import com.example.Pointage_Cleanic.repositories.rh.DossierEmployeRepository;
 import com.example.Pointage_Cleanic.services.terrain.CurrentUserProvider;
+import com.example.Pointage_Cleanic.util.RattachementEmailUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
@@ -75,13 +75,10 @@ public class CongeIdentiteService {
             return Optional.empty();
         }
         if (trouves.size() > 1) {
-            // `email` n'est pas contraint unique en base : on tranche de façon déterministe
-            // (le plus petit id) pour ne pas dépendre de l'ordre de la collection.
             log.warn("{} dossiers employés partagent l'email {} — résolution sur le premier id.",
                     trouves.size(), email);
-            return trouves.stream().min(Comparator.comparing(DossierEmploye::getId));
         }
-        return Optional.of(trouves.get(0));
+        return RattachementEmailUtils.premierDossier(trouves);
     }
 
     /** Id du dossier employé de l'appelant, ou {@code null} s'il n'est pas rattaché. */

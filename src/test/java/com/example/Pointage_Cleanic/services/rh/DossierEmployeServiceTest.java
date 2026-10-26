@@ -75,6 +75,7 @@ class DossierEmployeServiceTest {
                     .dureeEssaiMois(dto.getDureeEssaiMois())
                     .joursTravail(dto.getJoursTravail())
                     .nombreEnfants(dto.getNombreEnfants())
+                    .email(dto.getEmail())
                     .build();
         });
         when(mapper.toDto(any(DossierEmploye.class))).thenAnswer(inv -> {
@@ -374,6 +375,32 @@ class DossierEmployeServiceTest {
         assertThatThrownBy(() -> service.create(dto, null))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("date de naissance");
+    }
+
+    // ─── Email : seule clé de rattachement au compte de connexion ───────────
+
+    @Test
+    void create_normalise_l_email_comme_celui_du_compte() throws Exception {
+        DossierEmployeDto dto = actifDto("M20E");
+        dto.setEmail("  Awa.Diop@Cleanic.SN ");
+
+        service.create(dto, null);
+
+        ArgumentCaptor<DossierEmploye> captor = ArgumentCaptor.forClass(DossierEmploye.class);
+        verify(repository).save(captor.capture());
+        assertThat(captor.getValue().getEmail()).isEqualTo("awa.diop@cleanic.sn");
+    }
+
+    @Test
+    void un_email_blanc_devient_null() throws Exception {
+        DossierEmployeDto dto = actifDto("M21E");
+        dto.setEmail("   ");
+
+        service.create(dto, null);
+
+        ArgumentCaptor<DossierEmploye> captor = ArgumentCaptor.forClass(DossierEmploye.class);
+        verify(repository).save(captor.capture());
+        assertThat(captor.getValue().getEmail()).isNull();
     }
 
     private EnfantEmployeDto enfant(String prenom, LocalDate naissance) {

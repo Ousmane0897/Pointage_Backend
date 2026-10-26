@@ -217,8 +217,9 @@ public class CongeWorkflowService {
         }
 
         return moi.orElseThrow(() -> new CongeInvalideException(
-                "Votre compte n'est rattaché à aucun dossier employé : "
-                        + "contactez les Ressources humaines."));
+                "Votre compte n'est rattaché à aucun dossier employé : aucune fiche ne porte "
+                        + "votre adresse de connexion (" + identite.emailCourant() + "). "
+                        + "Demandez aux Ressources humaines de la renseigner dans votre fiche employé."));
     }
 
     // ─── Transitions ──────────────────────────────────────────────────────────

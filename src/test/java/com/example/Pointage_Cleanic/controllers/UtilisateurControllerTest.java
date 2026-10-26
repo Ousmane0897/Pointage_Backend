@@ -7,6 +7,7 @@ import com.example.Pointage_Cleanic.repositories.UtilisateurRepository;
 import com.example.Pointage_Cleanic.security.JwtRequestFilter;
 import com.example.Pointage_Cleanic.security.JwtUtil;
 import com.example.Pointage_Cleanic.services.MyUserDetailsService;
+import com.example.Pointage_Cleanic.services.RattachementCompteService;
 import com.example.Pointage_Cleanic.services.UtilisateursService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
@@ -41,6 +42,7 @@ class UtilisateurControllerTest {
     @MockBean private UtilisateursService utilisateursService;
     @MockBean private LoginRepository loginRepository;
     @MockBean private PasswordEncoder passwordEncoder;
+    @MockBean private RattachementCompteService rattachementCompteService;
 
     // === Sécurité (OBLIGATOIRE en WebMvcTest)
     @MockBean private MyUserDetailsService myUserDetailsService;

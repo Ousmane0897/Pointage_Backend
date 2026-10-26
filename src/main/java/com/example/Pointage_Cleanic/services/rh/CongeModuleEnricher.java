@@ -4,6 +4,7 @@ import com.example.Pointage_Cleanic.entities.GestionModules.ModulesAutorises;
 import com.example.Pointage_Cleanic.entities.GestionModules.SousModules.Rh;
 import com.example.Pointage_Cleanic.entities.rh.DossierEmploye;
 import com.example.Pointage_Cleanic.repositories.rh.DossierEmployeRepository;
+import com.example.Pointage_Cleanic.util.RattachementEmailUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -42,10 +43,13 @@ public class CongeModuleEnricher {
         }
         try {
             List<DossierEmploye> dossiers = dossierEmployeRepository.findByEmailIgnoreCase(email.trim());
-            if (dossiers.isEmpty()) {
+            // Même dossier que celui retenu par CongeIdentiteService en cas de doublon,
+            // sinon le flag de validation serait calculé sur un autre employé.
+            DossierEmploye dossier = RattachementEmailUtils.premierDossier(dossiers).orElse(null);
+            if (dossier == null) {
                 return modules;   // compte technique, non rattaché à un employé
             }
-            String employeId = dossiers.get(0).getId();
+            String employeId = dossier.getId();
 
             Rh rh = modules.getRh();
             if (rh == null) {

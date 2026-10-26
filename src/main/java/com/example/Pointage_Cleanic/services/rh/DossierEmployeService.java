@@ -23,6 +23,7 @@ import com.example.Pointage_Cleanic.exception.ResourceNotFoundException;
 import com.example.Pointage_Cleanic.repositories.rh.DossierEmployeRepository;
 import com.example.Pointage_Cleanic.util.AffectationSiteUtils;
 import com.example.Pointage_Cleanic.util.EnfantEmployeUtils;
+import com.example.Pointage_Cleanic.util.RattachementEmailUtils;
 import com.example.Pointage_Cleanic.util.SiteAffecteUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -394,6 +395,10 @@ public class DossierEmployeService {
     }
 
     private void nettoyerChampsOptionnels(DossierEmploye d) {
+        // L'email est la seule clé qui rattache le compte de connexion au dossier (congés) :
+        // normalisé comme celui du compte, sans quoi un espace ou une majuscule saisis ici
+        // rendraient le compte « non rattaché ».
+        d.setEmail(RattachementEmailUtils.normaliser(d.getEmail()));
         if (d.getStatut() != StatutDossierEmploye.EN_PERIODE_ESSAI) {
             d.setDureeEssaiMois(null);
         }

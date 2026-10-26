@@ -1,10 +1,12 @@
 package com.example.Pointage_Cleanic.controllers;
 
+import com.example.Pointage_Cleanic.Dto.RattachementDossierDto;
 import com.example.Pointage_Cleanic.entities.Utilisateur;
 import com.example.Pointage_Cleanic.entities.User;
 import com.example.Pointage_Cleanic.exception.EmailAlreadyExistsException;
 import com.example.Pointage_Cleanic.repositories.LoginRepository;
 import com.example.Pointage_Cleanic.repositories.UtilisateurRepository;
+import com.example.Pointage_Cleanic.services.RattachementCompteService;
 import com.example.Pointage_Cleanic.services.UtilisateursService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -26,6 +28,7 @@ public class UtilisateurController {
     private final UtilisateursService utilisateursService;
     private final PasswordEncoder passwordEncoder;
     private final LoginRepository loginRepository;
+    private final RattachementCompteService rattachementCompteService;
 
     @PostMapping
     public ResponseEntity<?> save(@RequestBody Utilisateur utilisateur) {
@@ -70,6 +73,18 @@ public class UtilisateurController {
     public ResponseEntity<List<Utilisateur>> getAll() {
 
         return ResponseEntity.ok(utilisateursService.getAll());
+    }
+
+    /** Dossier employé portant l'email de chaque compte (congés : rattachement par email). */
+    @GetMapping("/rattachements")
+    public ResponseEntity<List<RattachementDossierDto>> rattachements() {
+        return ResponseEntity.ok(rattachementCompteService.rattachements());
+    }
+
+    /** Dossier employé portant cet email, pour le formulaire de compte avant enregistrement. */
+    @GetMapping("/rattachement")
+    public ResponseEntity<RattachementDossierDto> rattachement(@RequestParam String email) {
+        return ResponseEntity.ok(rattachementCompteService.rattachement(email));
     }
 
     @GetMapping("/{id}")

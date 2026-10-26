@@ -46,6 +46,12 @@ public interface DossierEmployeRepository extends MongoRepository<DossierEmploye
      */
     List<DossierEmploye> findByEmailIgnoreCase(String email);
 
+    /**
+     * Rattachement de plusieurs comptes en une lecture. Comparaison à l'identique :
+     * les emails de dossier sont normalisés à l'écriture (trim + minuscules).
+     */
+    List<DossierEmploye> findByEmailIn(Collection<String> emails);
+
     // Stock v2 7.4 : repérage du « Responsable Achats » (validateur des bons)
     List<DossierEmploye> findByPosteIgnoreCase(String poste);
 

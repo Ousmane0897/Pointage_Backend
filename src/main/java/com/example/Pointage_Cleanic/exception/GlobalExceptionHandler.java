@@ -71,6 +71,14 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.FORBIDDEN).body(body);
     }
 
+    @ExceptionHandler(CompteAccesRefuseException.class)
+    public ResponseEntity<Map<String, Object>> handleCompteAccesRefuse(CompteAccesRefuseException ex) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("error", "COMPTE_ACCES_REFUSE");
+        body.put("message", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(body);
+    }
+
     @ExceptionHandler(CongeTransitionInterditeException.class)
     public ResponseEntity<Map<String, Object>> handleCongeTransitionInterdite(
             CongeTransitionInterditeException ex) {
