@@ -48,7 +48,9 @@ public class ComparatifAnalyseService {
             if (m.getDate() == null) {
                 continue;
             }
-            String cle = axe == AxeComparatif.SITE ? m.getSiteSourceId() : m.getProduitId();
+            String cle = axe == AxeComparatif.SITE
+                    ? SiteSourceCle.cle(m.getSiteSourceId(), m.getSiteSourceNom())
+                    : m.getProduitId();
             if (cle == null) {
                 cle = "—";
             }

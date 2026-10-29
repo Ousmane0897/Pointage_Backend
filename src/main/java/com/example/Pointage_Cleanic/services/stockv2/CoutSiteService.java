@@ -31,8 +31,9 @@ public class CoutSiteService {
 
         Map<String, Agg> parSite = new LinkedHashMap<>();
         for (MouvementStock m : perimetre.mouvements()) {
-            String siteId = m.getSiteSourceId();
-            Agg agg = parSite.computeIfAbsent(siteId, k -> new Agg(m.getSiteSourceNom()));
+            // Un site hors référentiel (siteSourceId nul) est groupé par son nom, pas fondu sous null.
+            Agg agg = parSite.computeIfAbsent(SiteSourceCle.cle(m.getSiteSourceId(), m.getSiteSourceNom()),
+                    k -> new Agg(m.getSiteSourceId(), m.getSiteSourceNom()));
             long montant = Math.round(m.getQuantite() * valorisationSupport.coutDe(m, produits).coutUnitaire());
             agg.coutTotal += montant;
             agg.nbSorties++;
@@ -54,7 +55,7 @@ public class CoutSiteService {
                 nbSurconso++;
             }
             lignes.add(ComparatifCoutSitesDto.LigneSite.builder()
-                    .siteId(e.getKey())
+                    .siteId(a.siteId)
                     .siteNom(a.siteNom)
                     .coutTotal(a.coutTotal)
                     .nbSorties(a.nbSorties)
@@ -78,12 +79,14 @@ public class CoutSiteService {
     }
 
     private static final class Agg {
+        private final String siteId;
         private final String siteNom;
         private long coutTotal;
         private long nbSorties;
         private double quantiteTotale;
 
-        private Agg(String siteNom) {
+        private Agg(String siteId, String siteNom) {
+            this.siteId = siteId;
             this.siteNom = siteNom;
         }
     }

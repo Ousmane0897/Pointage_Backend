@@ -25,6 +25,8 @@ public class BonSortiePayload {
     private LocalDate date;
 
     private String siteSourceId;
+    /** Site hors référentiel (chantier, prestation ponctuelle) : lu seulement si {@code siteSourceId} est vide. */
+    private String siteSourceNom;
     private DestinatairePayload destinataire;
     private String motif;
     private String demandeurId;

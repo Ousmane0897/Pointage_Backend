@@ -62,7 +62,10 @@ public class BonSortieService {
             query.addCriteria(new Criteria().orOperator(
                     Criteria.where("reference").regex(regex, "i"),
                     Criteria.where("motif").regex(regex, "i"),
-                    Criteria.where("destinataire.clientNom").regex(regex, "i")
+                    Criteria.where("destinataire.clientNom").regex(regex, "i"),
+                    // Seul moyen de retrouver un bon dont le site est hors référentiel : le filtre
+                    // siteId ne peut pas le cibler.
+                    Criteria.where("siteSourceNom").regex(regex, "i")
             ));
         }
         if (statut != null) {
@@ -89,7 +92,7 @@ public class BonSortieService {
         if (payload.getType() == null) {
             throw new IllegalArgumentException("Le type de sortie est obligatoire");
         }
-        String siteNom = referentielSite.valideEtCharge(payload.getSiteSourceId()).getNom();
+        SiteSource site = resoudreSiteSource(payload);
         DestinataireBon destinataire = resoudreDestinataire(payload.getDestinataire());
         List<LigneBon> lignes = support.denormaliserLignes(payload.getLignes());
         DemandeurRef demandeur = support.resoudreDemandeur(payload.getDemandeurId());
@@ -100,8 +103,8 @@ public class BonSortieService {
                 .reference(compteurService.genererReference("BS"))
                 .type(payload.getType())
                 .date(payload.getDate() != null ? payload.getDate() : LocalDate.now())
-                .siteSourceId(payload.getSiteSourceId())
-                .siteSourceNom(siteNom)
+                .siteSourceId(site.id())
+                .siteSourceNom(site.nom())
                 .destinataire(destinataire)
                 .motif(payload.getMotif())
                 .natureDon(spec.natureDon())
@@ -135,7 +138,7 @@ public class BonSortieService {
         if (payload.getType() == null) {
             throw new IllegalArgumentException("Le type de sortie est obligatoire");
         }
-        String siteNom = referentielSite.valideEtCharge(payload.getSiteSourceId()).getNom();
+        SiteSource site = resoudreSiteSource(payload);
         DestinataireBon destinataire = resoudreDestinataire(payload.getDestinataire());
         List<LigneBon> lignes = support.denormaliserLignes(payload.getLignes());
         DemandeurRef demandeur = support.resoudreDemandeur(payload.getDemandeurId());
@@ -143,8 +146,8 @@ public class BonSortieService {
 
         bon.setType(payload.getType());
         bon.setDate(payload.getDate() != null ? payload.getDate() : bon.getDate());
-        bon.setSiteSourceId(payload.getSiteSourceId());
-        bon.setSiteSourceNom(siteNom);
+        bon.setSiteSourceId(site.id());
+        bon.setSiteSourceNom(site.nom());
         bon.setDestinataire(destinataire);
         bon.setMotif(payload.getMotif());
         bon.setNatureDon(spec.natureDon());
@@ -272,6 +275,36 @@ public class BonSortieService {
         return mapper.toDto(saved);
     }
 
+
+    /** Longueur maximale d'un nom de site saisi hors référentiel. */
+    static final int LONGUEUR_MAX_SITE_LIBRE = 120;
+
+    /**
+     * Site source du bon : un site du référentiel ({@code siteSourceId}, nom relu en base — celui
+     * du client est ignoré) ou, à défaut, un site <b>hors référentiel</b> saisi en texte libre
+     * ({@code siteSourceId} nul, nom normalisé). Le stock n'en dépend pas : depuis l'entrepôt
+     * unique, une sortie débite l'entrepôt quel que soit le site ; celui-ci n'est qu'une clé
+     * d'imputation analytique (cf. {@link SiteSourceCle}).
+     */
+    private SiteSource resoudreSiteSource(BonSortiePayload payload) {
+        String siteId = payload.getSiteSourceId();
+        if (siteId != null && !siteId.isBlank()) {
+            return new SiteSource(siteId, referentielSite.valideEtCharge(siteId).getNom());
+        }
+        String nom = SiteSourceCle.normaliserNom(payload.getSiteSourceNom());
+        if (nom == null) {
+            throw new IllegalArgumentException(
+                    "Site source obligatoire : choisissez un site ou saisissez son nom");
+        }
+        if (nom.length() > LONGUEUR_MAX_SITE_LIBRE) {
+            throw new IllegalArgumentException(
+                    "Le nom du site ne doit pas dépasser " + LONGUEUR_MAX_SITE_LIBRE + " caractères");
+        }
+        return new SiteSource(null, nom);
+    }
+
+    private record SiteSource(String id, String nom) {
+    }
 
     /** Valide et résout les champs propres au type de sortie (don / chantier). */
     private SpecificiteSortie resoudreSpecificite(BonSortiePayload payload) {
