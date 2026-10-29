@@ -34,6 +34,8 @@ public class DotationService {
 
     private static class Acc {
         String siteId;
+        /** Nom dénormalisé du mouvement : seul libellé d'un site hors référentiel (siteId nul). */
+        String siteNom;
         String produitId;
         double prevu;
         double reel;
@@ -63,8 +65,13 @@ public class DotationService {
 
         // Réel : sorties effectives du mois
         for (MouvementStock m : sortiesDuMois(debut, fin, siteId, produitId)) {
-            Acc acc = accs.computeIfAbsent(cle(m.getSiteSourceId(), m.getProduitId()),
+            // Clé de site partagée avec les plafonds (id) ; un site hors référentiel est groupé par nom.
+            Acc acc = accs.computeIfAbsent(
+                    cle(SiteSourceCle.cle(m.getSiteSourceId(), m.getSiteSourceNom()), m.getProduitId()),
                     k -> nouvelAcc(m.getSiteSourceId(), m.getProduitId()));
+            if (acc.siteNom == null) {
+                acc.siteNom = m.getSiteSourceNom();
+            }
             acc.reel += m.getQuantite();
         }
 
@@ -88,7 +95,7 @@ public class DotationService {
                 : (acc.reel < acc.prevu ? SensEcartDotation.SOUS_CONSOMMATION : SensEcartDotation.CONFORME);
         return LigneComparatifDto.builder()
                 .siteId(acc.siteId)
-                .siteNom(referentielSite.nomDuSite(acc.siteId))
+                .siteNom(acc.siteId == null && acc.siteNom != null ? acc.siteNom : referentielSite.nomDuSite(acc.siteId))
                 .produitId(acc.produitId)
                 .produitCode(produit == null ? null : produit.getCode())
                 .produitLibelle(produit == null ? null : produit.getLibelle())

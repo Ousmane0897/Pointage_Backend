@@ -187,7 +187,7 @@ public class ConsommationStockService {
 
     private String cle(TypeRapportConsommation type, MouvementStock m) {
         return switch (type) {
-            case PAR_SITE -> m.getSiteSourceId() == null ? "—" : m.getSiteSourceId();
+            case PAR_SITE -> SiteSourceCle.cle(m.getSiteSourceId(), m.getSiteSourceNom());
             case PAR_PRODUIT -> m.getProduitId();
             case PAR_PERIODE -> m.getDate() == null ? "—" : m.getDate().format(MOIS);
         };

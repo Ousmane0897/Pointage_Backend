@@ -70,7 +70,8 @@ public class BonMailNotificationService {
         lignes.put("Référence", valeur(bon.getReference()));
         lignes.put("Type", libelle(bon.getType() == null ? null : bon.getType().name()));
         lignes.put("Date", date(bon.getDate()));
-        lignes.put("Site source", valeur(bon.getSiteSourceNom()));
+        lignes.put("Site source", valeur(bon.getSiteSourceNom())
+                + (bon.getSiteSourceId() == null && bon.getSiteSourceNom() != null ? " (hors référentiel)" : ""));
         lignes.put("Destinataire", destinataire(bon.getDestinataire()));
         lignes.put("Nombre de lignes", String.valueOf(bon.getLignes() == null ? 0 : bon.getLignes().size()));
         lignes.put("Montant total", montant(bon.getMontantTotal()));
