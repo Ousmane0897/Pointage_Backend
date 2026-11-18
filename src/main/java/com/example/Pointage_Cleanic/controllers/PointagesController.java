@@ -35,14 +35,10 @@ public class PointagesController {
         String cleanCode = request.getCodeSecret()
                 .replaceAll("[^0-9]", ""); // 🔥 SUPPRIME TOUT SAUF CHIFFRES
 
-        if (!pointageServices.canPoint(request.getDeviceId(), 20)) {
-            return ResponseEntity
-                    .status(HttpStatus.TOO_MANY_REQUESTS)
-                    .body("Ce téléphone a déjà été utilisé pour un pointage récemment.");
-        }
-
         // Employé introuvable / code invalide → ResourceNotFoundException (404 JSON) géré
         // par GlobalExceptionHandler ; pas de try/catch local.
+        // Téléphone d'un autre agent / double envoi → PointageTropFrequentException (429 JSON
+        // { message }) : la garde vit dans le service car elle doit connaître l'agent.
         Pointage pointage = pointageServices.enregistrerPointage(
                 cleanCode,
                 request.getDeviceId(),
