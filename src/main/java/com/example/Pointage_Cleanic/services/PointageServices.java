@@ -3,6 +3,7 @@ package com.example.Pointage_Cleanic.services;
 
 import com.example.Pointage_Cleanic.entities.Pointage;
 import com.example.Pointage_Cleanic.entities.rh.DossierEmploye;
+import com.example.Pointage_Cleanic.exception.PointageTropFrequentException;
 import com.example.Pointage_Cleanic.exception.ResourceNotFoundException;
 import com.example.Pointage_Cleanic.repositories.PointageRepository;
 import com.example.Pointage_Cleanic.repositories.rh.DossierEmployeRepository;
@@ -247,9 +248,65 @@ public class PointageServices {
         mongoTemplate.updateFirst(query, update, Pointage.class);
     }
 
-    public boolean canPoint(String deviceId, int lockDurationInMinutes) {
-        Instant cutoff = Instant.now().minus(lockDurationInMinutes, ChronoUnit.MINUTES);
-        return !pointageRepository.existsByDeviceIdAndTimestampAfter(deviceId, cutoff);
+    /**
+     * Délai pendant lequel un téléphone qui vient de servir à un agent est refusé à tout
+     * AUTRE agent. Il ne s'applique jamais à l'agent lui-même : un agent multi-sites qui sort
+     * d'un site et arrive sur le suivant quelques minutes plus tard, avec son propre
+     * téléphone, ne triche pas.
+     */
+    public static final long DELAI_TELEPHONE_MINUTES = 20;
+
+    /** Anti-rebond : deux pointages du même agent à moins de 60 s = double envoi. */
+    public static final long ANTI_REBOND_SECONDES = 60;
+
+    static final String MESSAGE_TELEPHONE_PARTAGE =
+            "Ce téléphone vient de servir au pointage d'un autre agent. "
+                    + "Chaque agent doit pointer avec son propre téléphone.";
+
+    static final String MESSAGE_DOUBLE_ENVOI =
+            "Votre pointage vient d'être enregistré. Patientez une minute avant de pointer à nouveau.";
+
+    /**
+     * Garde anti-triche du kiosque, évaluée <b>avant toute écriture</b>.
+     * <ol>
+     *   <li><b>Téléphone partagé</b> — refus si ce téléphone a servi à un <i>autre</i> agent,
+     *       à l'arrivée <b>ou</b> à la sortie, dans les {@value #DELAI_TELEPHONE_MINUTES}
+     *       dernières minutes.</li>
+     *   <li><b>Double envoi</b> — refus si l'agent lui-même a pointé (arrivée ou sortie, tout
+     *       téléphone) il y a moins de {@value #ANTI_REBOND_SECONDES} s : sans cela un double
+     *       envoi clôturerait aussitôt l'arrivée qu'il vient d'ouvrir.</li>
+     * </ol>
+     * ⚠ L'ancienne règle bloquait le <i>téléphone</i> 20 min quel que soit l'agent, donc aussi
+     * son propriétaire : un agent multi-sites était refusé à l'arrivée sur son 2ᵉ site.
+     * <p>⚠ Un pointage antérieur à ce lot n'a pas de {@code deviceIdSortie} : seule son arrivée
+     * est prise en compte, comme avant.
+     */
+    public void verifierTelephone(String deviceId, String codeSecret) {
+        Instant maintenant = Instant.now();
+
+        Instant seuilTelephone = maintenant.minus(DELAI_TELEPHONE_MINUTES, ChronoUnit.MINUTES);
+        Query telephonePartage = new Query(new Criteria().andOperator(
+                Criteria.where("codeSecret").ne(codeSecret),
+                new Criteria().orOperator(
+                        Criteria.where("deviceId").is(deviceId).and("timestamp").gt(seuilTelephone),
+                        Criteria.where("deviceIdSortie").is(deviceId).and("timestampSortie").gt(seuilTelephone))));
+        if (mongoTemplate.exists(telephonePartage, Pointage.class)) {
+            throw new PointageTropFrequentException(MESSAGE_TELEPHONE_PARTAGE);
+        }
+
+        Instant seuilRebond = maintenant.minusSeconds(ANTI_REBOND_SECONDES);
+        // Borne sur la date (veille incluse, pour minuit) : la requête suit l'index
+        // pointage_flux_idx (codeSecret, date) au lieu de balayer tous les pointages de l'agent.
+        LocalDate aujourdhui = LocalDate.now();
+        Query doubleEnvoi = new Query(new Criteria().andOperator(
+                Criteria.where("codeSecret").is(codeSecret),
+                Criteria.where("date").gte(aujourdhui.minusDays(1)).lte(aujourdhui),
+                new Criteria().orOperator(
+                        Criteria.where("timestamp").gt(seuilRebond),
+                        Criteria.where("timestampSortie").gt(seuilRebond))));
+        if (mongoTemplate.exists(doubleEnvoi, Pointage.class)) {
+            throw new PointageTropFrequentException(MESSAGE_DOUBLE_ENVOI);
+        }
     }
 
 
@@ -278,6 +335,9 @@ public class PointageServices {
             DossierEmploye agent = dossierEmployeRepository.findByAgentId(codeSecret)
                     .orElseThrow(() -> new ResourceNotFoundException("Employé introuvable"));
 
+            // 1️⃣bis Garde anti-triche — lève PointageTropFrequentException (429) sans rien écrire.
+            verifierTelephone(deviceId, codeSecret);
+
             LocalDate today = LocalDate.now();
             LocalTime now = LocalTime.now();
             String currentTime = now.format(DateTimeFormatter.ofPattern("HH:mm"));
@@ -293,7 +353,10 @@ public class PointageServices {
                     .with(Sort.by(Sort.Direction.DESC, "timestamp"));
             Update closeUpdate = new Update()
                     .set("heureDepart", currentTime)
-                    .set("status", "TERMINÉ");
+                    .set("status", "TERMINÉ")
+                    // Trace le téléphone de la SORTIE pour la garde anti-triche.
+                    .set("deviceIdSortie", deviceId)
+                    .set("timestampSortie", Instant.now());
             Pointage ouvert = mongoTemplate.findAndModify(
                     openQuery, closeUpdate,
                     FindAndModifyOptions.options().returnNew(false),
@@ -319,6 +382,7 @@ public class PointageServices {
                 ouvert.setHeureDepart(currentTime);
                 ouvert.setStatus("TERMINÉ");
                 ouvert.setDuree(formattedDuration);
+                ouvert.setDeviceIdSortie(deviceId);
                 return ouvert;
             }
 

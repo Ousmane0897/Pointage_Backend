@@ -116,6 +116,16 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(body);
     }
 
+    // ─── Pointage kiosque : garde anti-triche ───────────────────────────────
+
+    @ExceptionHandler(PointageTropFrequentException.class)
+    public ResponseEntity<Map<String, Object>> handlePointageTropFrequent(PointageTropFrequentException ex) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("error", "POINTAGE_TROP_FREQUENT");
+        body.put("message", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS).body(body);
+    }
+
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<Map<String, Object>> handleIllegalArgument(IllegalArgumentException ex) {
         Map<String, Object> body = new HashMap<>();

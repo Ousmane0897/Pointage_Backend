@@ -9,7 +9,6 @@ import org.springframework.boot.test.autoconfigure.data.mongo.DataMongoTest;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.test.context.TestPropertySource;
 
-import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 
@@ -29,23 +28,6 @@ class PointageRepositoryTest extends MongoTestContainer {
         mongoTemplate.getDb().drop();
     }
 
-
-    @Test
-    void should_detect_recent_device_usage() {
-
-        Pointage p = new Pointage();
-        p.setDeviceId("DEV-1");
-        p.setTimestamp(Instant.now());
-        p.setDate(LocalDate.of(2025, 12, 10));
-
-        repository.save(p);
-
-        boolean exists = repository.existsByDeviceIdAndTimestampAfter(
-                "DEV-1",
-                Instant.now().minusSeconds(60));
-
-        assertTrue(exists);
-    }
 
     @Test
     void should_count_by_date() {

@@ -3,6 +3,7 @@ package com.example.Pointage_Cleanic.services;
 import com.example.Pointage_Cleanic.config.MongoTestContainer;
 import com.example.Pointage_Cleanic.entities.Pointage;
 import com.example.Pointage_Cleanic.entities.rh.DossierEmploye;
+import com.example.Pointage_Cleanic.exception.PointageTropFrequentException;
 import com.example.Pointage_Cleanic.repositories.PointageRepository;
 import com.example.Pointage_Cleanic.repositories.rh.DossierEmployeRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -10,13 +11,17 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
+import org.springframework.data.mongodb.core.query.Update;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -73,9 +78,14 @@ class PointageConcurrenceIT extends MongoTestContainer {
                 .heureArrive("08:00")
                 .status("EN COURS...")
                 .deviceId("DEV-0")
-                .timestamp(Instant.now())
+                // Arrivée vieille de 2 h : hors anti-rebond, sinon tous les appels seraient refusés.
+                .timestamp(Instant.now().minus(Duration.ofHours(2)))
                 .build();
         String openId = pointageRepository.save(ouvert).getId();
+        // ⚠ timestamp est un @CreatedDate, écrasé par « maintenant » à la création : on repose
+        // l'arrivée vieille de 2 h, sans quoi l'anti-rebond refuserait tous les appels.
+        mongoTemplate.updateFirst(Query.query(Criteria.where("_id").is(openId)),
+                Update.update("timestamp", Instant.now().minus(Duration.ofHours(2))), Pointage.class);
 
         int n = 20;
         ExecutorService exec = Executors.newFixedThreadPool(n);
@@ -89,7 +99,15 @@ class PointageConcurrenceIT extends MongoTestContainer {
 
         long closuresOfOriginal = 0;
         for (CompletableFuture<Pointage> f : futures) {
-            Pointage p = f.get(30, TimeUnit.SECONDS);
+            Pointage p;
+            try {
+                p = f.get(30, TimeUnit.SECONDS);
+            } catch (ExecutionException e) {
+                // Un appel arrivé après la clôture peut être refusé par l'anti-rebond : ce
+                // n'est pas une clôture, et c'est précisément le comportement attendu.
+                assertThat(e.getCause()).isInstanceOf(PointageTropFrequentException.class);
+                continue;
+            }
             if (openId.equals(p.getId()) && "TERMINÉ".equals(p.getStatus())) {
                 closuresOfOriginal++;
             }

@@ -1,6 +1,7 @@
 package com.example.Pointage_Cleanic.controllers;
 
 import com.example.Pointage_Cleanic.entities.Pointage;
+import com.example.Pointage_Cleanic.exception.PointageTropFrequentException;
 import com.example.Pointage_Cleanic.exception.ResourceNotFoundException;
 import com.example.Pointage_Cleanic.models.PointageRequest;
 import com.example.Pointage_Cleanic.repositories.PointageRepository;
@@ -64,7 +65,6 @@ class PointagesControllerTest {
 
         Pointage pointage = new Pointage();
 
-        Mockito.when(pointageServices.canPoint(eq("DEV-1"), Mockito.anyInt())).thenReturn(true);
         Mockito.when(pointageServices.enregistrerPointage(eq("1234"), eq("DEV-1"), any(), any()))
                 .thenReturn(pointage);
 
@@ -85,13 +85,16 @@ class PointagesControllerTest {
         request.setCodeSecret("1234");
         request.setDeviceId("DEV-1");
 
-        Mockito.when(pointageServices.canPoint("DEV-1", 2)).thenReturn(false);
+        Mockito.when(pointageServices.enregistrerPointage(eq("1234"), eq("DEV-1"), any(), any()))
+                .thenThrow(new PointageTropFrequentException("Ce téléphone vient de servir au pointage d'un autre agent."));
 
+        // 429 JSON { error, message } : le kiosque affiche le message tel quel.
         mockMvc.perform(post("/api/pointages")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsBytes(request)))
                 .andExpect(status().isTooManyRequests())
-                .andExpect(content().string(containsString("téléphone")));
+                .andExpect(jsonPath("$.error").value("POINTAGE_TROP_FREQUENT"))
+                .andExpect(jsonPath("$.message").value(containsString("téléphone")));
     }
 
     // ==========================================
@@ -135,7 +138,6 @@ class PointagesControllerTest {
         request.setCodeSecret("9999");
         request.setDeviceId("DEV-1");
 
-        Mockito.when(pointageServices.canPoint(eq("DEV-1"), Mockito.anyInt())).thenReturn(true);
         Mockito.when(pointageServices.enregistrerPointage(eq("9999"), eq("DEV-1"), any(), any()))
                 .thenThrow(new ResourceNotFoundException("Employé introuvable"));
 

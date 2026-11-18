@@ -2,6 +2,7 @@ package com.example.Pointage_Cleanic.services;
 
 import com.example.Pointage_Cleanic.entities.Pointage;
 import com.example.Pointage_Cleanic.entities.rh.DossierEmploye;
+import com.example.Pointage_Cleanic.exception.PointageTropFrequentException;
 import com.example.Pointage_Cleanic.exception.ResourceNotFoundException;
 import com.example.Pointage_Cleanic.repositories.PointageRepository;
 import com.example.Pointage_Cleanic.repositories.rh.DossierEmployeRepository;
@@ -10,6 +11,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.*;
 import org.springframework.data.mongodb.core.FindAndModifyOptions;
 import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.query.Query;
+import org.springframework.data.mongodb.core.query.Update;
 
 import java.util.Optional;
 
@@ -41,18 +44,61 @@ class PointageServicesTest {
     }
 
     // ======================================================
-    // 🧪 canPoint()
+    // 🧪 Garde anti-triche — refus AVANT toute écriture
     // ======================================================
 
     @Test
-    void should_allow_point_when_no_recent_device_usage() {
+    void telephone_d_un_autre_agent_refuse_sans_rien_ecrire() {
 
-        when(pointageRepository.existsByDeviceIdAndTimestampAfter(anyString(), any()))
-                .thenReturn(false);
+        when(dossierEmployeRepository.findByAgentId("1234"))
+                .thenReturn(Optional.of(agent("1234", "Site B")));
+        // 1er exists = téléphone partagé
+        when(mongoTemplate.exists(any(Query.class), eq(Pointage.class))).thenReturn(true);
 
-        boolean result = service.canPoint("DEV-1", 4);
+        PointageTropFrequentException ex = assertThrows(PointageTropFrequentException.class,
+                () -> service.enregistrerPointage("1234", "DEV-1", null, null));
 
-        assertTrue(result);
+        assertEquals(PointageServices.MESSAGE_TELEPHONE_PARTAGE, ex.getMessage());
+        verify(mongoTemplate, never()).findAndModify(any(), any(), any(FindAndModifyOptions.class), eq(Pointage.class));
+        verify(pointageRepository, never()).save(any());
+    }
+
+    @Test
+    void double_envoi_du_meme_agent_refuse_sans_rien_ecrire() {
+
+        when(dossierEmployeRepository.findByAgentId("1234"))
+                .thenReturn(Optional.of(agent("1234", "Site B")));
+        // téléphone libre, mais l'agent vient de pointer
+        when(mongoTemplate.exists(any(Query.class), eq(Pointage.class))).thenReturn(false, true);
+
+        PointageTropFrequentException ex = assertThrows(PointageTropFrequentException.class,
+                () -> service.enregistrerPointage("1234", "DEV-1", null, null));
+
+        assertEquals(PointageServices.MESSAGE_DOUBLE_ENVOI, ex.getMessage());
+        verify(pointageRepository, never()).save(any());
+    }
+
+    @Test
+    void la_sortie_trace_le_telephone_utilise() {
+
+        Pointage existing = new Pointage();
+        existing.setId("p-open");
+        existing.setHeureArrive("08:00");
+        when(dossierEmployeRepository.findByAgentId("1234"))
+                .thenReturn(Optional.of(agent("1234", "Dakar")));
+        when(mongoTemplate.findAndModify(any(), any(),
+                any(FindAndModifyOptions.class), eq(Pointage.class)))
+                .thenReturn(existing);
+
+        Pointage result = service.enregistrerPointage("1234", "DEV-9", null, null);
+
+        ArgumentCaptor<Update> update = ArgumentCaptor.forClass(Update.class);
+        verify(mongoTemplate).findAndModify(any(), update.capture(),
+                any(FindAndModifyOptions.class), eq(Pointage.class));
+        org.bson.Document set = (org.bson.Document) update.getValue().getUpdateObject().get("$set");
+        assertEquals("DEV-9", set.get("deviceIdSortie"));
+        assertNotNull(set.get("timestampSortie"));
+        assertEquals("DEV-9", result.getDeviceIdSortie());
     }
 
     // ======================================================

@@ -50,8 +50,19 @@ public class Pointage {
     @Indexed
     private String deviceId;
 
+    /** Instant de l'ARRIVÉE (posé à la création, jamais modifié par la sortie). */
     @CreatedDate
     private Instant timestamp;
 
     private String adresse;
+
+    // --- Sortie : téléphone et instant du pointage de DÉPART ---
+    // Nuls sur les pointages antérieurs et tant que le pointage est ouvert. Ils permettent
+    // à la garde anti-triche de voir AUSSI les sorties : sans eux, un agent pouvait pointer
+    // la sortie d'un collègue avec son téléphone sans que rien ne le détecte.
+
+    /** Téléphone (deviceId) ayant servi au pointage de départ. */
+    private String deviceIdSortie;
+    /** Instant du pointage de départ. */
+    private Instant timestampSortie;
 }
