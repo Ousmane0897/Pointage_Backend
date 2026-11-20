@@ -19,7 +19,6 @@ bin/
 
 ### IntelliJ IDEA ###
 .idea
-.env
 *.iws
 *.iml
 *.ipr
@@ -43,3 +42,10 @@ replay_pid*.log
 
 ### Claude Code local ###
 .claude/settings.local.json
+
+### Secrets locaux (jamais suivis : voir .env.example) ###
+.env
+.env.*
+!.env.example
+application-local.yml
+src/main/resources/application-local.yml

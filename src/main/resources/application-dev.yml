@@ -1,6 +1,3 @@
-jwt:
-  secret: DevSecretKeyDevSecretKeyDevSecretKey123456
-
 # Configuration SMTP
 spring:
   mail:

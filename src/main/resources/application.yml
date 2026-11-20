@@ -1,4 +1,9 @@
 spring:
+  # Développement : variables lues dans un fichier .env local NON suivi par git (modèle :
+  # .env.example). En production, elles viennent de l'environnement (docker-compose env_file).
+  config:
+    import: optional:file:.env[.properties]
+
   data:
     mongodb:
       uri: mongodb://localhost:27017/cleanic
@@ -6,6 +11,8 @@ spring:
   mail:
     host: smtp.gmail.com
     port: 587
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
     properties:
       mail.smtp.auth: true
       mail.smtp.starttls.enable: true
@@ -20,7 +27,8 @@ spring:
       max-request-size: 15MB
 
 jwt:
-  secret: w9awKW+/x+VOzOyvg5DY3D7qWVZhipaV6VH8h9c4JS8=
+  # Aucune valeur par défaut : à fournir par l'environnement (voir .env.example).
+  secret: ${JWT_SECRET}
 
 springdoc:
   api-docs:
@@ -34,7 +42,7 @@ springdoc:
 google:
   maps:
     api:
-      key: "AIzaSyAijDeBFgsJUYLqS6Nn3EQfi56cPPMtN_Q"
+      key: ${GOOGLE_MAPS_API_KEY}
 
 app:
   frontend:

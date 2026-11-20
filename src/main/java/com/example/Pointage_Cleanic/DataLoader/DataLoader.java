@@ -10,6 +10,8 @@ import com.example.Pointage_Cleanic.repositories.rh.FormationRepository;
 import com.example.Pointage_Cleanic.repositories.rh.GrilleEvaluationRepository;
 import com.example.Pointage_Cleanic.repositories.LoginRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
@@ -18,6 +20,7 @@ import java.time.LocalDate;
 import java.util.List;
 
 
+@Slf4j
 @Component
 @RequiredArgsConstructor
 public class DataLoader implements CommandLineRunner {
@@ -28,6 +31,11 @@ public class DataLoader implements CommandLineRunner {
     private final GrilleEvaluationRepository grilleEvaluationRepository;
     private final FormationRepository formationRepository;
 
+    static final String SUPERADMIN_EMAIL = "diarra.niang@cleanicsenegal.com";
+
+    @Value("${SUPERADMIN_INITIAL_PASSWORD:}")
+    private String superadminInitialPassword;
+
 
     @Override
     public void run(String... args) {
@@ -36,16 +44,29 @@ public class DataLoader implements CommandLineRunner {
         seedFormationsExemples();
     }
 
-    private void seedSuperadmin() {
-        if (loginRepository.findByEmail("diarra.niang@cleanicsenegal.com").isEmpty()) {
-            User user = new User();
-            user.setEmail("diarra.niang@cleanicsenegal.com");
-            user.setPassword(passwordEncoder.encode("admin2025"));
-            user.setRole("SUPERADMIN");
-            user.setMustChangePassword(true);
-            loginRepository.save(user);
-            System.out.println("Utilisateur admin créé");
+    /**
+     * Crée le super-administrateur initial s'il n'existe pas encore.
+     *
+     * <p>Le mot de passe initial vient de la variable d'environnement
+     * {@code SUPERADMIN_INITIAL_PASSWORD} — jamais du code. Absente ou vide : aucun compte n'est
+     * créé (le démarrage continue). Le compte doit changer son mot de passe à la première
+     * connexion ({@code mustChangePassword=true}).
+     */
+    void seedSuperadmin() {
+        if (loginRepository.findByEmail(SUPERADMIN_EMAIL).isPresent()) {
+            return;
         }
+        if (superadminInitialPassword == null || superadminInitialPassword.isBlank()) {
+            log.warn("Super-administrateur initial non créé : SUPERADMIN_INITIAL_PASSWORD n'est pas défini.");
+            return;
+        }
+        User user = new User();
+        user.setEmail(SUPERADMIN_EMAIL);
+        user.setPassword(passwordEncoder.encode(superadminInitialPassword));
+        user.setRole("SUPERADMIN");
+        user.setMustChangePassword(true);
+        loginRepository.save(user);
+        log.info("Super-administrateur initial créé (changement de mot de passe exigé à la première connexion).");
     }
 
     private void seedGrilleEvaluationParDefaut() {

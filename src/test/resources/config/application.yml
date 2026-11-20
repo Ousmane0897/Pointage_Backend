@@ -1,0 +1,10 @@
+# Valeurs FACTICES pour les tests uniquement (classpath:/config/ surcharge classpath:/).
+# application.yml ne porte plus aucun secret (${JWT_SECRET}, ${GOOGLE_MAPS_API_KEY} sans défaut) :
+# sans ce fichier, le contexte de test ne démarrerait pas faute de variables d'environnement.
+jwt:
+  secret: valeur_factice_de_test_au_moins_32_caracteres
+
+google:
+  maps:
+    api:
+      key: cle-factice-de-test

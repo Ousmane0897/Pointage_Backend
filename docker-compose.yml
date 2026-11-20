@@ -14,12 +14,12 @@ services:
       - "8080:8080"
     depends_on:
       - mongo
+    # Secrets lus dans .env (non suivi par git ; modèle : .env.example). Le profil prod
+    # refuse de démarrer si une variable obligatoire manque (SecretsRequisVerificateur).
+    env_file:
+      - .env
     environment:
       SPRING_PROFILES_ACTIVE: "prod"
-      MAIL_USERNAME: "cleanicsarl24@gmail.com"
-      MAIL_PASSWORD: "wsuj dawn qmdd qyfq"
-      JWT_SECRET: "G5pRQXJg7GwOULOE2VODLI9q3baigC4UcW3DYKGX//g="
-      GOOGLE_MAPS_API_KEY: "AIzaSyAijDeBFgsJUYLqS6Nn3EQfi56cPPMtN_Q"
     restart: always
 
 volumes:

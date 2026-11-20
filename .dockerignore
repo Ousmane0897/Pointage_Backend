@@ -1,0 +1,8 @@
+# Le Dockerfile fait « COPY . . » : sans ces exclusions, les secrets locaux
+# entreraient dans les couches de l'image de build.
+.env
+application-local.yml
+src/main/resources/application-local.yml
+.git
+.gradle
+build
