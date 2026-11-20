@@ -1,5 +1,7 @@
 package com.example.Pointage_Cleanic.controllers.rh.developpementrh;
 
+import org.springframework.security.access.prepost.PreAuthorize;
+
 import com.example.Pointage_Cleanic.Dto.rh.EvaluationFormationDto;
 import com.example.Pointage_Cleanic.Dto.rh.FormationDto;
 import com.example.Pointage_Cleanic.Dto.rh.ParticipationFormationDto;
@@ -13,6 +15,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 import java.util.Map;
 
+@PreAuthorize("@droits.peut('rh.formations')")
 @RestController
 @RequestMapping("/api/developpement-rh/formations")
 @RequiredArgsConstructor

@@ -1,5 +1,7 @@
 package com.example.Pointage_Cleanic.controllers.rh.developpementrh;
 
+import org.springframework.security.access.prepost.PreAuthorize;
+
 import com.example.Pointage_Cleanic.Dto.rh.AlerteRecidiveDto;
 import com.example.Pointage_Cleanic.Dto.rh.SanctionDto;
 import com.example.Pointage_Cleanic.Enum.rh.StatutSanction;
@@ -15,6 +17,7 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 
+@PreAuthorize("@droits.peut('rh.sanctions')")
 @RestController
 @RequestMapping("/api/developpement-rh/sanctions")
 @RequiredArgsConstructor

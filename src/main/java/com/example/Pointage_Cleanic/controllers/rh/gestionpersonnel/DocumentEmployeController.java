@@ -1,5 +1,7 @@
 package com.example.Pointage_Cleanic.controllers.rh.gestionpersonnel;
 
+import org.springframework.security.access.prepost.PreAuthorize;
+
 import com.example.Pointage_Cleanic.Dto.rh.DocumentEmployeDto;
 import com.example.Pointage_Cleanic.Dto.rh.ModifierDocumentRequest;
 import com.example.Pointage_Cleanic.Dto.rh.ValiderDocumentRequest;
@@ -19,6 +21,7 @@ import java.io.IOException;
 import java.time.LocalDate;
 import java.util.List;
 
+@PreAuthorize("@droits.peut('rh.documents')")
 @RestController
 @RequestMapping("/api/gestion-personnel/documents")
 @RequiredArgsConstructor
@@ -26,6 +29,7 @@ public class DocumentEmployeController {
 
     private final DocumentEmployeService service;
 
+    @PreAuthorize("@droits.peutUnParmi('rh.documents', 'rh.dossierEmploye')")
     @GetMapping
     public ResponseEntity<Page<DocumentEmployeDto>> list(
             @RequestParam(defaultValue = "0") int page,
@@ -36,11 +40,13 @@ public class DocumentEmployeController {
         return ResponseEntity.ok(service.list(page, size, employeId, categorie));
     }
 
+    @PreAuthorize("@droits.peutUnParmi('rh.documents', 'rh.dossierEmploye')")
     @GetMapping("/employe/{employeId}")
     public ResponseEntity<List<DocumentEmployeDto>> listByEmploye(@PathVariable String employeId) {
         return ResponseEntity.ok(service.listByEmploye(employeId));
     }
 
+    @PreAuthorize("@droits.peutUnParmi('rh.documents', 'rh.dossierEmploye')")
     @GetMapping("/{id}")
     public ResponseEntity<DocumentEmployeDto> getById(@PathVariable String id) {
         return ResponseEntity.ok(service.getById(id));
@@ -88,6 +94,7 @@ public class DocumentEmployeController {
         return ResponseEntity.noContent().build();
     }
 
+    @PreAuthorize("@droits.peutUnParmi('rh.documents', 'rh.dossierEmploye')")
     @GetMapping("/{id}/telecharger")
     public ResponseEntity<byte[]> telecharger(@PathVariable String id) {
         DocumentEmploye doc = service.getFichier(id);

@@ -1,5 +1,7 @@
 package com.example.Pointage_Cleanic.controllers.rh;
 
+import org.springframework.security.access.prepost.PreAuthorize;
+
 import com.example.Pointage_Cleanic.Dto.rh.KpiRhDto;
 import com.example.Pointage_Cleanic.services.rh.TableauBordRhService;
 import lombok.RequiredArgsConstructor;
@@ -20,6 +22,7 @@ import java.time.LocalDate;
  * alors occupée par {@code BesoinFormationController}, dont le {@code GET} renvoyait une liste de
  * besoins de formation en lieu et place des KPI.
  */
+@PreAuthorize("@droits.peut('rh.tableauBordRh')")
 @RestController
 @RequestMapping("/api/developpement-rh/tableau-bord")
 @RequiredArgsConstructor

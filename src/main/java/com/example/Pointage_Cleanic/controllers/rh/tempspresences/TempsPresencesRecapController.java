@@ -1,5 +1,7 @@
 package com.example.Pointage_Cleanic.controllers.rh.tempspresences;
 
+import org.springframework.security.access.prepost.PreAuthorize;
+
 import com.example.Pointage_Cleanic.Dto.rh.RecapitulatifMensuelDto;
 import com.example.Pointage_Cleanic.services.rh.RecapitulatifMensuelService;
 import lombok.RequiredArgsConstructor;
@@ -14,6 +16,7 @@ import java.util.List;
  * tableau brut). Combine pointages, congés et heures supplémentaires via
  * {@link RecapitulatifMensuelService#getRecapitulatifDetaille}.
  */
+@PreAuthorize("@droits.peut('rh.recapitulatif')")
 @RestController
 @RequestMapping("/api/temps-presences/recapitulatif")
 @RequiredArgsConstructor

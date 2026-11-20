@@ -1,5 +1,7 @@
 package com.example.Pointage_Cleanic.controllers.rh.tempspresences;
 
+import org.springframework.security.access.prepost.PreAuthorize;
+
 import com.example.Pointage_Cleanic.Dto.rh.HeureSupplementaireDto;
 import com.example.Pointage_Cleanic.services.rh.HeureSupplementaireService;
 import com.example.Pointage_Cleanic.services.terrain.CurrentUserProvider;
@@ -19,6 +21,7 @@ import java.util.Map;
  * Le décideur est résolu depuis le JWT via {@link CurrentUserProvider}.
  * Réutilise {@link HeureSupplementaireService}.
  */
+@PreAuthorize("@droits.peut('rh.heuresSupplementaires')")
 @RestController
 @RequestMapping("/api/temps-presences/heures-supplementaires")
 @RequiredArgsConstructor

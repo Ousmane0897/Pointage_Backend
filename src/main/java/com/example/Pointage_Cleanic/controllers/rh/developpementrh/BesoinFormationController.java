@@ -1,5 +1,7 @@
 package com.example.Pointage_Cleanic.controllers.rh.developpementrh;
 
+import org.springframework.security.access.prepost.PreAuthorize;
+
 import com.example.Pointage_Cleanic.Dto.rh.BesoinFormationDto;
 import com.example.Pointage_Cleanic.Enum.rh.PrioriteBesoin;
 import com.example.Pointage_Cleanic.Enum.rh.StatutBesoin;
@@ -24,6 +26,7 @@ import java.util.Map;
  * qui partage la base {@code /formations} : Spring ordonne les patterns du plus spécifique au moins
  * spécifique.
  */
+@PreAuthorize("@droits.peut('rh.formations')")
 @RestController
 @RequestMapping("/api/developpement-rh/formations/besoins")
 @RequiredArgsConstructor

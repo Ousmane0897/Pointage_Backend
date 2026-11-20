@@ -1,5 +1,7 @@
 package com.example.Pointage_Cleanic.controllers.rh.tempspresences;
 
+import org.springframework.security.access.prepost.PreAuthorize;
+
 import com.example.Pointage_Cleanic.Dto.ResumeJourneeDto;
 import com.example.Pointage_Cleanic.Dto.rh.PointageCentraliseDto;
 import com.example.Pointage_Cleanic.services.rh.PointageCentraliseService;
@@ -17,6 +19,7 @@ import java.time.temporal.ChronoUnit;
  * Réutilise {@link PointageCentraliseService} ; les données proviennent du module
  * pointage existant. Sécurisé par JWT via {@code .anyRequest().authenticated()}.
  */
+@PreAuthorize("@droits.peut('rh.pointageCentralise')")
 @RestController
 @RequestMapping("/api/temps-presences/pointages")
 @RequiredArgsConstructor

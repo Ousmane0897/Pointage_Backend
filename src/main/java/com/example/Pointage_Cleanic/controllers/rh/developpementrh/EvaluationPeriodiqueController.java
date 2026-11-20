@@ -1,5 +1,7 @@
 package com.example.Pointage_Cleanic.controllers.rh.developpementrh;
 
+import org.springframework.security.access.prepost.PreAuthorize;
+
 import com.example.Pointage_Cleanic.Dto.rh.AutoEvaluationRequest;
 import com.example.Pointage_Cleanic.Dto.rh.EvaluationManagerRequest;
 import com.example.Pointage_Cleanic.Dto.rh.EvaluationPeriodiqueDto;
@@ -13,6 +15,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
+@PreAuthorize("@droits.peut('rh.evaluations')")
 @RestController
 @RequestMapping("/api/developpement-rh/evaluations")
 @RequiredArgsConstructor

@@ -1,5 +1,7 @@
 package com.example.Pointage_Cleanic.controllers.rh.tempspresences;
 
+import org.springframework.security.access.prepost.PreAuthorize;
+
 import com.example.Pointage_Cleanic.Dto.rh.RhAbsenceDto;
 import com.example.Pointage_Cleanic.services.rh.RhAbsenceService;
 import com.example.Pointage_Cleanic.util.PageResponse;
@@ -21,6 +23,7 @@ import java.util.List;
  * POST/PUT en multipart (part JSON « absence » + part fichier « fichier » optionnel),
  * sur le modèle de {@code ContratController}. Réutilise {@link RhAbsenceService}.
  */
+@PreAuthorize("@droits.peutUnParmi('rh.absences', 'rh.conges', 'rh.dossierEmploye')")
 @RestController
 @RequestMapping("/api/temps-presences/absences")
 @RequiredArgsConstructor
