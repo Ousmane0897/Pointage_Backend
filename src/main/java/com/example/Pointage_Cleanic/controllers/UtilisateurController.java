@@ -112,13 +112,10 @@ public class UtilisateurController {
                 ? utilisateurDetails.getEmail().trim().toLowerCase()
                 : ancienEmail;
 
-        // Mot de passe : ne réencoder que si un NOUVEAU mot de passe est fourni.
-        // Le formulaire peut renvoyer un champ vide (pas de changement) ou réécho le hash existant
-        // (à ne surtout pas réencoder, sinon le compte devient inconnectable).
+        // Mot de passe : vide ou absent = inchangé. Le hash n'est plus jamais renvoyé au front
+        // (password en WRITE_ONLY), donc toute valeur reçue est un nouveau mot de passe en clair.
         String motDePasseRecu = utilisateurDetails.getPassword();
-        boolean motDePasseChange = motDePasseRecu != null
-                && !motDePasseRecu.isBlank()
-                && !motDePasseRecu.equals(utilisateur.getPassword());
+        boolean motDePasseChange = motDePasseRecu != null && !motDePasseRecu.isBlank();
         String hashAEnregistrer = motDePasseChange
                 ? passwordEncoder.encode(motDePasseRecu)
                 : utilisateur.getPassword();

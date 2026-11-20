@@ -85,9 +85,12 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/pointages/{codeSecret}").permitAll() // statut consulté par le mobile
                         .requestMatchers("/pointages/**").permitAll() // chemin legacy mobile inchangé
 
+                        // 🔹 Connexion : seul le POST est public. change-password exige le JWT
+                        // (fallback anyRequest), GET/DELETE /api/login ont été supprimés.
+                        .requestMatchers(HttpMethod.POST, "/api/login").permitAll()
+
                         // 🔹 Autres routes publiques
                         .requestMatchers(
-                                "/api/login/**",
                                 "/auth/forgot-password",
                                 "/auth/reset-password/**",
                                 "/v3/api-docs/**",

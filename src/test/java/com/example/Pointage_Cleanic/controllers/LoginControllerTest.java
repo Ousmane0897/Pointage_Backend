@@ -10,7 +10,6 @@ import com.example.Pointage_Cleanic.repositories.UserRepository;
 import com.example.Pointage_Cleanic.repositories.UtilisateurRepository;
 import com.example.Pointage_Cleanic.security.JwtRequestFilter;
 import com.example.Pointage_Cleanic.security.JwtUtil;
-import com.example.Pointage_Cleanic.services.LoginService;
 import com.example.Pointage_Cleanic.services.MyUserDetailsService;
 import com.example.Pointage_Cleanic.services.rh.CongeModuleEnricher;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -45,7 +44,6 @@ class LoginControllerTest {
 
     // === Dépendances DIRECTES du controller ===
     @MockBean private AuthenticationManager authenticationManager;
-    @MockBean private LoginService loginService;
     @MockBean private LoginRepository loginRepository;
     @MockBean private UserRepository userRepository;
     @MockBean private UtilisateurRepository utilisateurRepository;
@@ -130,6 +128,7 @@ class LoginControllerTest {
                 .thenReturn("NEW_JWT");
 
         mockMvc.perform(post("/api/login/change-password")
+                        .principal(() -> "user@test.com")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
@@ -154,47 +153,49 @@ class LoginControllerTest {
         when(passwordEncoder.matches(any(), any())).thenReturn(false);
 
         mockMvc.perform(post("/api/login/change-password")
+                        .principal(() -> "user@test.com")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest());
     }
 
-    // ===================== GET =====================
-
+    /** L'e-mail vient du JWT : sans principal, la requête est refusée même si le corps en porte un. */
     @Test
-    void get_all_users() throws Exception {
+    void change_password_sans_principal_401() throws Exception {
+        ChangePasswordRequest request = new ChangePasswordRequest();
+        request.setEmail("user@test.com");
+        request.setOldPassword("old");
+        request.setNewPassword("new123");
+        request.setConfirmPassword("new123");
 
-        when(loginRepository.findAll())
-                .thenReturn(List.of(new User(), new User()));
-
-        mockMvc.perform(get("/api/login"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(2));
+        mockMvc.perform(post("/api/login/change-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isUnauthorized());
+        verify(passwordEncoder, never()).encode(any());
     }
 
-    // ===================== DELETE =====================
-
+    /** L'e-mail du corps est ignoré : c'est le compte du JWT qui est modifié. */
     @Test
-    void delete_user_ok() throws Exception {
+    void change_password_ignore_email_du_corps() throws Exception {
+        ChangePasswordRequest request = new ChangePasswordRequest();
+        request.setEmail("victime@test.com");
+        request.setOldPassword("old");
+        request.setNewPassword("new123");
+        request.setConfirmPassword("new123");
 
         User user = new User();
-        when(loginService.getById("1")).thenReturn(user);
+        user.setPassword("ENC_OLD");
+        when(userRepository.findByEmail("user@test.com")).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("old", "ENC_OLD")).thenReturn(true);
+        when(passwordEncoder.encode("new123")).thenReturn("ENC_NEW");
+        when(jwtUtil.generateToken2(any(), any(), any(), anyBoolean())).thenReturn("NEW_JWT");
 
-        mockMvc.perform(delete("/api/login/1"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.Deleted").value(true));
-
-        verify(loginRepository).delete(user);
+        mockMvc.perform(post("/api/login/change-password")
+                        .principal(() -> "user@test.com")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk());
+        verify(userRepository, never()).findByEmail("victime@test.com");
     }
-
-    @Test
-    void delete_user_not_found() throws Exception {
-
-        when(loginService.getById("99")).thenReturn(null);
-
-        mockMvc.perform(delete("/api/login/99"))
-                .andExpect(status().isNotFound());
-    }
-
-
 }

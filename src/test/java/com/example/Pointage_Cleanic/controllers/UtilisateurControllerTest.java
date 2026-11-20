@@ -66,7 +66,7 @@ class UtilisateurControllerTest {
 
         mockMvc.perform(post("/api/superadmin")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(u)))
+                        .content(json(u)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.email").value("admin@test.com"));
     }
@@ -85,7 +85,7 @@ class UtilisateurControllerTest {
 
         mockMvc.perform(post("/api/superadmin")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(u)))
+                        .content(json(u)))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.error").value("EMAIL_EXISTS"))
                 .andExpect(jsonPath("$.message").value(
@@ -173,7 +173,7 @@ class UtilisateurControllerTest {
 
         mockMvc.perform(put("/api/superadmin/123")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(existing)))
+                        .content(json(existing)))
                 .andExpect(status().isCreated());
     }
 
@@ -206,7 +206,7 @@ class UtilisateurControllerTest {
 
         mockMvc.perform(put("/api/superadmin/123")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(payload)))
+                        .content(json(payload)))
                 .andExpect(status().isCreated());
 
         org.mockito.ArgumentCaptor<com.example.Pointage_Cleanic.entities.User> captor =
@@ -216,7 +216,7 @@ class UtilisateurControllerTest {
     }
 
     // =========================
-    // PUT /api/superadmin/{id} — mot de passe inchangé (hash réécho) : ne pas réencoder
+    // PUT /api/superadmin/{id} — mot de passe vide = inchangé : ne pas réencoder
     // =========================
     @Test
     void update_utilisateur_sans_changement_password_ne_reencode_pas() throws Exception {
@@ -235,14 +235,14 @@ class UtilisateurControllerTest {
         when(utilisateursService.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(loginRepository.findByEmail("admin@test.com")).thenReturn(Optional.of(login));
 
-        // Le formulaire réécho le hash existant : ne doit PAS être réencodé.
+        // Le formulaire envoie un mot de passe vide : le hash existant est conservé.
         Utilisateur payload = new Utilisateur();
         payload.setEmail("admin@test.com");
-        payload.setPassword("ANCIEN_HASH");
+        payload.setPassword("");
 
         mockMvc.perform(put("/api/superadmin/123")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(payload)))
+                        .content(json(payload)))
                 .andExpect(status().isCreated());
 
         verify(passwordEncoder, never()).encode(any());
@@ -334,5 +334,17 @@ class UtilisateurControllerTest {
         org.junit.jupiter.api.Assertions.assertTrue(stock.isBonsSortie());
         org.junit.jupiter.api.Assertions.assertTrue(stock.isMarges());
         org.junit.jupiter.api.Assertions.assertFalse(stock.isInventaires());
+    }
+
+    /**
+     * {@code password} est en WRITE_ONLY (jamais sérialisé) : on le réinjecte à la main pour
+     * simuler le corps envoyé par le front.
+     */
+    private String json(Object o) throws Exception {
+        com.fasterxml.jackson.databind.node.ObjectNode n = objectMapper.valueToTree(o);
+        if (o instanceof Utilisateur u && u.getPassword() != null) {
+            n.put("password", u.getPassword());
+        }
+        return objectMapper.writeValueAsString(n);
     }
 }

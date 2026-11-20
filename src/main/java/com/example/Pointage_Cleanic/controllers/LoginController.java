@@ -9,7 +9,6 @@ import com.example.Pointage_Cleanic.entities.Utilisateur;
 import com.example.Pointage_Cleanic.entities.User;
 import com.example.Pointage_Cleanic.repositories.*;
 import com.example.Pointage_Cleanic.security.JwtUtil;
-import com.example.Pointage_Cleanic.services.LoginService;
 import com.example.Pointage_Cleanic.services.MyUserDetailsService;
 import com.example.Pointage_Cleanic.services.rh.CongeModuleEnricher;
 import lombok.RequiredArgsConstructor;
@@ -22,8 +21,7 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.HashMap;
-import java.util.List;
+import java.security.Principal;
 import java.util.Map;
 import java.util.Optional;
 
@@ -35,7 +33,6 @@ public class LoginController {
     private final AuthenticationManager authenticationManager;
     private final JwtUtil jwtUtil;
     private final MyUserDetailsService userDetailsService;
-    private final LoginService loginService;
     private final LoginRepository loginRepository;
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
@@ -80,10 +77,18 @@ public class LoginController {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body("User not found");
     }
 
+    /**
+     * Changement de mot de passe d'un compte connecté (dont la première connexion,
+     * {@code mustChangePassword=true}). Route <b>authentifiée</b> : l'e-mail est celui du JWT,
+     * jamais celui du corps — sinon n'importe qui pourrait viser un autre compte.
+     */
     @PostMapping("/change-password")
-    public ResponseEntity<?> changePassword(@RequestBody ChangePasswordRequest request) {
+    public ResponseEntity<?> changePassword(@RequestBody ChangePasswordRequest request, Principal principal) {
 
-        String email = request.getEmail();
+        if (principal == null || principal.getName() == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("message", "Authentification requise"));
+        }
+        String email = principal.getName();
         String oldPass = request.getOldPassword();
         String newPass = request.getNewPassword();
         String confirmPass = request.getConfirmPassword();
@@ -157,27 +162,5 @@ public class LoginController {
                 "message", "Mot de passe changé avec succès.",
                 "token", jwt
         ));
-    }
-
-
-
-
-
-    @GetMapping
-    public ResponseEntity<List<User>> get() {
-       List<User>  user = loginRepository.findAll();
-       return ResponseEntity.ok(user);
-    }
-    @DeleteMapping("/{id}")
-    public ResponseEntity<Map<String, Boolean>> deleteEmployee(@PathVariable String id) {
-        User user =  loginService.getById(id);
-
-        if (user == null) {
-            return ResponseEntity.notFound().build(); // 404
-        }
-        loginRepository.delete(user);
-        Map<String, Boolean> response = new HashMap<>();
-        response.put("Deleted", Boolean.TRUE);
-        return ResponseEntity.ok(response);
     }
 }
