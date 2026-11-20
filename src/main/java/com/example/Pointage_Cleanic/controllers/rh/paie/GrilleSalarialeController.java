@@ -1,5 +1,7 @@
 package com.example.Pointage_Cleanic.controllers.rh.paie;
 
+import org.springframework.security.access.prepost.PreAuthorize;
+
 import com.example.Pointage_Cleanic.Dto.rh.CategorieProfessionnelleDto;
 import com.example.Pointage_Cleanic.Enum.rh.RegimeIpres;
 import com.example.Pointage_Cleanic.services.rh.CategorieProfessionnelleService;
@@ -10,6 +12,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
+@PreAuthorize("@droits.peut('rh.grilleSalariale')")
 @RestController
 @RequestMapping("/api/paie/grille-salariale")
 @RequiredArgsConstructor
@@ -17,6 +20,7 @@ public class GrilleSalarialeController {
 
     private final CategorieProfessionnelleService categorieProfessionnelleService;
 
+    @PreAuthorize("@droits.peutUnParmi('rh.grilleSalariale', 'rh.calculBulletin')")
     @GetMapping
     public ResponseEntity<List<CategorieProfessionnelleDto>> getAll(
             @RequestParam(required = false) String q,
@@ -26,6 +30,7 @@ public class GrilleSalarialeController {
         return ResponseEntity.ok(categorieProfessionnelleService.getAll(q, regimeIpres, actif));
     }
 
+    @PreAuthorize("@droits.peutUnParmi('rh.grilleSalariale', 'rh.calculBulletin')")
     @GetMapping("/{id}")
     public ResponseEntity<CategorieProfessionnelleDto> getById(@PathVariable String id) {
         return ResponseEntity.ok(categorieProfessionnelleService.getById(id));

@@ -111,6 +111,34 @@ public abstract class SecuriteITBase extends MongoTestContainer {
         return req.header(HttpHeaders.AUTHORIZATION, "Bearer " + jeton);
     }
 
+    /**
+     * Les trois cas exigés pour une route protégée par drapeau :
+     * <ol>
+     *   <li>sans jeton → 401 ;</li>
+     *   <li>jeton d'un compte sans aucun droit, puis de chaque profil {@code refuses} → 403 ;</li>
+     *   <li>jeton du profil {@code autorise} → ni 401 ni 403 (la requête atteint le contrôleur :
+     *       2xx, ou une erreur métier 400/404/422 selon les données de test).</li>
+     * </ol>
+     *
+     * @param requete  fabrique de la requête (une nouvelle instance par appel)
+     * @param autorise drapeaux JSON du profil autorisé, ex. {@code {"rh":{"calculBulletin":true}}}
+     * @param refuses  drapeaux JSON de profils qui doivent être refusés (autre drapeau, autre module)
+     */
+    protected void verifierAcces(java.util.function.Supplier<MockHttpServletRequestBuilder> requete,
+                                 String autorise, String... refuses) throws Exception {
+        String libelle = requete.get().buildRequest(new org.springframework.mock.web.MockServletContext()).getRequestURI();
+        mockMvc.perform(requete.get())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.status().isUnauthorized());
+        mockMvc.perform(avec(requete.get(), jetonSansDroit()))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.status().isForbidden());
+        for (String refuse : refuses) {
+            int statut = mockMvc.perform(avec(requete.get(), jetonAvec(refuse))).andReturn().getResponse().getStatus();
+            org.assertj.core.api.Assertions.assertThat(statut).as(libelle + " avec " + refuse).isEqualTo(403);
+        }
+        int statut = mockMvc.perform(avec(requete.get(), jetonAvec(autorise))).andReturn().getResponse().getStatus();
+        org.assertj.core.api.Assertions.assertThat(statut).as(libelle + " avec " + autorise).isNotIn(401, 403);
+    }
+
     private ModulesAutorises modules(String json) {
         if (json == null) {
             return null;

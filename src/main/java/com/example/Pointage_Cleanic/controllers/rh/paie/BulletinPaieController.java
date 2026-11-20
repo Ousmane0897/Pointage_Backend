@@ -1,5 +1,7 @@
 package com.example.Pointage_Cleanic.controllers.rh.paie;
 
+import org.springframework.security.access.prepost.PreAuthorize;
+
 import com.example.Pointage_Cleanic.Dto.rh.BulletinPaieDto;
 import com.example.Pointage_Cleanic.Dto.rh.CalculBulletinRequest;
 import com.example.Pointage_Cleanic.Dto.rh.ValiderBulletinRequest;
@@ -14,6 +16,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 import java.util.Map;
 
+@PreAuthorize("@droits.peut('rh.calculBulletin')")
 @RestController
 @RequestMapping("/api/paie/bulletins")
 @RequiredArgsConstructor
@@ -29,6 +32,7 @@ public class BulletinPaieController {
         return ResponseEntity.status(HttpStatus.CREATED).body(dto);
     }
 
+    @PreAuthorize("@droits.peutUnParmi('rh.calculBulletin', 'rh.historiquePaies')")
     @GetMapping("/historique")
     public ResponseEntity<List<BulletinPaieDto>> getHistorique(
             @RequestParam String employeId,
@@ -37,6 +41,7 @@ public class BulletinPaieController {
         return ResponseEntity.ok(bulletinPaieService.getHistorique(employeId, annee));
     }
 
+    @PreAuthorize("@droits.peutUnParmi('rh.calculBulletin', 'rh.historiquePaies')")
     @GetMapping
     public ResponseEntity<List<BulletinPaieDto>> getAll(
             @RequestParam(required = false) String employeId,
@@ -50,6 +55,7 @@ public class BulletinPaieController {
                 bulletinPaieService.getAll(employeId, departement, mois, annee, statut, q));
     }
 
+    @PreAuthorize("@droits.peutUnParmi('rh.calculBulletin', 'rh.historiquePaies')")
     @GetMapping("/{id}")
     public ResponseEntity<BulletinPaieDto> getById(@PathVariable String id) {
         return ResponseEntity.ok(bulletinPaieService.getById(id));
@@ -90,6 +96,7 @@ public class BulletinPaieController {
         return ResponseEntity.ok(bulletinPaieService.annuler(id, commentaire));
     }
 
+    @PreAuthorize("@droits.peutUnParmi('rh.calculBulletin', 'rh.historiquePaies')")
     @GetMapping("/{id}/pdf")
     public ResponseEntity<byte[]> exportPdf(@PathVariable String id) {
         byte[] file = bulletinPaieService.exportPdf(id);

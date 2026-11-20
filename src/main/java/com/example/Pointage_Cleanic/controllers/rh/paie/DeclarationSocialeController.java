@@ -1,5 +1,7 @@
 package com.example.Pointage_Cleanic.controllers.rh.paie;
 
+import org.springframework.security.access.prepost.PreAuthorize;
+
 import com.example.Pointage_Cleanic.Dto.rh.DeclarationSocialeDto;
 import com.example.Pointage_Cleanic.Enum.rh.StatutDeclaration;
 import com.example.Pointage_Cleanic.Enum.rh.TypeDeclaration;
@@ -14,6 +16,7 @@ import java.time.format.DateTimeParseException;
 import java.util.List;
 import java.util.Map;
 
+@PreAuthorize("@droits.peut('rh.declarations')")
 @RestController
 @RequestMapping("/api/paie/declarations-sociales")
 @RequiredArgsConstructor
