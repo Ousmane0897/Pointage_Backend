@@ -40,6 +40,14 @@ class DossierEmployeControllerTest {
     @MockBean private MyUserDetailsService myUserDetailsService;
     @MockBean private JwtUtil jwtUtil;
     @MockBean private JwtRequestFilter jwtRequestFilter;
+    // Droits : vue complète du dossier (le slice teste le contrat JSON, pas les droits —
+    // ceux-ci sont couverts par DroitsPersonnelSecuriteIT, filtres actifs).
+    @MockBean com.example.Pointage_Cleanic.security.Droits droits;
+
+    @org.junit.jupiter.api.BeforeEach
+    void vueComplete() {
+        Mockito.when(droits.peut("rh.dossierEmploye")).thenReturn(true);
+    }
 
     @Test
     void list_ok() throws Exception {

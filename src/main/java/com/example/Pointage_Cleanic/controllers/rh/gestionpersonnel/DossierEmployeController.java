@@ -1,8 +1,13 @@
 package com.example.Pointage_Cleanic.controllers.rh.gestionpersonnel;
 
+import org.springframework.security.access.prepost.PreAuthorize;
+import com.example.Pointage_Cleanic.security.Droits;
+import com.example.Pointage_Cleanic.security.DroitsExpr;
+
 import com.example.Pointage_Cleanic.Dto.rh.DossierEmployeBulkImportRequest;
 import com.example.Pointage_Cleanic.Dto.rh.DossierEmployeBulkImportResponse;
 import com.example.Pointage_Cleanic.Dto.rh.DossierEmployeDto;
+import com.example.Pointage_Cleanic.Dto.rh.DossierEmployeResumeDto;
 import com.example.Pointage_Cleanic.Dto.rh.DossierEmployeStatutRequest;
 import com.example.Pointage_Cleanic.Enum.StrategieErreursImport;
 import com.example.Pointage_Cleanic.services.rh.DossierEmployeService;
@@ -19,6 +24,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 
+@PreAuthorize("@droits.peut('rh.dossierEmploye')")
 @RestController
 @RequestMapping("/api/gestion-personnel/employes")
 @RequiredArgsConstructor
@@ -26,9 +32,16 @@ public class DossierEmployeController {
 
     private final DossierEmployeService service;
     private final ObjectMapper objectMapper;
+    private final Droits droits;
 
+    /** Sans {@code rh.dossierEmploye}, un lecteur du référentiel ne reçoit que la vue réduite. */
+    private boolean vueComplete() {
+        return droits.peut("rh.dossierEmploye");
+    }
+
+    @PreAuthorize(DroitsExpr.REFERENTIEL)
     @GetMapping
-    public ResponseEntity<Page<DossierEmployeDto>> list(
+    public ResponseEntity<Page<?>> list(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(required = false) String q,
@@ -37,12 +50,15 @@ public class DossierEmployeController {
             @RequestParam(required = false) String poste,
             @RequestParam(required = false) String statut
     ) {
-        return ResponseEntity.ok(service.list(page, size, q, departement, site, poste, statut));
+        Page<DossierEmployeDto> resultat = service.list(page, size, q, departement, site, poste, statut);
+        return ResponseEntity.ok(vueComplete() ? resultat : resultat.map(DossierEmployeResumeDto::de));
     }
 
+    @PreAuthorize(DroitsExpr.REFERENTIEL)
     @GetMapping("/{id}")
-    public ResponseEntity<DossierEmployeDto> getById(@PathVariable String id) {
-        return ResponseEntity.ok(service.getById(id));
+    public ResponseEntity<?> getById(@PathVariable String id) {
+        DossierEmployeDto dossier = service.getById(id);
+        return ResponseEntity.ok(vueComplete() ? dossier : DossierEmployeResumeDto.de(dossier));
     }
 
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -78,6 +94,7 @@ public class DossierEmployeController {
         return ResponseEntity.ok(service.updateStatut(id, request));
     }
 
+    @PreAuthorize(DroitsExpr.REFERENTIEL)
     @GetMapping("/{id}/photo")
     public ResponseEntity<byte[]> getPhoto(@PathVariable String id) {
         byte[] photo = service.getPhoto(id);

@@ -1,5 +1,7 @@
 package com.example.Pointage_Cleanic.controllers;
 
+import org.springframework.security.access.prepost.PreAuthorize;
+
 
 import com.example.Pointage_Cleanic.Dto.EmployeCompletDto;
 import com.example.Pointage_Cleanic.Dto.ImportEmployeRequest;
@@ -26,6 +28,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+@PreAuthorize("@droits.peut('rh.dossierEmploye')")
 @RestController
 @RequestMapping("/api/employe-complet")
 @RequiredArgsConstructor
@@ -108,6 +111,7 @@ public class EmployeCompletController {
         return ResponseEntity.ok(employeCompletService.getByAgentId(AgentId));
     }
 
+    @PreAuthorize("permitAll()")
     @GetMapping("/image/{agentId}")
     public ResponseEntity<byte[]> getEmployeImage(@PathVariable String agentId) {
         return employeCompletRepository.findByAgentId(agentId)

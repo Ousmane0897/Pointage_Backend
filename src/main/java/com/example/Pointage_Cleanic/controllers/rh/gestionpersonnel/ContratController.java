@@ -1,5 +1,7 @@
 package com.example.Pointage_Cleanic.controllers.rh.gestionpersonnel;
 
+import org.springframework.security.access.prepost.PreAuthorize;
+
 import com.example.Pointage_Cleanic.Dto.*;
 import com.example.Pointage_Cleanic.Dto.rh.*;
 import com.example.Pointage_Cleanic.entities.rh.Avenant;
@@ -18,6 +20,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
 import java.util.List;
 
+@PreAuthorize("@droits.peut('rh.contrats')")
 @RestController
 @RequestMapping("/api/gestion-personnel/contrats")
 @RequiredArgsConstructor
@@ -26,11 +29,13 @@ public class ContratController {
     private final ContratService contratService;
     private final ObjectMapper objectMapper;
 
+    @PreAuthorize("@droits.peutUnParmi('rh.contrats', 'rh.dossierEmploye')")
     @GetMapping("/alertes")
     public ResponseEntity<List<AlerteContratDto>> getAlertesEcheance() {
         return ResponseEntity.ok(contratService.getAlertesEcheance());
     }
 
+    @PreAuthorize("@droits.peutUnParmi('rh.contrats', 'rh.dossierEmploye')")
     @GetMapping
     public ResponseEntity<Page<ContratDto>> list(
             @RequestParam(defaultValue = "0") int page,
@@ -41,11 +46,13 @@ public class ContratController {
         return ResponseEntity.ok(contratService.list(page, size, q, typeContrat));
     }
 
+    @PreAuthorize("@droits.peutUnParmi('rh.contrats', 'rh.dossierEmploye')")
     @GetMapping("/{id}")
     public ResponseEntity<ContratDto> getById(@PathVariable String id) {
         return ResponseEntity.ok(contratService.getById(id));
     }
 
+    @PreAuthorize("@droits.peutUnParmi('rh.contrats', 'rh.dossierEmploye')")
     @GetMapping("/employe/{employeId}")
     public ResponseEntity<List<ContratDto>> getByEmployeId(@PathVariable String employeId) {
         return ResponseEntity.ok(contratService.getByEmployeId(employeId));
@@ -76,6 +83,7 @@ public class ContratController {
         return ResponseEntity.noContent().build();
     }
 
+    @PreAuthorize("@droits.peutUnParmi('rh.contrats', 'rh.dossierEmploye')")
     @GetMapping("/{id}/renouvellements")
     public ResponseEntity<List<Renouvellement>> getRenouvellements(@PathVariable String id) {
         return ResponseEntity.ok(contratService.getById(id).getRenouvellements());
@@ -89,6 +97,7 @@ public class ContratController {
         return ResponseEntity.ok(contratService.renouveler(id, request));
     }
 
+    @PreAuthorize("@droits.peutUnParmi('rh.contrats', 'rh.dossierEmploye')")
     @GetMapping("/{id}/avenants")
     public ResponseEntity<List<Avenant>> getAvenants(@PathVariable String id) {
         return ResponseEntity.ok(contratService.getById(id).getAvenants());
@@ -107,6 +116,7 @@ public class ContratController {
         return ResponseEntity.ok(contratService.resilier(id));
     }
 
+    @PreAuthorize("@droits.peutUnParmi('rh.contrats', 'rh.dossierEmploye')")
     @GetMapping("/{id}/fichier")
     public ResponseEntity<byte[]> getFichier(@PathVariable String id) {
         Contrat contrat = contratService.getFichier(id);
