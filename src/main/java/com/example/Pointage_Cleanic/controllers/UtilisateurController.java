@@ -9,6 +9,7 @@ import com.example.Pointage_Cleanic.services.UtilisateursService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
@@ -17,7 +18,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+/** Gestion des comptes : réservée au super-administrateur actif (C2, lot 0 sécurité). */
 @RestController
+@PreAuthorize("@droits.estSuperAdmin()")
 @RequestMapping("/api/superadmin")
 @RequiredArgsConstructor
 public class UtilisateurController {
@@ -29,7 +32,6 @@ public class UtilisateurController {
 
     @PostMapping
     public ResponseEntity<?> save(@RequestBody Utilisateur utilisateur) {
-        System.out.println("DATA RECU: " + utilisateur);
         String email = utilisateur.getEmail().trim().toLowerCase();
 
         if (!utilisateurRepository.findAllByEmail(email).isEmpty()

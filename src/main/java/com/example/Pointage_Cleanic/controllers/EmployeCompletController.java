@@ -48,13 +48,9 @@ public class EmployeCompletController {
             @RequestPart(value = "contrat", required = false) MultipartFile contrat
     ) throws IOException {
 
-        System.out.println("RAW JSON = " + employeJson); // 🔥 LOG 1
-
         EmployeCompletDto dto =
                 objectMapper.readValue(employeJson, EmployeCompletDto.class);
 
-        System.out.println("DTO PRENOM = " + dto.getPrenom()); // 🔥 LOG 2
-        System.out.println("DTO TELEPHONE = " + dto.getTelephone1());
 
         return ResponseEntity.ok(employeCompletService.create(dto, photo,contrat));
     }
@@ -68,7 +64,6 @@ public class EmployeCompletController {
     public ResponseEntity<ImportEmployeResponse> importFromExcel(
             @RequestBody List<EmployeCompletDto> imported
     ) {
-        System.out.println("🔥 IMPORT EXCEL APPELÉ");
         return ResponseEntity.ok(employeCompletService.importMany(imported));
     }
 

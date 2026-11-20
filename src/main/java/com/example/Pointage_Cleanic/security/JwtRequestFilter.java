@@ -6,7 +6,9 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.authentication.DisabledException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
@@ -56,7 +58,19 @@ public class JwtRequestFilter extends OncePerRequestFilter {
         }
 
         if (SecurityContextHolder.getContext().getAuthentication() == null) {
-            UserDetails userDetails = userDetailsService.loadUserByUsername(username);
+            UserDetails userDetails;
+            try {
+                userDetails = userDetailsService.loadUserByUsername(username);
+            } catch (DisabledException e) {
+                // Compte désactivé après l'émission du JWT (valable 8 h) : refus immédiat.
+                ecrireErreur(response, HttpServletResponse.SC_FORBIDDEN, "COMPTE_DESACTIVE",
+                        "Votre compte est désactivé. Veuillez contacter le super admin.");
+                return;
+            } catch (UsernameNotFoundException e) {
+                // Compte supprimé après l'émission du JWT.
+                response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "JWT invalid");
+                return;
+            }
 
             if (!jwtUtil.validateToken(jwt, userDetails)) {
                 response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "JWT invalid");
@@ -78,5 +92,12 @@ public class JwtRequestFilter extends OncePerRequestFilter {
         }
 
         chain.doFilter(request, response);
+    }
+
+    private static void ecrireErreur(HttpServletResponse response, int status, String code, String message)
+            throws IOException {
+        response.setStatus(status);
+        response.setContentType("application/json;charset=UTF-8");
+        response.getWriter().write("{\"error\":\"" + code + "\",\"message\":\"" + message + "\"}");
     }
 }

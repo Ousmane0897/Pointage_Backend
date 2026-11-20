@@ -3,6 +3,7 @@ package com.example.Pointage_Cleanic.exception;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.DisabledException;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.validation.FieldError;
@@ -28,6 +29,18 @@ public class GlobalExceptionHandler {
         Map<String, String> errorResponse = new HashMap<>();
         errorResponse.put("error", ex.getMessage());
         return errorResponse;
+    }
+
+    /**
+     * Refus d'un {@code @PreAuthorize} (droit absent, compte non super-admin…). Sans cette
+     * entrée, le gestionnaire générique de {@link RuntimeException} renverrait 500.
+     */
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<Map<String, Object>> handleAccessDenied(AccessDeniedException ex) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("error", "ACCES_REFUSE");
+        body.put("message", "Vous n'avez pas le droit d'accéder à cette ressource.");
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(body);
     }
 
     @ExceptionHandler(UsernameNotFoundException.class)

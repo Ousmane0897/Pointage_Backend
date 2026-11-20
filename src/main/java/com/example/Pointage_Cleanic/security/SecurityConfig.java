@@ -12,6 +12,7 @@ import org.springframework.security.authentication.dao.DaoAuthenticationProvider
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.core.userdetails.UserDetailsService;
@@ -25,6 +26,7 @@ import java.util.List;
 
 @Configuration
 @EnableWebSecurity
+@EnableMethodSecurity // @PreAuthorize("@droits.peut(...)") — voir security/Droits
 @RequiredArgsConstructor
 public class SecurityConfig {
 
@@ -110,18 +112,16 @@ public class SecurityConfig {
                         .requestMatchers("/api/dashboard_par_agence").authenticated()
                         .requestMatchers("/api/planification/**").authenticated()
                         .requestMatchers("/ws/info").authenticated()
-                        .requestMatchers("/api/super-admin/**").authenticated()
                         .requestMatchers("/api/terrain/**").authenticated()
                         .requestMatchers("/api/stock/**").authenticated()
 
                         // Toutes les autres requêtes nécessitent authentification
                         .anyRequest().authenticated()
                 )
-                // Requête non authentifiée (aucun header Authorization) → 401, et non le 403 par
-                // défaut de Spring Security (Http403ForbiddenEntryPoint). Ce backend n'a aucune
-                // autorisation par rôle (pas de @PreAuthorize, tout est .authenticated()) : un 403
-                // de la couche sécurité signifiait donc toujours « pas authentifié ». On s'aligne
-                // ainsi sur JwtRequestFilter, qui renvoie déjà 401 sur token invalide/expiré.
+                // Requête non authentifiée (aucun header Authorization) → 401, aligné sur
+                // JwtRequestFilter (token invalide/expiré → 401). Depuis le lot 0 sécurité, un 403
+                // signifie « authentifié mais sans le droit » (@PreAuthorize + Droits, compte
+                // désactivé) — renvoyé en JSON par GlobalExceptionHandler.
                 .exceptionHandling(ex -> ex.authenticationEntryPoint(
                         (request, response, authException) ->
                                 response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Authentification requise")))
