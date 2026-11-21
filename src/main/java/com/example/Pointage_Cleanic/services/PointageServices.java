@@ -67,14 +67,6 @@ public class PointageServices {
         return mongoTemplate.findAll(Pointage.class);
     }
 
-    public Pointage getPointageBycodeSecret(String codeSecret) {
-        // Un agent peut avoir plusieurs pointages (multi-site) : renvoyer le plus récent.
-        Query query = new Query();
-        query.addCriteria(Criteria.where("codeSecret").is(codeSecret));
-        query.with(Sort.by(Sort.Direction.DESC, "timestamp")).limit(1);
-        return mongoTemplate.findOne(query, Pointage.class);
-    }
-
     public Page<Pointage> searchHistorique(
             String search,
             String dateDebut,

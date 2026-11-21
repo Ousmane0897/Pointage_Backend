@@ -66,7 +66,8 @@ class PlanningSecuriteIT extends MongoTestContainer {
     /** Une route publique reste publique : l'entry point ne doit pas déborder. */
     @Test
     void une_route_publique_reste_accessible_sans_token() throws Exception {
-        mockMvc.perform(get("/api/pointages/{codeSecret}", "0000"))
+        mockMvc.perform(post("/api/pointages").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"codeSecret\":\"0000\",\"deviceId\":\"planning-securite-it\"}"))
                 .andExpect(status().is(not(401)));
     }
 

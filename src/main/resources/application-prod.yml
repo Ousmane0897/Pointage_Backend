@@ -35,3 +35,7 @@ google:
     api:
       key: ${GOOGLE_MAPS_API_KEY}
 
+server:
+  # Derrière nginx/docker : l'IP cliente (limite de débit du pointage public) vient de
+  # X-Forwarded-For uniquement si la requête arrive d'un mandataire interne (RemoteIpValve).
+  forward-headers-strategy: native

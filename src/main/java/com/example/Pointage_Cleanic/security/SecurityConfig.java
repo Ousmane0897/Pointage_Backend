@@ -76,15 +76,14 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 
                         // 🔹 Pointages — vues superviseur (JWT obligatoire).
-                        // Placées AVANT les règles publiques : first-match-wins, et
-                        // /api/pointages/{codeSecret} matcherait aussi /today.
+                        // Placées AVANT les règles publiques (first-match-wins). Le GET public
+                        // /api/pointages/{codeSecret} a été supprimé (lot 0 sécurité, C5).
                         .requestMatchers(HttpMethod.GET, "/api/pointages/today").authenticated()
                         .requestMatchers("/api/pointages/historique/**").authenticated() // search + exports excel/pdf
                         .requestMatchers(HttpMethod.GET, "/api/pointages").authenticated() // getAll
 
                         // 🔹 Pointages — mobile public (pointage sans token)
                         .requestMatchers(HttpMethod.POST, "/api/pointages").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/pointages/{codeSecret}").permitAll() // statut consulté par le mobile
                         .requestMatchers("/pointages/**").permitAll() // chemin legacy mobile inchangé
 
                         // 🔹 Connexion : seul le POST est public. change-password exige le JWT

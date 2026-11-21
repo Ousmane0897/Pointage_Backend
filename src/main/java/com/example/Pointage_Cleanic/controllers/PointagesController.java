@@ -5,7 +5,12 @@ import com.example.Pointage_Cleanic.security.DroitsExpr;
 
 
 
+import com.example.Pointage_Cleanic.Dto.pointage.PointageConfirmationDto;
 import com.example.Pointage_Cleanic.entities.Pointage;
+import com.example.Pointage_Cleanic.exception.ResourceNotFoundException;
+import com.example.Pointage_Cleanic.services.pointage.PointageLimiteurDebit;
+import jakarta.servlet.http.HttpServletRequest;
+import java.util.Optional;
 import com.example.Pointage_Cleanic.models.PointageRequest;
 import com.example.Pointage_Cleanic.repositories.PointageRepository;
 import com.example.Pointage_Cleanic.services.PointageServices;
@@ -30,13 +35,25 @@ public class PointagesController {
 
     private final PointageServices pointageServices;
     private final PointageRepository pointageRepository;
+    private final PointageLimiteurDebit limiteurDebit;
+
+    /**
+     * Pointage public du kiosque (sans jeton). Limité en débit par IP et par appareil
+     * ({@link PointageLimiteurDebit}) ; la réponse ne contient que ce que l'écran final affiche.
+     */
     @PostMapping
-    public ResponseEntity<?> pointer(@Valid @RequestBody
-                                         PointageRequest request) {
+    public ResponseEntity<?> pointer(@Valid @RequestBody PointageRequest request,
+                                     HttpServletRequest httpRequest) {
 
         // codeSecret et deviceId sont garantis non-blank par @Valid (sinon 400 VALIDATION_ERROR).
         String cleanCode = request.getCodeSecret()
                 .replaceAll("[^0-9]", ""); // 🔥 SUPPRIME TOUT SAUF CHIFFRES
+
+        String ip = httpRequest.getRemoteAddr();
+        Optional<String> refus = limiteurDebit.verifier(ip, request.getDeviceId());
+        if (refus.isPresent()) {
+            return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS).body(refus.get());
+        }
 
         if (!pointageServices.canPoint(request.getDeviceId(), 20)) {
             return ResponseEntity
@@ -46,13 +63,20 @@ public class PointagesController {
 
         // Employé introuvable / code invalide → ResourceNotFoundException (404 JSON) géré
         // par GlobalExceptionHandler ; pas de try/catch local.
-        Pointage pointage = pointageServices.enregistrerPointage(
-                cleanCode,
-                request.getDeviceId(),
-                request.getLatitude(),
-                request.getLongitude()
-        );
-        return ResponseEntity.ok(pointage);
+        Pointage pointage;
+        try {
+            pointage = pointageServices.enregistrerPointage(
+                    cleanCode,
+                    request.getDeviceId(),
+                    request.getLatitude(),
+                    request.getLongitude()
+            );
+        } catch (ResourceNotFoundException codeInconnu) {
+            limiteurDebit.signalerCodeInconnu(ip, request.getDeviceId());
+            throw codeInconnu;
+        }
+        limiteurDebit.signalerSucces(ip, request.getDeviceId());
+        return ResponseEntity.ok(PointageConfirmationDto.de(pointage));
     }
 
     @PreAuthorize(DroitsExpr.POINTAGES_SUPERVISION)
@@ -124,18 +148,6 @@ public class PointagesController {
         return ResponseEntity.ok()
                 .header("Content-Disposition", "attachment; filename=pointages.pdf") // indique au navigateur que la réponse contient un fichier à télécharger et lui donne un nom (pointages.pdf).
                 .body(file);
-    }
-
-    @GetMapping("/{codeSecret}")
-    public ResponseEntity<Pointage> GetBycodeSecret(@PathVariable String codeSecret) {
-
-        Pointage pointage = pointageServices.getPointageBycodeSecret(codeSecret);
-
-        if (pointage == null) {
-            return ResponseEntity.notFound().build(); // 404
-        }
-
-        return ResponseEntity.ok(pointage);
     }
 
 

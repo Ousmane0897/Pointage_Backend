@@ -50,6 +50,8 @@ class PointagesControllerTest {
     @MockBean private MyUserDetailsService myUserDetailsService;
     @MockBean private JwtUtil jwtUtil;
     @MockBean private JwtRequestFilter jwtRequestFilter;
+    // Limite de débit du pointage public : mock neutre (Optional.empty() par défaut = accepté).
+    @MockBean private com.example.Pointage_Cleanic.services.pointage.PointageLimiteurDebit limiteurDebit;
 
     // ==========================================
     // POST /api/pointages — SUCCESS
@@ -273,26 +275,4 @@ class PointagesControllerTest {
     // ==========================================
     // GET /api/pointages/{codeSecret}
     // ==========================================
-
-    @Test
-    void should_return_pointage_when_found() throws Exception {
-
-        Pointage pointage = new Pointage();
-
-        Mockito.when(pointageServices.getPointageBycodeSecret("1234"))
-                .thenReturn(pointage);
-
-        mockMvc.perform(get("/api/pointages/1234"))
-                .andExpect(status().isOk());
-    }
-
-    @Test
-    void should_return_404_when_not_found() throws Exception {
-
-        Mockito.when(pointageServices.getPointageBycodeSecret("9999"))
-                .thenReturn(null);
-
-        mockMvc.perform(get("/api/pointages/9999"))
-                .andExpect(status().isNotFound());
-    }
 }
