@@ -21,9 +21,10 @@ public class ResetPasswordToken {
     private String id;
 
     private String email;
-    private String token; // Code OTP ou UUID
+    /** Hash BCrypt du code à 6 chiffres (jamais le code en clair). */
+    private String token;
     private LocalDateTime expiration;
-
-    // getters & setters
+    /** Essais de validation échoués ; au 5ᵉ, le code est supprimé. Absent des anciens documents → 0. */
+    private int tentatives;
 }
 

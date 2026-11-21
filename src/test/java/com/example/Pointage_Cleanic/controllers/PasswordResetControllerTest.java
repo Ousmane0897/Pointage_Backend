@@ -5,9 +5,7 @@ import com.example.Pointage_Cleanic.security.JwtUtil;
 import com.example.Pointage_Cleanic.services.MyUserDetailsService;
 import com.example.Pointage_Cleanic.services.ResetPasswordService;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import jakarta.mail.MessagingException;
 import org.junit.jupiter.api.Test;
-import org.mockito.Mock;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -17,114 +15,58 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.Map;
 
-import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(PasswordResetController.class)
 @AutoConfigureMockMvc(addFilters = false)
 class PasswordResetControllerTest {
 
-    @Autowired
-    private MockMvc mockMvc;
+    @Autowired private MockMvc mockMvc;
+    @Autowired private ObjectMapper objectMapper;
 
-    @Autowired
-    private ObjectMapper objectMapper;
+    @MockBean private ResetPasswordService resetPasswordService;
 
-    // ✅ Dépendance métier du controller
-    @MockBean
-    private ResetPasswordService resetPasswordService;
-
-    // ✅ Sécurité (obligatoire)
     @MockBean private MyUserDetailsService myUserDetailsService;
     @MockBean private JwtUtil jwtUtil;
     @MockBean private JwtRequestFilter jwtRequestFilter;
 
-    // =========================
-    // FORGOT PASSWORD
-    // =========================
-
+    /** Réponse identique que l'e-mail existe ou non (le service ne lève rien). */
     @Test
-    void forgot_password_ok() throws Exception {
-        Map<String, String> request = Map.of("email", "user@test.com");
-
-        doNothing().when(resetPasswordService)
-                .sendResetPasswordEmail("user@test.com");
-
+    void forgot_password_reponse_neutre() throws Exception {
         mockMvc.perform(post("/auth/forgot-password")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
+                        .content(objectMapper.writeValueAsString(Map.of("email", "inconnu@test.com"))))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.message")
-                        .value("Le Code de réinitialisation vous est envoyé par mail."));
+                .andExpect(jsonPath("$.message").value(PasswordResetController.MESSAGE_DEMANDE));
+        verify(resetPasswordService).sendResetPasswordEmail("inconnu@test.com");
     }
-
-    @Test
-    void forgot_password_runtime_exception() throws Exception {
-        Map<String, String> request = Map.of("email", "unknown@test.com");
-
-        doThrow(new RuntimeException("Utilisateur introuvable"))
-                .when(resetPasswordService)
-                .sendResetPasswordEmail("unknown@test.com");
-
-        mockMvc.perform(post("/auth/forgot-password")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isInternalServerError());
-    }
-
-    @Test
-    void forgot_password_messaging_exception() throws Exception {
-        Map<String, String> request = Map.of("email", "user@test.com");
-
-        doThrow(new MessagingException("SMTP error"))
-                .when(resetPasswordService)
-                .sendResetPasswordEmail("user@test.com");
-
-        mockMvc.perform(post("/auth/forgot-password")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isInternalServerError());
-    }
-
-    // =========================
-    // RESET PASSWORD
-    // =========================
 
     @Test
     void reset_password_ok() throws Exception {
-        Map<String, String> request = Map.of(
-                "code", "123456",
-                "newPassword", "newPass123"
-        );
-
-        doNothing().when(resetPasswordService)
-                .resetPassword(request);
-
         mockMvc.perform(post("/auth/reset-password")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
+                        .content(objectMapper.writeValueAsString(
+                                Map.of("email", "a@test.com", "code", "123456", "newPassword", "nouveau1"))))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.message")
-                        .value("Mot de passe réinitialisé avec succès"));
+                .andExpect(jsonPath("$.message").value("Mot de passe réinitialisé avec succès"));
+        verify(resetPasswordService).resetPassword("a@test.com", "123456", "nouveau1");
     }
 
     @Test
-    void reset_password_invalid_code() throws Exception {
-        Map<String, String> request = Map.of(
-                "code", "000000",
-                "newPassword", "newPass123"
-        );
-
-        doThrow(new RuntimeException("Code invalide"))
-                .when(resetPasswordService)
-                .resetPassword(request);
+    void reset_password_code_invalide_400() throws Exception {
+        doThrow(new IllegalArgumentException("Code invalide ou expiré."))
+                .when(resetPasswordService).resetPassword("a@test.com", "000000", "nouveau1");
 
         mockMvc.perform(post("/auth/reset-password")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
+                        .content(objectMapper.writeValueAsString(
+                                Map.of("email", "a@test.com", "code", "000000", "newPassword", "nouveau1"))))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.error")
-                        .value("Code invalide"));
+                .andExpect(jsonPath("$.error").value("Code invalide ou expiré."))
+                .andExpect(jsonPath("$.message").value("Code invalide ou expiré."));
     }
 }

@@ -9,7 +9,6 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.data.mongo.DataMongoTest;
 import org.springframework.data.mongodb.core.MongoTemplate;
-import org.springframework.test.context.TestPropertySource;
 
 import java.time.LocalDateTime;
 import java.util.Optional;
@@ -30,70 +29,49 @@ class ResetPasswordTokenRepositoryTest extends MongoTestContainer {
         mongoTemplate.getDb().drop();
     }
 
-
-    @Test
-    @DisplayName("Doit trouver un token par email")
-    void shouldFindByEmail() {
-        // GIVEN
-        ResetPasswordToken token = ResetPasswordToken.builder()
-                .email("user@cleanic.com")
-                .token("123456")
-                .expiration(LocalDateTime.now().plusMinutes(15))
-                .build();
-
-        tokenRepository.save(token);
-
-        // WHEN
-        Optional<ResetPasswordToken> result =
-                tokenRepository.findByEmail("user@cleanic.com");
-
-        // THEN
-        assertThat(result).isPresent();
-        assertThat(result.get().getToken())
-                .isEqualTo("123456");
+    private ResetPasswordToken jeton(String email, LocalDateTime expiration) {
+        return tokenRepository.save(ResetPasswordToken.builder()
+                .email(email).token("HASH").expiration(expiration).build());
     }
 
     @Test
-    @DisplayName("Doit trouver un token par valeur du token")
-    void shouldFindByToken() {
-        // GIVEN
-        ResetPasswordToken token = ResetPasswordToken.builder()
-                .email("user@cleanic.com")
-                .token("654321")
-                .expiration(LocalDateTime.now().plusMinutes(15))
-                .build();
+    @DisplayName("Renvoie le code le plus récent de l'e-mail")
+    void shouldFindLatestByEmail() {
+        jeton("user@cleanic.com", LocalDateTime.now().plusMinutes(1));
+        ResetPasswordToken recent = jeton("user@cleanic.com", LocalDateTime.now().plusMinutes(10));
 
-        tokenRepository.save(token);
+        Optional<ResetPasswordToken> result = tokenRepository.findFirstByEmailOrderByExpirationDesc("user@cleanic.com");
 
-        // WHEN
-        Optional<ResetPasswordToken> result =
-                tokenRepository.findByToken("654321");
-
-        // THEN
         assertThat(result).isPresent();
-        assertThat(result.get().getEmail())
-                .isEqualTo("user@cleanic.com");
+        assertThat(result.get().getId()).isEqualTo(recent.getId());
     }
 
     @Test
     @DisplayName("Ne doit rien retourner si email inexistant")
     void shouldReturnEmptyWhenEmailNotFound() {
-        // WHEN
-        Optional<ResetPasswordToken> result =
-                tokenRepository.findByEmail("absent@cleanic.com");
-
-        // THEN
-        assertThat(result).isEmpty();
+        assertThat(tokenRepository.findFirstByEmailOrderByExpirationDesc("absent@cleanic.com")).isEmpty();
     }
 
     @Test
-    @DisplayName("Ne doit rien retourner si token inexistant")
-    void shouldReturnEmptyWhenTokenNotFound() {
-        // WHEN
-        Optional<ResetPasswordToken> result =
-                tokenRepository.findByToken("000000");
+    @DisplayName("Supprime tous les codes d'un e-mail")
+    void shouldDeleteByEmail() {
+        jeton("user@cleanic.com", LocalDateTime.now().plusMinutes(5));
+        jeton("user@cleanic.com", LocalDateTime.now().plusMinutes(6));
+        jeton("autre@cleanic.com", LocalDateTime.now().plusMinutes(6));
 
-        // THEN
-        assertThat(result).isEmpty();
+        tokenRepository.deleteByEmail("user@cleanic.com");
+
+        assertThat(tokenRepository.count()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("Purge les codes expirés")
+    void shouldDeleteExpired() {
+        jeton("a@cleanic.com", LocalDateTime.now().minusMinutes(1));
+        jeton("b@cleanic.com", LocalDateTime.now().plusMinutes(5));
+
+        tokenRepository.deleteByExpirationBefore(LocalDateTime.now());
+
+        assertThat(tokenRepository.findAll()).extracting(ResetPasswordToken::getEmail).containsExactly("b@cleanic.com");
     }
 }
