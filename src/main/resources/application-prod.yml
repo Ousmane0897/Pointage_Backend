@@ -39,3 +39,11 @@ server:
   # Derrière nginx/docker : l'IP cliente (limite de débit du pointage public) vient de
   # X-Forwarded-For uniquement si la requête arrive d'un mandataire interne (RemoteIpValve).
   forward-headers-strategy: native
+
+springdoc:
+  # Documentation de l'API fermée en production (lot 0 sécurité) : elle décrit toutes les
+  # routes et leurs paramètres. Reste disponible en dev.
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false

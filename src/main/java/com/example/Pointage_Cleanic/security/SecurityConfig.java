@@ -94,8 +94,7 @@ public class SecurityConfig {
                         ).permitAll()
                         .requestMatchers(
                                 "/api/produits/image/**",
-                                "/api/employe-complet/image/**",
-                                "/api/dossier-employe/*/photo"
+                                "/api/employe-complet/image/**"
                         ).permitAll()
                         .requestMatchers("/ws/**").permitAll()
 
