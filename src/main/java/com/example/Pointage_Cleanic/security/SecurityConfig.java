@@ -41,16 +41,8 @@ public class SecurityConfig {
                 .cors(cors -> cors.configurationSource(request -> {
                     CorsConfiguration config = new CorsConfiguration();
 
-                    // Mettre explicitement ton front ici
-                    config.setAllowedOrigins(List.of(
-                            "https://pointic-cleanic.com",
-                            "https://www.pointic-cleanic.com",
-                            "https://app.pointic-cleanic.com",
-                            "http://localhost",
-                            "http://127.0.0.1:*",
-                            "https://*.ngrok-free.dev",
-                            "https://sizably-unhonored-bryce.ngrok-free.dev"
-                    ));
+                    // Origines du front : liste unique partagée avec le WebSocket (OriginesAutorisees).
+                    config.setAllowedOriginPatterns(OriginesAutorisees.MOTIFS);
 
                     // Méthodes autorisées
                     config.setAllowedMethods(List.of(

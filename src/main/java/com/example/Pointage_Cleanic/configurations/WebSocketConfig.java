@@ -1,7 +1,11 @@
 package com.example.Pointage_Cleanic.configurations;
 
 
+import com.example.Pointage_Cleanic.security.JwtChannelInterceptor;
+import com.example.Pointage_Cleanic.security.OriginesAutorisees;
+import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.messaging.simp.config.ChannelRegistration;
 import org.springframework.messaging.simp.config.MessageBrokerRegistry;
 import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBroker;
 import org.springframework.web.socket.config.annotation.StompEndpointRegistry;
@@ -14,7 +18,17 @@ import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerCo
  */
 @Configuration
 @EnableWebSocketMessageBroker
+@RequiredArgsConstructor
 public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
+
+    /** Valide le JWT au CONNECT et pose le principal de la session (lot 0 sécurité, C6). */
+    private final JwtChannelInterceptor jwtChannelInterceptor;
+
+    @Override
+    public void configureClientInboundChannel(ChannelRegistration registration) {
+        registration.interceptors(jwtChannelInterceptor);
+    }
+
     @Override
     public void configureMessageBroker(MessageBrokerRegistry config) {
         // Préfixe des topics que les clients peuvent s'abonner
@@ -25,7 +39,7 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) { // l’URL /ws est simplement le endpoint WebSocket que tu exposes côté backend pour permettre à Angular (ou tout autre client) de se connecter au broker
         registry.addEndpoint("/ws")
-                .setAllowedOriginPatterns("*")
+                .setAllowedOriginPatterns(OriginesAutorisees.MOTIFS.toArray(String[]::new)) // même liste que le CORS HTTP
                 .withSockJS();
     }
 
