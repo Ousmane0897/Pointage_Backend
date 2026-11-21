@@ -1,5 +1,7 @@
 package com.example.Pointage_Cleanic.controllers.productionchimie;
 
+import org.springframework.security.access.prepost.PreAuthorize;
+
 import com.example.Pointage_Cleanic.Dto.productionchimie.ControleQualiteDto;
 import com.example.Pointage_Cleanic.Dto.productionchimie.TendanceParametre;
 import com.example.Pointage_Cleanic.Enum.DecisionControle;
@@ -25,6 +27,7 @@ import java.io.IOException;
 import java.time.LocalDate;
 import java.util.List;
 
+@PreAuthorize("@droits.peutUnParmi('productionChimie.*')")
 @RestController
 @RequestMapping("/api/production-chimie/controle-qualite")
 @RequiredArgsConstructor
@@ -51,6 +54,7 @@ public class ControlesQualiteController {
         return ResponseEntity.ok(service.getById(id));
     }
 
+    @PreAuthorize("@droits.peut('productionChimie.controleQualite')")
     @PostMapping(value = "/controles", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<ControleQualiteDto> create(
             @RequestPart("controle") String controleJson,

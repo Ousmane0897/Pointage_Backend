@@ -1,5 +1,8 @@
 package com.example.Pointage_Cleanic.controllers;
 
+import org.springframework.security.access.prepost.PreAuthorize;
+import com.example.Pointage_Cleanic.security.DroitsExpr;
+
 
 
 import com.example.Pointage_Cleanic.entities.Pointage;
@@ -52,12 +55,14 @@ public class PointagesController {
         return ResponseEntity.ok(pointage);
     }
 
+    @PreAuthorize(DroitsExpr.POINTAGES_SUPERVISION)
     @GetMapping
     public ResponseEntity<List<Pointage>> getAll() {
         List<Pointage> All= pointageRepository.findAll();
         return ResponseEntity.status(HttpStatus.CREATED).body(All);
     }
 
+    @PreAuthorize(DroitsExpr.POINTAGES_SUPERVISION)
     @GetMapping("/today")
     public ResponseEntity<Page<Pointage>> getTodayPointages(
             @RequestParam(defaultValue = "0") int page,
@@ -71,6 +76,7 @@ public class PointagesController {
     }
 
     // Affiche l'historique dans la possibilité de recherche et de filtrage par période dans l'historique des pointages.
+    @PreAuthorize(DroitsExpr.POINTAGES_SUPERVISION)
     @GetMapping("/historique/search")
     public ResponseEntity<Page<Pointage>> searchHistorique(
             @RequestParam(required = false) String search,
@@ -90,6 +96,7 @@ public class PointagesController {
         );
     }
 
+    @PreAuthorize(DroitsExpr.POINTAGES_SUPERVISION)
     @GetMapping("/historique/export/excel")
     public ResponseEntity<byte[]> exportExcel(
             @RequestParam(required = false) String search,
@@ -104,6 +111,7 @@ public class PointagesController {
                 .body(file);
     }
 
+    @PreAuthorize(DroitsExpr.POINTAGES_SUPERVISION)
     @GetMapping("/historique/export/pdf")
     public ResponseEntity<byte[]> exportPdf(
             @RequestParam(required = false) String search,

@@ -1,5 +1,7 @@
 package com.example.Pointage_Cleanic.controllers.productionchimie;
 
+import org.springframework.security.access.prepost.PreAuthorize;
+
 import com.example.Pointage_Cleanic.Dto.productionchimie.MatierePremiereDto;
 import com.example.Pointage_Cleanic.entities.productionchimie.MatierePremiere;
 import com.example.Pointage_Cleanic.services.productionchimie.MatierePremiereService;
@@ -24,6 +26,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
 import java.util.List;
 
+@PreAuthorize("@droits.peutUnParmi('productionChimie.*')")
 @RestController
 @RequestMapping("/api/production-chimie/stock-chimie/matieres-premieres")
 @RequiredArgsConstructor
@@ -58,6 +61,7 @@ public class MatieresPremieresController {
         return ResponseEntity.ok(service.getById(id));
     }
 
+    @PreAuthorize("@droits.peut('productionChimie.matieresPremieres')")
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<MatierePremiereDto> create(
             @RequestPart("matiere") String matiereJson,
@@ -68,6 +72,7 @@ public class MatieresPremieresController {
         return ResponseEntity.status(201).body(created);
     }
 
+    @PreAuthorize("@droits.peut('productionChimie.matieresPremieres')")
     @PutMapping(value = "/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<MatierePremiereDto> update(
             @PathVariable String id,
@@ -79,6 +84,7 @@ public class MatieresPremieresController {
         return ResponseEntity.ok(service.update(id, dto, ficheSecurite, supprimerFicheSecurite));
     }
 
+    @PreAuthorize("@droits.peut('productionChimie.matieresPremieres')")
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> delete(@PathVariable String id) {
         service.delete(id);
@@ -96,6 +102,7 @@ public class MatieresPremieresController {
                 .body(mp.getFicheSecurite());
     }
 
+    @PreAuthorize("@droits.peut('productionChimie.matieresPremieres')")
     @DeleteMapping("/{id}/fiche-securite")
     public ResponseEntity<Void> deleteFicheSecurite(@PathVariable String id) {
         service.deleteFicheSecurite(id);

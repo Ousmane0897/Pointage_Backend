@@ -1,5 +1,7 @@
 package com.example.Pointage_Cleanic.controllers.productionchimie;
 
+import org.springframework.security.access.prepost.PreAuthorize;
+
 import com.example.Pointage_Cleanic.Dto.productionchimie.LotDto;
 import com.example.Pointage_Cleanic.Dto.productionchimie.TracabiliteLot;
 import com.example.Pointage_Cleanic.Enum.StatutControleLot;
@@ -17,6 +19,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDate;
 
+@PreAuthorize("@droits.peutUnParmi('productionChimie.*')")
 @RestController
 @RequestMapping("/api/production-chimie/lots")
 @RequiredArgsConstructor

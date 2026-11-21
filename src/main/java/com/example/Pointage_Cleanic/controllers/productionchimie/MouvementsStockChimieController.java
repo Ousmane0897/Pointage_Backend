@@ -1,5 +1,7 @@
 package com.example.Pointage_Cleanic.controllers.productionchimie;
 
+import org.springframework.security.access.prepost.PreAuthorize;
+
 import com.example.Pointage_Cleanic.Dto.productionchimie.AjustementMpPayload;
 import com.example.Pointage_Cleanic.Dto.productionchimie.MouvementStockChimieDto;
 import com.example.Pointage_Cleanic.Dto.productionchimie.ReceptionMpPayload;
@@ -19,6 +21,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDate;
 
+@PreAuthorize("@droits.peutUnParmi('productionChimie.*')")
 @RestController
 @RequestMapping("/api/production-chimie/stock-chimie/mouvements")
 @RequiredArgsConstructor
@@ -39,11 +42,13 @@ public class MouvementsStockChimieController {
         return ResponseEntity.ok(service.list(page, size, matierePremiereId, type, ordreFabricationId, dateDebut, dateFin));
     }
 
+    @PreAuthorize("@droits.peut('productionChimie.matieresPremieres')")
     @PostMapping("/reception")
     public ResponseEntity<MouvementStockChimieDto> reception(@Valid @RequestBody ReceptionMpPayload payload) {
         return ResponseEntity.status(201).body(service.createReception(payload));
     }
 
+    @PreAuthorize("@droits.peut('productionChimie.matieresPremieres')")
     @PostMapping("/ajustement")
     public ResponseEntity<MouvementStockChimieDto> ajustement(@Valid @RequestBody AjustementMpPayload payload) {
         return ResponseEntity.status(201).body(service.createAjustement(payload));

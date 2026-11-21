@@ -1,5 +1,7 @@
 package com.example.Pointage_Cleanic.controllers.productionchimie;
 
+import org.springframework.security.access.prepost.PreAuthorize;
+
 import com.example.Pointage_Cleanic.Dto.productionchimie.AnnulerOfPayload;
 import com.example.Pointage_Cleanic.Dto.productionchimie.DisponibiliteOf;
 import com.example.Pointage_Cleanic.Dto.productionchimie.LancerOfPayload;
@@ -24,6 +26,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.time.LocalDate;
 import java.util.List;
 
+@PreAuthorize("@droits.peutUnParmi('productionChimie.*')")
 @RestController
 @RequestMapping("/api/production-chimie/ordres")
 @RequiredArgsConstructor
@@ -68,11 +71,13 @@ public class OrdresFabricationController {
         return ResponseEntity.ok(service.disponibiliteForOf(id));
     }
 
+    @PreAuthorize("@droits.peut('productionChimie.ordresFabrication')")
     @PostMapping
     public ResponseEntity<OrdreFabricationDto> create(@Valid @RequestBody OrdreFabricationDto dto) {
         return ResponseEntity.status(201).body(service.create(dto));
     }
 
+    @PreAuthorize("@droits.peut('productionChimie.ordresFabrication')")
     @PutMapping("/{id}")
     public ResponseEntity<OrdreFabricationDto> update(
             @PathVariable String id,
@@ -81,6 +86,7 @@ public class OrdresFabricationController {
         return ResponseEntity.ok(service.update(id, dto));
     }
 
+    @PreAuthorize("@droits.peut('productionChimie.ordresFabrication')")
     @PostMapping("/{id}/lancer")
     public ResponseEntity<OrdreFabricationDto> lancer(
             @PathVariable String id,
@@ -89,6 +95,7 @@ public class OrdresFabricationController {
         return ResponseEntity.ok(service.lancer(id, payload));
     }
 
+    @PreAuthorize("@droits.peut('productionChimie.ordresFabrication')")
     @PostMapping("/{id}/terminer")
     public ResponseEntity<OrdreFabricationDto> terminer(
             @PathVariable String id,
@@ -97,6 +104,7 @@ public class OrdresFabricationController {
         return ResponseEntity.ok(service.terminer(id, payload));
     }
 
+    @PreAuthorize("@droits.peut('productionChimie.ordresFabrication')")
     @PostMapping("/{id}/annuler")
     public ResponseEntity<OrdreFabricationDto> annuler(
             @PathVariable String id,

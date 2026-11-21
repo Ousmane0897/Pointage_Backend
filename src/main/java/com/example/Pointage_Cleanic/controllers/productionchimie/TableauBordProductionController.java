@@ -1,5 +1,7 @@
 package com.example.Pointage_Cleanic.controllers.productionchimie;
 
+import org.springframework.security.access.prepost.PreAuthorize;
+
 import com.example.Pointage_Cleanic.Dto.productionchimie.ComparaisonPeriodes;
 import com.example.Pointage_Cleanic.Dto.productionchimie.EvolutionMensuelle;
 import com.example.Pointage_Cleanic.Dto.productionchimie.KpiProductionPeriode;
@@ -19,6 +21,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.time.LocalDate;
 import java.util.List;
 
+@PreAuthorize("@droits.peut('productionChimie.tableauBord')")
 @RestController
 @RequestMapping("/api/production-chimie/tableau-bord")
 @RequiredArgsConstructor

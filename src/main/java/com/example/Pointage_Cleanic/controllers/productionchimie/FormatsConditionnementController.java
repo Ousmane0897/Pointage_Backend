@@ -1,5 +1,7 @@
 package com.example.Pointage_Cleanic.controllers.productionchimie;
 
+import org.springframework.security.access.prepost.PreAuthorize;
+
 import com.example.Pointage_Cleanic.Dto.productionchimie.FormatConditionnementDto;
 import com.example.Pointage_Cleanic.Enum.TypeContenant;
 import com.example.Pointage_Cleanic.services.productionchimie.FormatConditionnementService;
@@ -19,6 +21,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
+@PreAuthorize("@droits.peutUnParmi('productionChimie.*')")
 @RestController
 @RequestMapping("/api/production-chimie/formats-conditionnement")
 @RequiredArgsConstructor
@@ -47,11 +50,13 @@ public class FormatsConditionnementController {
         return ResponseEntity.ok(service.getById(id));
     }
 
+    @PreAuthorize("@droits.peut('productionChimie.conditionnement')")
     @PostMapping
     public ResponseEntity<FormatConditionnementDto> create(@Valid @RequestBody FormatConditionnementDto dto) {
         return ResponseEntity.status(201).body(service.create(dto));
     }
 
+    @PreAuthorize("@droits.peut('productionChimie.conditionnement')")
     @PutMapping("/{id}")
     public ResponseEntity<FormatConditionnementDto> update(
             @PathVariable String id,
@@ -60,6 +65,7 @@ public class FormatsConditionnementController {
         return ResponseEntity.ok(service.update(id, dto));
     }
 
+    @PreAuthorize("@droits.peut('productionChimie.conditionnement')")
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> delete(@PathVariable String id) {
         service.delete(id);

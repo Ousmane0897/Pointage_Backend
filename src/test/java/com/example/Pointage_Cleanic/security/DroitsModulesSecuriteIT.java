@@ -76,7 +76,22 @@ class DroitsModulesSecuriteIT extends SecuriteITBase {
                 a("DELETE", "/api/terrain/interventions/inexistant", "{\"terrain\":{\"interventions\":true}}", "{\"terrain\":{\"planning\":true}}"),
                 a("DELETE", "/api/terrain/controles-terrain/grilles/inexistant", "{\"terrain\":{\"controleQualite\":true}}", "{\"terrain\":{\"planning\":true}}"),
                 a("POST", "/api/terrain/materiel", "{\"terrain\":{\"materiel\":true}}", "{\"terrain\":{\"planning\":true}}"),
-                a("DELETE", "/api/terrain/phytosanitaire/produits/inexistant", "{\"terrain\":{\"phytosanitaire\":true}}", "{\"terrain\":{\"planning\":true}}")
+                a("DELETE", "/api/terrain/phytosanitaire/produits/inexistant", "{\"terrain\":{\"phytosanitaire\":true}}", "{\"terrain\":{\"planning\":true}}"),
+                // --- Production chimie ---,
+                a("GET", "/api/production-chimie/tableau-bord/kpis?dateDebut=2026-01-01&dateFin=2026-01-31", "{\"productionChimie\":{\"tableauBord\":true}}", "{\"productionChimie\":{\"lots\":true}}"),
+                a("GET", "/api/production-chimie/stock-chimie/matieres-premieres", "{\"productionChimie\":{\"formulations\":true}}", "{\"stock\":{\"catalogue\":true}}"),
+                a("DELETE", "/api/production-chimie/stock-chimie/matieres-premieres/inexistant", "{\"productionChimie\":{\"matieresPremieres\":true}}", "{\"productionChimie\":{\"lots\":true}}"),
+                a("DELETE", "/api/production-chimie/formulations/inexistant", "{\"productionChimie\":{\"formulations\":true}}", "{\"productionChimie\":{\"lots\":true}}"),
+                a("POST", "/api/production-chimie/ordres/inexistant/terminer", "{\"productionChimie\":{\"ordresFabrication\":true}}", "{\"productionChimie\":{\"lots\":true}}"),
+                a("GET", "/api/production-chimie/lots", "{\"productionChimie\":{\"lots\":true}}", "{\"stock\":{\"catalogue\":true}}"),
+                a("DELETE", "/api/production-chimie/controle-qualite/grilles/inexistant", "{\"productionChimie\":{\"controleQualite\":true}}", "{\"productionChimie\":{\"lots\":true}}"),
+                a("DELETE", "/api/production-chimie/formats-conditionnement/inexistant", "{\"productionChimie\":{\"conditionnement\":true}}", "{\"productionChimie\":{\"lots\":true}}"),
+                a("GET", "/api/production-chimie/parametres", "{\"productionChimie\":{\"lots\":true}}", "{\"stock\":{\"catalogue\":true}}"),
+                a("PUT", "/api/production-chimie/parametres", "{\"productionChimie\":{\"formulations\":true}}", "{\"productionChimie\":{\"lots\":true}}"),
+                // --- Pointages kiosque (vues superviseur) ---,
+                a("GET", "/api/pointages/today", "{\"terrain\":{\"pointage\":true}}", "{\"terrain\":{\"planning\":true}}"),
+                a("GET", "/api/pointages/historique/search", "{\"rh\":{\"pointageCentralise\":true}}", "{\"rh\":{\"formations\":true}}"),
+                a("GET", "/api/pointages", "{\"terrain\":{\"pointage\":true}}", "{\"terrain\":{\"planning\":true}}")
         );
     }
 

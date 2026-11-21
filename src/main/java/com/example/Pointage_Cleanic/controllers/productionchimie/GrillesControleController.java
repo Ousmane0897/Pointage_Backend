@@ -1,5 +1,7 @@
 package com.example.Pointage_Cleanic.controllers.productionchimie;
 
+import org.springframework.security.access.prepost.PreAuthorize;
+
 import com.example.Pointage_Cleanic.Dto.productionchimie.GrilleControleDto;
 import com.example.Pointage_Cleanic.services.productionchimie.GrilleControleService;
 import jakarta.validation.Valid;
@@ -16,6 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
+@PreAuthorize("@droits.peutUnParmi('productionChimie.*')")
 @RestController
 @RequestMapping("/api/production-chimie/controle-qualite/grilles")
 @RequiredArgsConstructor
@@ -39,16 +42,19 @@ public class GrillesControleController {
         return dto == null ? ResponseEntity.noContent().build() : ResponseEntity.ok(dto);
     }
 
+    @PreAuthorize("@droits.peut('productionChimie.controleQualite')")
     @PostMapping
     public ResponseEntity<GrilleControleDto> create(@Valid @RequestBody GrilleControleDto dto) {
         return ResponseEntity.status(201).body(service.create(dto));
     }
 
+    @PreAuthorize("@droits.peut('productionChimie.controleQualite')")
     @PutMapping("/{id}")
     public ResponseEntity<GrilleControleDto> update(@PathVariable String id, @Valid @RequestBody GrilleControleDto dto) {
         return ResponseEntity.ok(service.update(id, dto));
     }
 
+    @PreAuthorize("@droits.peut('productionChimie.controleQualite')")
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> delete(@PathVariable String id) {
         service.delete(id);

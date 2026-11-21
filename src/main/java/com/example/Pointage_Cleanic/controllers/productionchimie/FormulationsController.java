@@ -1,5 +1,7 @@
 package com.example.Pointage_Cleanic.controllers.productionchimie;
 
+import org.springframework.security.access.prepost.PreAuthorize;
+
 import com.example.Pointage_Cleanic.Dto.productionchimie.ComparaisonVersions;
 import com.example.Pointage_Cleanic.Dto.productionchimie.FicheFormulationDto;
 import com.example.Pointage_Cleanic.Dto.productionchimie.RestaurerVersionPayload;
@@ -21,6 +23,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
+@PreAuthorize("@droits.peutUnParmi('productionChimie.*')")
 @RestController
 @RequestMapping("/api/production-chimie/formulations")
 @RequiredArgsConstructor
@@ -48,11 +51,13 @@ public class FormulationsController {
         return ResponseEntity.ok(service.getById(id));
     }
 
+    @PreAuthorize("@droits.peut('productionChimie.formulations')")
     @PostMapping
     public ResponseEntity<FicheFormulationDto> create(@Valid @RequestBody FicheFormulationDto dto) {
         return ResponseEntity.status(201).body(service.create(dto));
     }
 
+    @PreAuthorize("@droits.peut('productionChimie.formulations')")
     @PutMapping("/{id}")
     public ResponseEntity<FicheFormulationDto> update(
             @PathVariable String id,
@@ -61,12 +66,14 @@ public class FormulationsController {
         return ResponseEntity.ok(service.update(id, dto));
     }
 
+    @PreAuthorize("@droits.peut('productionChimie.formulations')")
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> delete(@PathVariable String id) {
         service.delete(id);
         return ResponseEntity.noContent().build();
     }
 
+    @PreAuthorize("@droits.peut('productionChimie.formulations')")
     @PostMapping("/{id}/versions/{numero}/restaurer")
     public ResponseEntity<FicheFormulationDto> restaurer(
             @PathVariable String id,
