@@ -1,5 +1,8 @@
 package com.example.Pointage_Cleanic.controllers.terrain;
 
+import org.springframework.security.access.prepost.PreAuthorize;
+import com.example.Pointage_Cleanic.security.DroitsExpr;
+
 import com.example.Pointage_Cleanic.Dto.terrain.EffectifSiteDto;
 import com.example.Pointage_Cleanic.Dto.terrain.SiteClientDto;
 import com.example.Pointage_Cleanic.Enum.terrain.FrequencePassage;
@@ -20,6 +23,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
 import java.util.List;
 
+@PreAuthorize(DroitsExpr.REFERENTIEL)
 @RestController
 @RequestMapping("/api/terrain/sites-clients")
 @RequiredArgsConstructor
@@ -59,6 +63,7 @@ public class SitesClientsController {
         return effectifSiteService.calculer(id, perimetre, excludeEmployeId, excludeAffectationId);
     }
 
+    @PreAuthorize("@droits.peut('terrain.sitesClients')")
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<SiteClientDto> create(
             @RequestPart("site") String siteJson,
@@ -68,6 +73,7 @@ public class SitesClientsController {
         return ResponseEntity.status(201).body(service.create(dto, cahierDesCharges));
     }
 
+    @PreAuthorize("@droits.peut('terrain.sitesClients')")
     @PutMapping(value = "/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public SiteClientDto update(
             @PathVariable String id,
@@ -78,6 +84,7 @@ public class SitesClientsController {
         return service.update(id, dto, cahierDesCharges);
     }
 
+    @PreAuthorize("@droits.peut('terrain.sitesClients')")
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> delete(@PathVariable String id) {
         service.delete(id);

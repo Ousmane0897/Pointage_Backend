@@ -1,5 +1,7 @@
 package com.example.Pointage_Cleanic.controllers.terrain;
 
+import org.springframework.security.access.prepost.PreAuthorize;
+
 import com.example.Pointage_Cleanic.Dto.terrain.AlerteMaintenance;
 import com.example.Pointage_Cleanic.Enum.terrain.StatutMateriel;
 import com.example.Pointage_Cleanic.Enum.terrain.TypeMateriel;
@@ -17,6 +19,7 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 
+@PreAuthorize("@droits.peutUnParmi('terrain.*')")
 @RestController
 @RequestMapping("/api/terrain/materiel")
 @RequiredArgsConstructor
@@ -47,6 +50,7 @@ public class MaterielController {
         return service.listMaintenances(dateDebut, dateFin);
     }
 
+    @PreAuthorize("@droits.peut('terrain.materiel')")
     @PostMapping("/maintenance-programmee")
     public ResponseEntity<MaintenanceProgrammee> creerMaintenance(@RequestBody MaintenanceProgrammee maintenance) {
         return ResponseEntity.status(201).body(service.creerMaintenance(maintenance));
@@ -57,22 +61,26 @@ public class MaterielController {
         return service.getById(id);
     }
 
+    @PreAuthorize("@droits.peut('terrain.materiel')")
     @PostMapping
     public ResponseEntity<Materiel> create(@RequestBody Materiel materiel) {
         return ResponseEntity.status(201).body(service.create(materiel));
     }
 
+    @PreAuthorize("@droits.peut('terrain.materiel')")
     @PutMapping("/{id}")
     public Materiel update(@PathVariable String id, @RequestBody Materiel materiel) {
         return service.update(id, materiel);
     }
 
+    @PreAuthorize("@droits.peut('terrain.materiel')")
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> delete(@PathVariable String id) {
         service.delete(id);
         return ResponseEntity.noContent().build();
     }
 
+    @PreAuthorize("@droits.peut('terrain.materiel')")
     @PostMapping("/{materielId}/affecter")
     public Materiel affecter(@PathVariable String materielId, @RequestBody Map<String, String> body) {
         return service.affecter(materielId, body.get("siteId"), body.get("commentaire"));
@@ -83,11 +91,13 @@ public class MaterielController {
         return service.historique(materielId);
     }
 
+    @PreAuthorize("@droits.peut('terrain.materiel')")
     @PostMapping("/{materielId}/panne")
     public EvenementMateriel panne(@PathVariable String materielId, @RequestBody Map<String, String> body) {
         return service.panne(materielId, body.get("description"));
     }
 
+    @PreAuthorize("@droits.peut('terrain.materiel')")
     @PostMapping("/{materielId}/maintenance")
     public EvenementMateriel maintenance(@PathVariable String materielId, @RequestBody EvenementMateriel evenement) {
         return service.maintenance(materielId, evenement);

@@ -1,5 +1,7 @@
 package com.example.Pointage_Cleanic.controllers.terrain;
 
+import org.springframework.security.access.prepost.PreAuthorize;
+
 import com.example.Pointage_Cleanic.Dto.terrain.FicheInterventionDto;
 import com.example.Pointage_Cleanic.Enum.terrain.StatutIntervention;
 import com.example.Pointage_Cleanic.entities.terrain.PhotoInterventionFichier;
@@ -17,6 +19,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
 import java.time.LocalDate;
 
+@PreAuthorize("@droits.peutUnParmi('terrain.*')")
 @RestController
 @RequestMapping("/api/terrain/interventions")
 @RequiredArgsConstructor
@@ -42,6 +45,7 @@ public class InterventionsController {
         return service.getById(id);
     }
 
+    @PreAuthorize("@droits.peut('terrain.interventions')")
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<FicheInterventionDto> create(
             @RequestPart("fiche") String ficheJson,
@@ -51,6 +55,7 @@ public class InterventionsController {
         return ResponseEntity.status(201).body(service.create(dto, photos));
     }
 
+    @PreAuthorize("@droits.peut('terrain.interventions')")
     @PutMapping(value = "/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public FicheInterventionDto update(
             @PathVariable String id,
@@ -61,6 +66,7 @@ public class InterventionsController {
         return service.update(id, dto, photos);
     }
 
+    @PreAuthorize("@droits.peut('terrain.interventions')")
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> delete(@PathVariable String id) {
         service.delete(id);

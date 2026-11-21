@@ -1,5 +1,7 @@
 package com.example.Pointage_Cleanic.controllers.terrain;
 
+import org.springframework.security.access.prepost.PreAuthorize;
+
 import com.example.Pointage_Cleanic.Dto.terrain.PointageTerrainDto;
 import com.example.Pointage_Cleanic.Enum.terrain.StatutPointage;
 import com.example.Pointage_Cleanic.Enum.terrain.TypePointage;
@@ -14,6 +16,7 @@ import org.springframework.web.bind.annotation.*;
 import java.time.LocalDate;
 import java.util.List;
 
+@PreAuthorize("@droits.peutUnParmi('terrain.*')")
 @RestController
 @RequestMapping("/api/terrain/pointages")
 @RequiredArgsConstructor
@@ -21,6 +24,7 @@ public class PointagesTerrainController {
 
     private final PointageTerrainService service;
 
+    @PreAuthorize("@droits.peut('terrain.pointage')")
     @PostMapping
     public ResponseEntity<PointageTerrainDto> create(@Valid @RequestBody PointageTerrainDto dto) {
         return ResponseEntity.status(201).body(service.create(dto));
@@ -31,6 +35,7 @@ public class PointagesTerrainController {
         return service.jour(employeId);
     }
 
+    @PreAuthorize("@droits.peutUnParmi('terrain.*', 'dashboard')")
     @GetMapping("/aujourd-hui")
     public List<PointageTerrainDto> aujourdHui() {
         return service.aujourdHui();

@@ -1,5 +1,7 @@
 package com.example.Pointage_Cleanic.controllers.terrain;
 
+import org.springframework.security.access.prepost.PreAuthorize;
+
 import com.example.Pointage_Cleanic.Dto.terrain.ComparaisonPeriodesTerrain;
 import com.example.Pointage_Cleanic.Dto.terrain.IncidentsParSite;
 import com.example.Pointage_Cleanic.Dto.terrain.InterventionsParSite;
@@ -18,6 +20,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.time.LocalDate;
 import java.util.List;
 
+@PreAuthorize("@droits.peut('terrain.tableauBord')")
 @RestController
 @RequestMapping("/api/terrain/tableau-bord")
 @RequiredArgsConstructor

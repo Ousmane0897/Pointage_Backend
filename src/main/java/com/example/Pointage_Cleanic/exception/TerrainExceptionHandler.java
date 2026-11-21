@@ -3,6 +3,7 @@ package com.example.Pointage_Cleanic.exception;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -57,6 +58,13 @@ public class TerrainExceptionHandler {
     @ExceptionHandler(TerrainConflitException.class)
     public ResponseEntity<Map<String, Object>> handleConflit(TerrainConflitException ex) {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(body(ex.getMessage(), HttpStatus.CONFLICT));
+    }
+
+    /** Refus d'un @PreAuthorize : 403 (sans cette entrée, le repli Exception renverrait 500). */
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<Map<String, Object>> handleAccesRefuse(AccessDeniedException ex) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(body("Vous n'avez pas le droit d'accéder à cette ressource.", HttpStatus.FORBIDDEN));
     }
 
     @ExceptionHandler(Exception.class)

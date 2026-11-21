@@ -1,5 +1,7 @@
 package com.example.Pointage_Cleanic.controllers.terrain;
 
+import org.springframework.security.access.prepost.PreAuthorize;
+
 import com.example.Pointage_Cleanic.Dto.terrain.AffectationAgentDto;
 import com.example.Pointage_Cleanic.Dto.terrain.AnnulationAffectationRequest;
 import com.example.Pointage_Cleanic.Dto.terrain.ConflitAffectation;
@@ -16,6 +18,7 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 
+@PreAuthorize("@droits.peutUnParmi('terrain.*', 'dashboard')")
 @RestController
 @RequestMapping("/api/terrain/planning")
 @RequiredArgsConstructor
@@ -64,11 +67,13 @@ public class PlanningController {
         return service.getById(id);
     }
 
+    @PreAuthorize("@droits.peut('terrain.planning')")
     @PostMapping("/affectations")
     public ResponseEntity<AffectationAgentDto> create(@Valid @RequestBody AffectationAgentDto dto) {
         return ResponseEntity.status(201).body(service.create(dto));
     }
 
+    @PreAuthorize("@droits.peut('terrain.planning')")
     @PutMapping("/affectations/{id}")
     public AffectationAgentDto update(@PathVariable String id, @RequestBody AffectationAgentDto dto) {
         return service.update(id, dto);
@@ -80,6 +85,7 @@ public class PlanningController {
      * <p>Remplace l'ancien {@code DELETE /affectations/{id}}, supprimé le 2026-07-21 : une
      * affectation ne se supprime pas, elle s'annule — sinon la traçabilité serait contournable.
      */
+    @PreAuthorize("@droits.peut('terrain.planning')")
     @PostMapping("/affectations/{id}/annuler")
     public AffectationAgentDto annuler(@PathVariable String id,
                                        @RequestBody(required = false) AnnulationAffectationRequest body) {

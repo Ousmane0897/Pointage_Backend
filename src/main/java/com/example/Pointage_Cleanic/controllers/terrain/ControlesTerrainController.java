@@ -1,5 +1,7 @@
 package com.example.Pointage_Cleanic.controllers.terrain;
 
+import org.springframework.security.access.prepost.PreAuthorize;
+
 import com.example.Pointage_Cleanic.Dto.terrain.ControleQualiteTerrainDto;
 import com.example.Pointage_Cleanic.Dto.terrain.EvolutionNotePoint;
 import com.example.Pointage_Cleanic.Dto.terrain.GrilleEvaluationTerrainDto;
@@ -21,6 +23,7 @@ import java.io.IOException;
 import java.time.LocalDate;
 import java.util.List;
 
+@PreAuthorize("@droits.peutUnParmi('terrain.*')")
 @RestController
 @RequestMapping("/api/terrain/controles-terrain")
 @RequiredArgsConstructor
@@ -46,17 +49,20 @@ public class ControlesTerrainController {
         return service.getGrille(id);
     }
 
+    @PreAuthorize("@droits.peut('terrain.controleQualite')")
     @PostMapping("/grilles")
     public ResponseEntity<GrilleEvaluationTerrainDto> createGrille(@Valid @RequestBody GrilleEvaluationTerrainDto dto) {
         return ResponseEntity.status(201).body(service.createGrille(dto));
     }
 
+    @PreAuthorize("@droits.peut('terrain.controleQualite')")
     @PutMapping("/grilles/{id}")
     public GrilleEvaluationTerrainDto updateGrille(@PathVariable String id,
                                                    @RequestBody GrilleEvaluationTerrainDto dto) {
         return service.updateGrille(id, dto);
     }
 
+    @PreAuthorize("@droits.peut('terrain.controleQualite')")
     @DeleteMapping("/grilles/{id}")
     public ResponseEntity<Void> deleteGrille(@PathVariable String id) {
         service.deleteGrille(id);
@@ -88,6 +94,7 @@ public class ControlesTerrainController {
         return service.getControle(id);
     }
 
+    @PreAuthorize("@droits.peut('terrain.controleQualite')")
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<ControleQualiteTerrainDto> create(
             @RequestPart("controle") String controleJson,

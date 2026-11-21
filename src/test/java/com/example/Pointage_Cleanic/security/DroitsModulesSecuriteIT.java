@@ -62,7 +62,21 @@ class DroitsModulesSecuriteIT extends SecuriteITBase {
                 a("GET", "/api/stock/valorisation/cout-site?dateDebut=2026-01-01&dateFin=2026-01-31", "{\"stock\":{\"coutSite\":true}}", "{\"stock\":{\"marges\":true}}"),
                 a("GET", "/api/stock/valorisation/chantiers", "{\"stock\":{\"coutChantier\":true}}", "{\"stock\":{\"marges\":true}}"),
                 a("GET", "/api/stock/valorisation/marges?dateDebut=2026-01-01&dateFin=2026-01-31", "{\"stock\":{\"marges\":true}}", "{\"stock\":{\"coutSite\":true}}"),
-                a("GET", "/api/stock/valorisation/tableau-bord?dateDebut=2026-01-01&dateFin=2026-01-31", "{\"stock\":{\"tableauBordFinancier\":true}}", "{\"stock\":{\"marges\":true}}")
+                a("GET", "/api/stock/valorisation/tableau-bord?dateDebut=2026-01-01&dateFin=2026-01-31", "{\"stock\":{\"tableauBordFinancier\":true}}", "{\"stock\":{\"marges\":true}}"),
+                // --- Terrain ---,
+                a("GET", "/api/terrain/tableau-bord/kpis?dateDebut=2026-01-01&dateFin=2026-01-31", "{\"terrain\":{\"tableauBord\":true}}", "{\"terrain\":{\"planning\":true}}"),
+                a("GET", "/api/terrain/sites-clients", "{\"terrain\":{\"planning\":true}}", null),
+                a("DELETE", "/api/terrain/sites-clients/inexistant", "{\"terrain\":{\"sitesClients\":true}}", "{\"terrain\":{\"planning\":true}}"),
+                a("GET", "/api/terrain/planning/affectations", "{\"terrain\":{\"alertes\":true}}", null),
+                a("POST", "/api/terrain/planning/affectations/inexistant/annuler", "{\"terrain\":{\"planning\":true}}", "{\"terrain\":{\"alertes\":true}}"),
+                a("GET", "/api/terrain/pointages/historique", "{\"terrain\":{\"pointage\":true}}", "{\"stock\":{\"catalogue\":true}}"),
+                a("GET", "/api/terrain/alertes", "{\"terrain\":{\"planning\":true}}", null),
+                a("GET", "/api/terrain/alertes/parametres", "{\"terrain\":{\"alertes\":true}}", "{\"terrain\":{\"planning\":true}}"),
+                a("PUT", "/api/terrain/alertes/parametres", "{\"terrain\":{\"alertes\":true}}", "{\"terrain\":{\"planning\":true}}"),
+                a("DELETE", "/api/terrain/interventions/inexistant", "{\"terrain\":{\"interventions\":true}}", "{\"terrain\":{\"planning\":true}}"),
+                a("DELETE", "/api/terrain/controles-terrain/grilles/inexistant", "{\"terrain\":{\"controleQualite\":true}}", "{\"terrain\":{\"planning\":true}}"),
+                a("POST", "/api/terrain/materiel", "{\"terrain\":{\"materiel\":true}}", "{\"terrain\":{\"planning\":true}}"),
+                a("DELETE", "/api/terrain/phytosanitaire/produits/inexistant", "{\"terrain\":{\"phytosanitaire\":true}}", "{\"terrain\":{\"planning\":true}}")
         );
     }
 
@@ -73,10 +87,27 @@ class DroitsModulesSecuriteIT extends SecuriteITBase {
     @ParameterizedTest(name = "{0} {1}")
     @MethodSource("routes")
     void droit_exige(String methode, String url, String autorise, String refuse) throws Exception {
+        java.util.List<String> refuses = new java.util.ArrayList<>();
+        if (refuse != null) {
+            refuses.add(refuse);
+        }
+        // Lectures consommées par le tableau de bord ou le référentiel multi-modules : le drapeau
+        // « dashboard » y est volontairement admis.
+        if (!LECTURES_TABLEAU_DE_BORD.contains(methode + " " + url)) {
+            refuses.add("{\"dashboard\":true}");
+        }
         verifierAcces(() -> request(HttpMethod.valueOf(methode), url)
                         .contentType(MediaType.APPLICATION_JSON).content("{}"),
-                autorise, refuse, "{\"dashboard\":true}");
+                autorise, refuses.toArray(String[]::new));
     }
+
+    private static final java.util.Set<String> LECTURES_TABLEAU_DE_BORD = java.util.Set.of(
+            "GET /api/terrain/sites-clients",
+            "GET /api/terrain/planning/affectations",
+            "GET /api/terrain/alertes",
+            "GET /api/pointages/today",
+            "GET /api/pointages/historique/search",
+            "GET /api/pointages");
 
     /**
      * Congés et jours fériés : libre-service ouvert à tout compte connecté (« Mes demandes »,

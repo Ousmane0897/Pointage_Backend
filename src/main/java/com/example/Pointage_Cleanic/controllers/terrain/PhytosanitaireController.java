@@ -1,5 +1,7 @@
 package com.example.Pointage_Cleanic.controllers.terrain;
 
+import org.springframework.security.access.prepost.PreAuthorize;
+
 import com.example.Pointage_Cleanic.Dto.terrain.AlerteDelaiPhyto;
 import com.example.Pointage_Cleanic.Enum.terrain.CategoriePhyto;
 import com.example.Pointage_Cleanic.Enum.terrain.StatutApplicationPhyto;
@@ -17,6 +19,7 @@ import org.springframework.web.bind.annotation.*;
 import java.time.LocalDate;
 import java.util.List;
 
+@PreAuthorize("@droits.peutUnParmi('terrain.*')")
 @RestController
 @RequestMapping("/api/terrain/phytosanitaire")
 @RequiredArgsConstructor
@@ -36,17 +39,20 @@ public class PhytosanitaireController {
         return service.getProduit(id);
     }
 
+    @PreAuthorize("@droits.peut('terrain.phytosanitaire')")
     @PostMapping("/produits")
     public ResponseEntity<ProduitPhytosanitaire> createProduit(@RequestBody ProduitPhytosanitaire produit) {
         return ResponseEntity.status(201).body(service.createProduit(produit));
     }
 
+    @PreAuthorize("@droits.peut('terrain.phytosanitaire')")
     @PutMapping("/produits/{id}")
     public ProduitPhytosanitaire updateProduit(@PathVariable String id,
                                                @RequestBody ProduitPhytosanitaire produit) {
         return service.updateProduit(id, produit);
     }
 
+    @PreAuthorize("@droits.peut('terrain.phytosanitaire')")
     @DeleteMapping("/produits/{id}")
     public ResponseEntity<Void> deleteProduit(@PathVariable String id) {
         service.deleteProduit(id);
@@ -81,16 +87,19 @@ public class PhytosanitaireController {
         return service.getApplication(id);
     }
 
+    @PreAuthorize("@droits.peut('terrain.phytosanitaire')")
     @PostMapping("/applications")
     public ResponseEntity<ApplicationPhyto> createApplication(@RequestBody ApplicationPhyto application) {
         return ResponseEntity.status(201).body(service.createApplication(application));
     }
 
+    @PreAuthorize("@droits.peut('terrain.phytosanitaire')")
     @PutMapping("/applications/{id}")
     public ApplicationPhyto updateApplication(@PathVariable String id, @RequestBody ApplicationPhyto application) {
         return service.updateApplication(id, application);
     }
 
+    @PreAuthorize("@droits.peut('terrain.phytosanitaire')")
     @DeleteMapping("/applications/{id}")
     public ResponseEntity<Void> deleteApplication(@PathVariable String id) {
         service.deleteApplication(id);

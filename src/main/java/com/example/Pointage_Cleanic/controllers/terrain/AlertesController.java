@@ -1,5 +1,7 @@
 package com.example.Pointage_Cleanic.controllers.terrain;
 
+import org.springframework.security.access.prepost.PreAuthorize;
+
 import com.example.Pointage_Cleanic.Dto.terrain.AlerteTerrainDto;
 import com.example.Pointage_Cleanic.Dto.terrain.ParametresEscaladeDto;
 import com.example.Pointage_Cleanic.Dto.terrain.RecapitulatifQuotidien;
@@ -16,6 +18,7 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 
+@PreAuthorize("@droits.peutUnParmi('terrain.*', 'dashboard')")
 @RestController
 @RequestMapping("/api/terrain/alertes")
 @RequiredArgsConstructor
@@ -48,11 +51,13 @@ public class AlertesController {
         return service.recapQuotidien(date);
     }
 
+    @PreAuthorize("@droits.peut('terrain.alertes')")
     @GetMapping("/parametres")
     public ParametresEscaladeDto getParametres() {
         return service.getParametres();
     }
 
+    @PreAuthorize("@droits.peut('terrain.alertes')")
     @PutMapping("/parametres")
     public ParametresEscaladeDto updateParametres(@RequestBody ParametresEscaladeDto dto) {
         return service.updateParametres(dto);
@@ -63,16 +68,19 @@ public class AlertesController {
         return service.getById(id);
     }
 
+    @PreAuthorize("@droits.peut('terrain.alertes')")
     @PostMapping("/{id}/traiter")
     public AlerteTerrainDto traiter(@PathVariable String id, @RequestBody(required = false) Map<String, String> body) {
         return service.traiter(id, body == null ? null : body.get("commentaire"));
     }
 
+    @PreAuthorize("@droits.peut('terrain.alertes')")
     @PostMapping("/{id}/justifier")
     public AlerteTerrainDto justifier(@PathVariable String id, @RequestBody(required = false) Map<String, String> body) {
         return service.justifier(id, body == null ? null : body.get("motif"));
     }
 
+    @PreAuthorize("@droits.peut('terrain.alertes')")
     @PostMapping("/{id}/escalader")
     public AlerteTerrainDto escalader(@PathVariable String id, @RequestBody(required = false) Map<String, String> body) {
         return service.escalader(id, body == null ? null : body.get("motif"));
