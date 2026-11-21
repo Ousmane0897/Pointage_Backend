@@ -28,14 +28,14 @@ Tests are forced single-threaded (`maxParallelForks = 1`, JUnit parallel disable
 docker-compose up --build             # Mongo (port 27018 on host) + Spring Boot on 8080, profile=prod
 ```
 
-`docker-compose.yml` currently hardcodes `MAIL_PASSWORD`, `JWT_SECRET`, and `GOOGLE_MAPS_API_KEY` — treat those as already-compromised and regenerate before any production deploy; do not commit replacements.
+`docker-compose.yml` lit ses secrets dans un fichier `.env` non suivi (`env_file`, modèle `.env.example`). Les anciennes valeurs, longtemps commitées, sont **compromises** : procédure de rotation et de purge de l'historique dans `docs/securite/rotation-secrets.md`.
 
 ### Profiles & configuration
 
-- `application.yml` — default, points at `mongodb://localhost:27017/cleanic`, logs `com.example=DEBUG`.
-- `application-dev.yml` — dev JWT secret + SMTP via `MAIL_USERNAME` / `MAIL_PASSWORD` env vars.
-- `application-prod.yml` — Mongo host `mongo` (docker-compose service), `JWT_SECRET` from env.
-- `application-test.yml` — dummy JWT secret, disabled mail; auto-applied in tests.
+- `application.yml` — default, points at `mongodb://localhost:27017/cleanic`, logs `com.example=DEBUG` (Spring Security et Spring Web en INFO). Secrets lus depuis l'environnement (`${JWT_SECRET}`, `${GOOGLE_MAPS_API_KEY}`, `${MAIL_USERNAME}`/`${MAIL_PASSWORD}`) ; en dev, un `.env` local est importé (`spring.config.import: optional:file:.env[.properties]`).
+- `application-dev.yml` — SMTP via `MAIL_USERNAME` / `MAIL_PASSWORD` env vars (plus aucun secret en dur).
+- `application-prod.yml` — Mongo host `mongo` (docker-compose service), secrets sans valeur par défaut (`SecretsRequisVerificateur` refuse le démarrage s'il en manque un), Swagger désactivé, `server.forward-headers-strategy: native`.
+- `application-test.yml` — dummy JWT secret, disabled mail. ⚠ Ce profil n'est **pas** activé automatiquement : les valeurs factices des tests viennent de `src/test/resources/config/application.yml` (et des `properties` des `@SpringBootTest`).
 
 Jackson is configured globally for `dd/MM/yyyy` dates in `Africa/Dakar`. Preserve that when adding DTOs — don't hardcode other formats.
 
@@ -45,15 +45,15 @@ Standard layered Spring MVC: `controllers → services → repositories (Spring 
 
 Things that only make sense after reading several files:
 
-- **Auth is stateless JWT.** `security/SecurityConfig.java` disables CSRF, sets `SessionCreationPolicy.STATELESS`, and installs `JwtRequestFilter` before `UsernamePasswordAuthenticationFilter`. The filter skips `OPTIONS` (preflight) and rejects expired/invalid tokens with 401. **Depuis 2026-07-21, un `authenticationEntryPoint` global renvoie aussi 401 quand aucun token n'est fourni** (auparavant : 403, défaut `Http403ForbiddenEntryPoint` de Spring Security). Le changement est sans risque de masquage ici car ce backend n'a **aucune autorisation par rôle** (pas de `@PreAuthorize`, tout est `.authenticated()`) : un 403 de la couche sécurité signifiait donc toujours « non authentifié ». Public routes are whitelisted there: `/api/login/**`, `/auth/forgot-password`, `/auth/reset-password/**`, Swagger, `/ws/**`, image endpoints (`/api/produits/image/**`, `/api/employe-complet/image/**`), and the mobile clock-in surface: `POST /api/pointages`, `GET /api/pointages/{codeSecret}` (statut), and the legacy `/pointages/**` tree (mobile clocks in without a token). **Les vues superviseur sont protégées** depuis 2026-06 : `GET /api/pointages/today`, `/api/pointages/historique/**` (recherche + exports) et `GET /api/pointages` (getAll) exigent un JWT (ordre des matchers : règles `.authenticated()` placées avant le `permitAll` car `/{codeSecret}` recouvre `/today`). Everything else is `.authenticated()` — y compris `/api/terrain/**` et `/api/stock/**` (module Stock v2, ajouté 2026-06), explicitement listés avant le `anyRequest`. When adding a controller, decide explicitly whether to permit it here.
+- **Auth is stateless JWT.** `security/SecurityConfig.java` disables CSRF, sets `SessionCreationPolicy.STATELESS`, and installs `JwtRequestFilter` before `UsernamePasswordAuthenticationFilter`. The filter skips `OPTIONS` (preflight), rejects expired/invalid tokens with 401, et répond **403 `COMPTE_DESACTIVE`** si le compte a été désactivé après l'émission du jeton (401 s'il a été supprimé). Sans jeton, l'`authenticationEntryPoint` global renvoie 401. **Depuis le lot 0 sécurité (2026-11), un 403 signifie « authentifié mais sans le droit »** (`@PreAuthorize` + `Droits`, voir la section Sécurité). Routes publiques : voir la section **Sécurité** ci-dessous — toute autre route exige un JWT. When adding a controller, decide explicitly whether to permit it here **et** posez son `@PreAuthorize`.
 
-- **CORS allowlist is in `SecurityConfig`, not a properties file.** Frontend origins (`pointic-cleanic.com`, `app.pointic-cleanic.com`, ngrok subdomains, localhost) are hardcoded. Add new origins there.
+- **CORS allowlist is in `security/OriginesAutorisees.MOTIFS`**, liste unique partagée par le CORS HTTP (`SecurityConfig`) et le point d'entrée WebSocket `/ws`. Ce sont des motifs (`setAllowedOriginPatterns`) ; n'y ajoutez pas de joker large (`*`, `*.ngrok-free.dev`).
 
 - **Two parallel user models coexist.** `User` (collection used by `LoginRepository` + `DataLoader` bootstrap superadmin `diarra.niang@cleanicsenegal.com`) and `Utilisateur` (richer admin entity with `RoleAdmin`, `ModulesAutorises`, activation flags). `MyUserDetailsService` bridges them for Spring Security. Don't collapse them without understanding which flows use which.
 
-- **Module-based authorization.** `Utilisateur.modulesAutorises: ModulesAutorises` is a per-user feature-flag object (booleans for top-level modules + nested sub-module objects under `entities/GestionModules/SousModules/`). Route-level authorization in `SecurityConfig` is coarse (`.authenticated()`); fine-grained gating is **delegated to the Angular frontend** which reads `ModulesAutorises` from the JWT/`AuthResponse2` to show/hide screens — there are **no `@PreAuthorize`/`@Secured` annotations** on the backend. Top-level flags include `Dashboard, Admin, StatistiquesAgences, Planifications, Calendrier, JourFeries, Employes, Agences, RH`; sub-modules `CollecteLivraison, Absences, Pointages, Stock` carry nested booleans. The `RH` flag (added 2026-04-30) gates the entire RH module 6.1–6.4. Le module **Stock v2** a son propre objet `ModulesAutorises.stock` (`SousModules/Stock`, ajouté 2026-06) avec 27 sous-flags : 7 pour 7.3 `{catalogue, mouvements, etatStock, inventaires, synthese, approvisionnement, tableauBord}` + 8 pour 7.4 `{categorisation, bonsEntree, bonsSortie, workflowValidation, historiqueDestinataire, plafonds, dotation, rapportsConso}` + 5 pour 7.5 `{analyseMensuelle, chantiers, dons, comparatif, filtresCroises}` + 7 pour 7.6 `{coutUnitaire, coutMouvements, valeurStock, coutSite, coutChantier, marges, tableauBordFinancier}` ; sérialisé tel quel dans le claim JWT `modules` (`@JsonInclude(NON_NULL)` → les utilisateurs existants restent inchangés). `RoleAdmin.RH` exists in the enum but is just a profile tag — without `ModulesAutorises.RH=true`, the RH screens stay hidden.
+- **Module-based authorization.** `Utilisateur.modulesAutorises: ModulesAutorises` is a per-user feature-flag object (`dashboard`, `admin` + sous-objets `rh`, `productionChimie`, `terrain`, `stock` sous `entities/GestionModules/SousModules/`). **Depuis le lot 0 sécurité, ces drapeaux sont contrôlés côté serveur** par `@PreAuthorize("@droits.peut('module.drapeau')")` (composant `security/Droits`, droits **relus en base** à chaque appel, pas depuis le claim JWT) ; le front ne fait plus que du confort d'affichage (sidebar + `guards/module.guard.ts`). Le module **Stock v2** a 27 sous-flags : 7.3 `{catalogue, mouvements, etatStock, inventaires, synthese, approvisionnement, tableauBord}`, 7.4 `{categorisation, bonsEntree, bonsSortie, workflowValidation, historiqueDestinataire, plafonds, dotation, rapportsConso}`, 7.5 `{analyseMensuelle, chantiers, dons, comparatif, filtresCroises}`, 7.6 `{coutUnitaire, coutMouvements, valeurStock, coutSite, coutChantier, marges, tableauBordFinancier}` ; sérialisé tel quel dans le claim JWT `modules` (`@JsonInclude(NON_NULL)`). `rh.congesMesDemandes` / `rh.congesValidation` sont calculés **à la connexion seulement** (`CongeModuleEnricher`) et ne sont donc pas en base : les routes congés correspondantes restent filtrées par `CongeIdentiteService`, pas par `@droits`.
 
-- **WebSockets (STOMP over SockJS) are a first-class channel**, not an afterthought. `WebSocketConfig` exposes `/ws`, broadcast prefixes `/topic` + `/queue`, client-to-server prefix `/app`. Used for the admin ↔ superadmin cancel/validate workflow (see `Dto/AnnulationRequestMessage.java`, `Dto/AnnulationDecisionMessage.java`, `Dto/CancelRequestDto.java`, `Dto/ValidationRequestDto.java`). `/ws/**` is permitAll but `/ws/info` requires auth — mirror that pattern for new endpoints.
+- **WebSockets (STOMP over SockJS) are a first-class channel**, not an afterthought. `WebSocketConfig` exposes `/ws`, broadcast prefixes `/topic` + `/queue`, client-to-server prefix `/app`. `/ws/**` est `permitAll` au niveau HTTP (poignée de main SockJS), mais **`JwtChannelInterceptor` exige un JWT valide au `CONNECT` STOMP** et pose le principal (nom = e-mail) : `convertAndSendToUser(email, …)` atteint donc son destinataire. Origines limitées à `OriginesAutorisees.MOTIFS`.
 
 - **Scheduled tasks are enabled** (`@EnableScheduling` on the main class). Look for `@Scheduled` before assuming a job is triggered by a request.
 
@@ -67,13 +67,9 @@ Things that only make sense after reading several files:
 | --- | --- |
 | `/api/login`, `/auth` | LoginController, PasswordResetController |
 | `/api/superadmin` | UtilisateurController |
-| `/api/employe`, `/api/employe-complet` | EmployesController, EmployeCompletController |
-| `/api/agences`, `/api/site` | AgencesController, SitesController |
-| `/api/planification`, `/api/ferie` | PlanificationController, FerieController |
-| `/api/pointages`, `/api/absences` | PointagesController (public), AbsencesControllers |
+| `/api/employe-complet` | EmployeCompletController (legacy, `rh.dossierEmploye` ; image publique en attente de retrait) |
+| `/api/pointages` | PointagesController (`POST` public et limité en débit ; vues superviseur protégées) |
 | `/api/produits` | ProduitController (**stock historique** — entité `Produit`, collection `produits`. ⚠️ Ne mappe PAS `/api/stock`, qui appartient au module Stock v2 7.3/7.4/7.5 ci-dessous) |
-| `/api/besoins` | CollecteBesoinController |
-| `/api/dashboard`, `/api/dashboard_par_agence` | DashboardController, DashboardParAgence |
 | `/ws` | STOMP endpoint |
 | **— RH 6.1 — gestion-personnel** (`controllers/rh/gestionpersonnel`) | |
 | `/api/gestion-personnel/employes` | DossierEmployeController (source de vérité RH depuis 2026-04) |
@@ -134,13 +130,23 @@ Things that only make sense after reading several files:
 
 ## Testing conventions
 
-- Controller tests use `@WebMvcTest(XxxController.class)` with `@AutoConfigureMockMvc(addFilters = false)` — security is disabled in slice tests, so `JwtRequestFilter`, `JwtUtil`, and `MyUserDetailsService` must still be declared as `@MockBean` (the Spring context loads them). Copy this pattern from `EmployesControllerTest`.
+- Controller tests use `@WebMvcTest(XxxController.class)` with `@AutoConfigureMockMvc(addFilters = false)` — security is disabled in slice tests, so `JwtRequestFilter`, `JwtUtil`, and `MyUserDetailsService` must still be declared as `@MockBean` (the Spring context loads them). Copy this pattern from `EmployeCompletControllerTest`. ⚠ Un slice ne teste **pas** les droits : tout `@PreAuthorize` se teste avec la chaîne de sécurité réelle en étendant `security/SecuriteITBase` (vrais JWT, comptes en base, helper `verifierAcces` : 401 / 403 / accès).
 - Integration tests that need a real Mongo extend `MongoTestContainer` (Testcontainers `mongo:7.0`, container reused across tests). `configurations/AbstractMongoTest.java` is the main-source counterpart.
 - Test profile (`application-test.yml`) has mail disabled (`spring.mail.host: disabled`) — don't wire `JavaMailSender` into tests that load the full context without mocking it.
 
 ## CI
 
 `.github/workflows/backend.yml` runs on push to `main` only: JDK 21 setup → `./gradlew clean build -x test` → `./gradlew test`. Docker push and VPS deploy steps are commented out. The `develop` branch (current working branch) is not covered by CI.
+
+## Sécurité
+
+Lot 0 sécurité (2026-11, branche `fix/securite-lot-0`) — détails et preuves : `docs/securite/correctifs-lot-0.md`.
+
+- **Routes publiques autorisées** (liste blanche vérifiée par `security/RoutesPubliquesIT`, qui échoue si une autre route répond sans jeton) : `POST /api/login`, `POST /auth/forgot-password`, `POST /auth/reset-password`, `POST /api/pointages` (kiosque, limité par `PointageLimiteurDebit`), `/ws/**` (poignée de main ; JWT exigé au `CONNECT` STOMP), `/error`, Swagger hors prod. Encore publiques **en attente de leur retrait** (preuve de non-utilisation dans les journaux nginx) : `GET /api/produits/image/**`, `GET /api/employe-complet/image/**`. Toute nouvelle route publique : `SecurityConfig` **et** la liste blanche du test.
+- **Droits par module** : chaque contrôleur porte un `@PreAuthorize`. `@droits.peut('stock.catalogue')`, `@droits.peutUnParmi('rh.calculBulletin', 'rh.historiquePaies')`, `@droits.estSuperAdmin()` ; joker `module.*` = au moins un drapeau du module ; expressions partagées dans `security/DroitsExpr` (`REFERENTIEL` pour les listes lues par plusieurs modules, `POINTAGES_SUPERVISION`). SUPERADMIN passe partout, le rôle RH passe sur tout `rh.*` (comme la sidebar), un compte désactivé est toujours refusé. Les droits sont **relus en base** (pas depuis le JWT). Les contrôles de rôle des services (`HabilitationStock`, `CongeIdentiteService`, `ParametresPointageService`…) restent en place : ne pas les retirer. Refus → 403 JSON `ACCES_REFUSE` (`GlobalExceptionHandler` et `TerrainExceptionHandler` — tout nouvel advice prioritaire doit aussi traduire `AccessDeniedException`). ⚠ Les erreurs de lecture de la requête (paramètre obligatoire manquant, `@Valid`) sont levées **avant** le contrôle de droit : 400 plutôt que 403, sans fuite de données.
+- **Données sensibles** : `User.password` / `Utilisateur.password` sont en `WRITE_ONLY` (jamais renvoyés) ; sans `rh.dossierEmploye`, les dossiers employés sont renvoyés en `DossierEmployeResumeDto` (ni paie, ni données personnelles).
+- **Aucun secret dans le code, les tests, les journaux** : valeurs uniquement par variables d'environnement (`.env` non suivi, modèle `.env.example`) ; `security/AucunSecretLitteralTest` échoue si une propriété sensible des `application*.yml` (hors test) ou de `docker-compose.yml` n'est pas une référence `${…}`. Jamais de `System.out.println` ni de journal contenant un corps de requête, un mot de passe, un jeton ou un code.
+- **Mot de passe oublié** : code `SecureRandom` haché, validé sur e-mail + code, 5 essais, réponse identique que le compte existe ou non (`ResetPasswordService`).
 
 ## Conventions transverses
 
