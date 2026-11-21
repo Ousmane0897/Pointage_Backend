@@ -1,5 +1,7 @@
 package com.example.Pointage_Cleanic.controllers.stockv2;
 
+import org.springframework.security.access.prepost.PreAuthorize;
+
 import com.example.Pointage_Cleanic.Dto.stockv2.MouvementStockDto;
 import com.example.Pointage_Cleanic.Enum.stockv2.MotifMouvement;
 import com.example.Pointage_Cleanic.Enum.stockv2.TypeMouvement;
@@ -32,6 +34,7 @@ import java.time.LocalDate;
  * <p>Une correction de stock passe par un <b>inventaire</b> (écart justifié puis clôture) ou par la
  * <b>suppression définitive</b> d'un document erroné, qui contre-passe son effet.
  */
+@PreAuthorize("@droits.peutUnParmi('stock.*')")
 @RestController
 @RequestMapping("/api/stock/mouvements")
 @RequiredArgsConstructor

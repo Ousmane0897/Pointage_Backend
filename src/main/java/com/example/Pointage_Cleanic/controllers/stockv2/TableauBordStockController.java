@@ -1,5 +1,7 @@
 package com.example.Pointage_Cleanic.controllers.stockv2;
 
+import org.springframework.security.access.prepost.PreAuthorize;
+
 import com.example.Pointage_Cleanic.Dto.stockv2.RapportTableauBordStockDto;
 import com.example.Pointage_Cleanic.services.stockv2.TableauBordStockService;
 import lombok.RequiredArgsConstructor;
@@ -12,6 +14,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDate;
 
+@PreAuthorize("@droits.peut('stock.tableauBord')")
 @RestController
 @RequestMapping("/api/stock/tableau-bord")
 @RequiredArgsConstructor

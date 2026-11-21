@@ -1,5 +1,7 @@
 package com.example.Pointage_Cleanic.controllers.stockv2;
 
+import org.springframework.security.access.prepost.PreAuthorize;
+
 import com.example.Pointage_Cleanic.Dto.stockv2.CategoriePayload;
 import com.example.Pointage_Cleanic.Dto.stockv2.CategorieStockDto;
 import com.example.Pointage_Cleanic.services.stockv2.CategorieStockService;
@@ -17,6 +19,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
+@PreAuthorize("@droits.peutUnParmi('stock.*')")
 @RestController
 @RequestMapping("/api/stock/categories")
 @RequiredArgsConstructor
@@ -44,16 +47,19 @@ public class CategorieStockController {
         return ResponseEntity.ok(service.getById(id));
     }
 
+    @PreAuthorize("@droits.peut('stock.catalogue')")
     @PostMapping
     public ResponseEntity<CategorieStockDto> create(@RequestBody CategoriePayload payload) {
         return ResponseEntity.ok(service.create(payload));
     }
 
+    @PreAuthorize("@droits.peut('stock.catalogue')")
     @PutMapping("/{id}")
     public ResponseEntity<CategorieStockDto> update(@PathVariable String id, @RequestBody CategoriePayload payload) {
         return ResponseEntity.ok(service.update(id, payload));
     }
 
+    @PreAuthorize("@droits.peut('stock.catalogue')")
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> delete(@PathVariable String id) {
         service.delete(id);

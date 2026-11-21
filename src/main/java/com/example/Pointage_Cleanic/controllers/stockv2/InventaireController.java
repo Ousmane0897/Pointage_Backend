@@ -1,5 +1,7 @@
 package com.example.Pointage_Cleanic.controllers.stockv2;
 
+import org.springframework.security.access.prepost.PreAuthorize;
+
 import com.example.Pointage_Cleanic.Dto.stockv2.ComptagePayload;
 import com.example.Pointage_Cleanic.Dto.stockv2.InventaireDto;
 import com.example.Pointage_Cleanic.Dto.stockv2.InventairePlanifPayload;
@@ -23,6 +25,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDate;
 
+@PreAuthorize("@droits.peut('stock.inventaires')")
 @RestController
 @RequestMapping("/api/stock/inventaires")
 @RequiredArgsConstructor

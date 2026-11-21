@@ -1,5 +1,7 @@
 package com.example.Pointage_Cleanic.controllers.stockv2;
 
+import org.springframework.security.access.prepost.PreAuthorize;
+
 import com.example.Pointage_Cleanic.Dto.stockv2.ConsommationPlafondDto;
 import com.example.Pointage_Cleanic.Dto.stockv2.PlafondDto;
 import com.example.Pointage_Cleanic.Dto.stockv2.PlafondPayload;
@@ -21,6 +23,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
+@PreAuthorize("@droits.peut('stock.plafonds')")
 @RestController
 @RequestMapping("/api/stock/plafonds")
 @RequiredArgsConstructor
@@ -28,6 +31,7 @@ public class PlafondController {
 
     private final PlafondService service;
 
+    @PreAuthorize("@droits.peutUnParmi('stock.plafonds', 'stock.bonsSortie', 'stock.dotation')")
     @GetMapping
     public ResponseEntity<PageResponse<PlafondDto>> list(
             @RequestParam(defaultValue = "0") int page,
@@ -39,6 +43,7 @@ public class PlafondController {
         return ResponseEntity.ok(service.list(page, size, q, siteId, granularite, actif));
     }
 
+    @PreAuthorize("@droits.peutUnParmi('stock.plafonds', 'stock.bonsSortie', 'stock.dotation')")
     @GetMapping("/consommation")
     public ResponseEntity<List<ConsommationPlafondDto>> consommation(
             @RequestParam String mois,
@@ -46,6 +51,7 @@ public class PlafondController {
         return ResponseEntity.ok(service.consommation(mois, siteId));
     }
 
+    @PreAuthorize("@droits.peutUnParmi('stock.plafonds', 'stock.bonsSortie', 'stock.dotation')")
     @GetMapping("/{id}")
     public ResponseEntity<PlafondDto> getById(@PathVariable String id) {
         return ResponseEntity.ok(service.getById(id));

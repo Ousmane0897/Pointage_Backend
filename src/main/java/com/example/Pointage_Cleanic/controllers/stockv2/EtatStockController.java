@@ -1,5 +1,7 @@
 package com.example.Pointage_Cleanic.controllers.stockv2;
 
+import org.springframework.security.access.prepost.PreAuthorize;
+
 import com.example.Pointage_Cleanic.Dto.stockv2.EtatStockDto;
 import com.example.Pointage_Cleanic.Dto.stockv2.SeuilPayload;
 import com.example.Pointage_Cleanic.Enum.stockv2.StatutStock;
@@ -16,6 +18,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+@PreAuthorize("@droits.peutUnParmi('stock.*')")
 @RestController
 @RequestMapping("/api/stock/etat-stock")
 @RequiredArgsConstructor
@@ -48,6 +51,7 @@ public class EtatStockController {
         return ResponseEntity.ok(service.getParProduit(produitId, siteId));
     }
 
+    @PreAuthorize("@droits.peutUnParmi('stock.catalogue', 'stock.etatStock')")
     @PutMapping("/seuils")
     public ResponseEntity<EtatStockDto> majSeuil(@RequestBody SeuilPayload payload) {
         return ResponseEntity.ok(service.majSeuil(payload));

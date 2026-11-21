@@ -1,5 +1,7 @@
 package com.example.Pointage_Cleanic.controllers.stockv2;
 
+import org.springframework.security.access.prepost.PreAuthorize;
+
 import com.example.Pointage_Cleanic.Dto.stockv2.MatriceComparatifDto;
 import com.example.Pointage_Cleanic.Dto.stockv2.ResultatCroiseDto;
 import com.example.Pointage_Cleanic.Dto.stockv2.SyntheseConsoMensuelleDto;
@@ -23,6 +25,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDate;
 
+@PreAuthorize("@droits.peutUnParmi('stock.analyseMensuelle')")
 @RestController
 @RequestMapping("/api/stock/analyse")
 @RequiredArgsConstructor
@@ -33,6 +36,7 @@ public class AnalyseStockController {
     private final ComparatifAnalyseService comparatifService;
     private final FiltreCroiseService croiseService;
 
+    @PreAuthorize("@droits.peut('stock.analyseMensuelle')")
     @GetMapping("/mensuel")
     public ResponseEntity<SyntheseConsoMensuelleDto> mensuel(
             @RequestParam String mois,
@@ -42,6 +46,7 @@ public class AnalyseStockController {
         return ResponseEntity.ok(mensuelleService.synthese(mois, moisFin, siteId, categorieId));
     }
 
+    @PreAuthorize("@droits.peut('stock.dons')")
     @GetMapping("/dons")
     public ResponseEntity<SyntheseDonsDto> dons(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateDebut,
@@ -52,6 +57,7 @@ public class AnalyseStockController {
         return ResponseEntity.ok(donsService.synthese(dateDebut, dateFin, natureDon, beneficiaire, siteId));
     }
 
+    @PreAuthorize("@droits.peut('stock.comparatif')")
     @GetMapping("/comparatif")
     public ResponseEntity<MatriceComparatifDto> comparatif(
             @RequestParam AxeComparatif axe,
@@ -65,6 +71,7 @@ public class AnalyseStockController {
                 comparatifService.comparatif(axe, dateDebut, dateFin, siteId, categorieId, typeSortie, seuilPct));
     }
 
+    @PreAuthorize("@droits.peut('stock.filtresCroises')")
     @GetMapping("/croise")
     public ResponseEntity<ResultatCroiseDto> croise(
             @RequestParam AxeAnalyse axeLignes,

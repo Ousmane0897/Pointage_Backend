@@ -1,5 +1,7 @@
 package com.example.Pointage_Cleanic.controllers.stockv2;
 
+import org.springframework.security.access.prepost.PreAuthorize;
+
 import com.example.Pointage_Cleanic.Dto.stockv2.ConsommationDestinataireDto;
 import com.example.Pointage_Cleanic.Dto.stockv2.RapportConsommationDto;
 import com.example.Pointage_Cleanic.Enum.stockv2.TypeRapportConsommation;
@@ -15,6 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.time.LocalDate;
 import java.util.List;
 
+@PreAuthorize("@droits.peutUnParmi('stock.historiqueDestinataire', 'stock.rapportsConso')")
 @RestController
 @RequestMapping("/api/stock/consommation")
 @RequiredArgsConstructor
@@ -22,6 +25,7 @@ public class ConsommationController {
 
     private final ConsommationStockService service;
 
+    @PreAuthorize("@droits.peut('stock.historiqueDestinataire')")
     @GetMapping("/par-destinataire")
     public ResponseEntity<List<ConsommationDestinataireDto>> parDestinataire(
             @RequestParam(required = false) String siteId,
@@ -31,6 +35,7 @@ public class ConsommationController {
         return ResponseEntity.ok(service.parDestinataire(siteId, produitId, dateDebut, dateFin));
     }
 
+    @PreAuthorize("@droits.peut('stock.rapportsConso')")
     @GetMapping("/rapport")
     public ResponseEntity<RapportConsommationDto> rapport(
             @RequestParam TypeRapportConsommation type,

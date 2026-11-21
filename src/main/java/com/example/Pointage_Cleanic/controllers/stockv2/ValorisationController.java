@@ -1,5 +1,7 @@
 package com.example.Pointage_Cleanic.controllers.stockv2;
 
+import org.springframework.security.access.prepost.PreAuthorize;
+
 import com.example.Pointage_Cleanic.Dto.stockv2.ChantierValoriseDto;
 import com.example.Pointage_Cleanic.Dto.stockv2.ComparatifCoutSitesDto;
 import com.example.Pointage_Cleanic.Dto.stockv2.CoutProduitDto;
@@ -42,6 +44,7 @@ import java.time.LocalDate;
  * Endpoints de valorisation financière (Stock v2 7.6). Lecture seule (sauf PUT du paramétrage) ;
  * les écritures de coût se font à l'entrée de stock et via les PATCH produits dédiés.
  */
+@PreAuthorize("@droits.peut('stock.tableauBordFinancier')")
 @RestController
 @RequestMapping("/api/stock/valorisation")
 @RequiredArgsConstructor
@@ -58,11 +61,13 @@ public class ValorisationController {
 
     // ---------------------------------------------------------------- Paramétrage
 
+    @PreAuthorize("@droits.peutUnParmi('stock.*')")
     @GetMapping("/parametrage")
     public ResponseEntity<ParametrageValorisationDto> getParametrage() {
         return ResponseEntity.ok(parametrageService.get());
     }
 
+    @PreAuthorize("@droits.peut('stock.coutUnitaire')")
     @PutMapping("/parametrage")
     public ResponseEntity<ParametrageValorisationDto> updateParametrage(
             @RequestBody ParametrageValorisationPayload payload) {
@@ -71,6 +76,7 @@ public class ValorisationController {
 
     // ---------------------------------------------------------------- Coût par produit
 
+    @PreAuthorize("@droits.peut('stock.coutUnitaire')")
     @GetMapping("/couts-produits")
     public ResponseEntity<PageResponse<CoutProduitDto>> coutsProduits(
             @RequestParam(defaultValue = "0") int page,
@@ -84,6 +90,7 @@ public class ValorisationController {
                 coutProduitService.list(page, size, q, typeProduit, categorieId, methode, avecAlerte));
     }
 
+    @PreAuthorize("@droits.peut('stock.coutUnitaire')")
     @GetMapping("/couts-produits/{id}/historique")
     public ResponseEntity<HistoriqueCoutProduitDto> historique(@PathVariable String id) {
         return ResponseEntity.ok(coutProduitService.historique(id));
@@ -91,6 +98,7 @@ public class ValorisationController {
 
     // ---------------------------------------------------------------- Mouvements valorisés
 
+    @PreAuthorize("@droits.peut('stock.coutMouvements')")
     @GetMapping("/mouvements")
     public ResponseEntity<PageResponse<LigneCoutMouvementDto>> mouvements(
             @RequestParam(defaultValue = "0") int page,
@@ -107,6 +115,7 @@ public class ValorisationController {
 
     // ---------------------------------------------------------------- Valeur de stock
 
+    @PreAuthorize("@droits.peut('stock.valeurStock')")
     @GetMapping("/valeur-stock")
     public ResponseEntity<ValeurStockDto> valeurStock(
             @RequestParam(required = false) String siteId,
@@ -117,6 +126,7 @@ public class ValorisationController {
 
     // ---------------------------------------------------------------- Coût par site
 
+    @PreAuthorize("@droits.peut('stock.coutSite')")
     @GetMapping("/cout-site")
     public ResponseEntity<ComparatifCoutSitesDto> coutSite(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateDebut,
@@ -127,6 +137,7 @@ public class ValorisationController {
 
     // ---------------------------------------------------------------- Coût de revient chantier
 
+    @PreAuthorize("@droits.peut('stock.coutChantier')")
     @GetMapping("/chantiers")
     public ResponseEntity<PageResponse<ChantierValoriseDto>> chantiers(
             @RequestParam(defaultValue = "0") int page,
@@ -139,6 +150,7 @@ public class ValorisationController {
         return ResponseEntity.ok(chantierService.list(page, size, q, statut, siteId, dateDebut, dateFin));
     }
 
+    @PreAuthorize("@droits.peut('stock.coutChantier')")
     @GetMapping("/chantiers/{id}")
     public ResponseEntity<CoutRevientChantierDto> chantierDetail(@PathVariable String id) {
         return ResponseEntity.ok(chantierService.detail(id));
@@ -146,6 +158,7 @@ public class ValorisationController {
 
     // ---------------------------------------------------------------- Marges
 
+    @PreAuthorize("@droits.peut('stock.marges')")
     @GetMapping("/marges")
     public ResponseEntity<SyntheseMargesDto> marges(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateDebut,
@@ -156,6 +169,7 @@ public class ValorisationController {
 
     // ---------------------------------------------------------------- Tableau de bord financier
 
+    @PreAuthorize("@droits.peut('stock.tableauBordFinancier')")
     @GetMapping("/tableau-bord")
     public ResponseEntity<RapportTableauBordFinancierDto> tableauBord(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateDebut,

@@ -1,5 +1,7 @@
 package com.example.Pointage_Cleanic.controllers.stockv2;
 
+import org.springframework.security.access.prepost.PreAuthorize;
+
 import com.example.Pointage_Cleanic.Dto.stockv2.BonSortieDto;
 import com.example.Pointage_Cleanic.Dto.stockv2.BonSortiePayload;
 import com.example.Pointage_Cleanic.Dto.stockv2.DecisionPayload;
@@ -25,6 +27,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDate;
 
+@PreAuthorize("@droits.peutUnParmi('stock.bonsSortie', 'stock.workflowValidation')")
 @RestController
 @RequestMapping("/api/stock/bons-sortie")
 @RequiredArgsConstructor

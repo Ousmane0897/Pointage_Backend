@@ -1,5 +1,7 @@
 package com.example.Pointage_Cleanic.controllers.stockv2;
 
+import org.springframework.security.access.prepost.PreAuthorize;
+
 import com.example.Pointage_Cleanic.Dto.stockv2.ChantierDto;
 import com.example.Pointage_Cleanic.Dto.stockv2.ChantierPayload;
 import com.example.Pointage_Cleanic.Dto.stockv2.DetailChantierDto;
@@ -24,6 +26,7 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 
+@PreAuthorize("@droits.peutUnParmi('stock.*')")
 @RestController
 @RequestMapping("/api/stock/chantiers")
 @RequiredArgsConstructor
@@ -58,22 +61,26 @@ public class ChantierController {
         return ResponseEntity.ok(service.detail(id));
     }
 
+    @PreAuthorize("@droits.peut('stock.chantiers')")
     @PostMapping
     public ResponseEntity<ChantierDto> creer(@RequestBody ChantierPayload payload) {
         return ResponseEntity.status(HttpStatus.CREATED).body(service.creer(payload));
     }
 
+    @PreAuthorize("@droits.peut('stock.chantiers')")
     @PutMapping("/{id}")
     public ResponseEntity<ChantierDto> modifier(@PathVariable String id, @RequestBody ChantierPayload payload) {
         return ResponseEntity.ok(service.modifier(id, payload));
     }
 
+    @PreAuthorize("@droits.peut('stock.chantiers')")
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> supprimer(@PathVariable String id) {
         service.supprimer(id);
         return ResponseEntity.noContent().build();
     }
 
+    @PreAuthorize("@droits.peut('stock.chantiers')")
     @PostMapping("/{id}/cloture")
     public ResponseEntity<ChantierDto> cloturer(@PathVariable String id) {
         return ResponseEntity.ok(service.cloturer(id));

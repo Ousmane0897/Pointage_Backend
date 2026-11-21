@@ -1,5 +1,7 @@
 package com.example.Pointage_Cleanic.controllers.stockv2;
 
+import org.springframework.security.access.prepost.PreAuthorize;
+
 import com.example.Pointage_Cleanic.Dto.stockv2.MethodeValorisationPayload;
 import com.example.Pointage_Cleanic.Dto.stockv2.PrixVentePayload;
 import com.example.Pointage_Cleanic.Dto.stockv2.ProduitBulkRequest;
@@ -31,6 +33,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
 import java.util.List;
 
+@PreAuthorize("@droits.peutUnParmi('stock.*')")
 @RestController
 @RequestMapping("/api/stock/produits")
 @RequiredArgsConstructor
@@ -63,6 +66,7 @@ public class ProduitStockController {
         return ResponseEntity.ok(service.getById(id));
     }
 
+    @PreAuthorize("@droits.peut('stock.catalogue')")
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<ProduitDto> create(
             @RequestPart("produit") String produitJson,
@@ -73,6 +77,7 @@ public class ProduitStockController {
         return ResponseEntity.status(HttpStatus.CREATED).body(service.create(dto, photo, ficheTechnique));
     }
 
+    @PreAuthorize("@droits.peut('stock.catalogue')")
     @PutMapping(value = "/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<ProduitDto> update(
             @PathVariable String id,
@@ -86,6 +91,7 @@ public class ProduitStockController {
         return ResponseEntity.ok(service.update(id, dto, photo, ficheTechnique, supprimerPhoto, supprimerFicheTechnique));
     }
 
+    @PreAuthorize("@droits.peut('stock.catalogue')")
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> delete(@PathVariable String id) {
         service.delete(id);
@@ -94,12 +100,14 @@ public class ProduitStockController {
 
     // --- 7.6 Valorisation : écriture des champs financiers (hors formulaire multipart 7.3) ---
 
+    @PreAuthorize("@droits.peut('stock.coutUnitaire')")
     @PatchMapping("/{id}/valorisation")
     public ResponseEntity<ProduitDto> definirMethodeValorisation(
             @PathVariable String id, @RequestBody MethodeValorisationPayload payload) {
         return ResponseEntity.ok(service.definirMethodeValorisation(id, payload.getMethodeValorisation()));
     }
 
+    @PreAuthorize("@droits.peut('stock.coutUnitaire')")
     @PatchMapping("/{id}/prix-vente")
     public ResponseEntity<ProduitDto> definirPrixVente(
             @PathVariable String id, @RequestBody PrixVentePayload payload) {
@@ -128,6 +136,7 @@ public class ProduitStockController {
                 .body(p.getFicheTechnique());
     }
 
+    @PreAuthorize("@droits.peut('stock.catalogue')")
     @PostMapping("/bulk")
     public ResponseEntity<ProduitBulkResponse> bulk(@RequestBody ProduitBulkRequest request) {
         ProduitBulkResponse response = service.importBulk(request);

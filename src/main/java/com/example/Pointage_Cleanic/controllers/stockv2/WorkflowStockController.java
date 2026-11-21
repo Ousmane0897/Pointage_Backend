@@ -1,5 +1,7 @@
 package com.example.Pointage_Cleanic.controllers.stockv2;
 
+import org.springframework.security.access.prepost.PreAuthorize;
+
 import com.example.Pointage_Cleanic.Dto.stockv2.BonWorkflowDto;
 import com.example.Pointage_Cleanic.Enum.stockv2.SensBon;
 import com.example.Pointage_Cleanic.Enum.stockv2.StatutBon;
@@ -13,6 +15,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
+@PreAuthorize("@droits.peut('stock.workflowValidation')")
 @RestController
 @RequestMapping("/api/stock/workflow")
 @RequiredArgsConstructor
