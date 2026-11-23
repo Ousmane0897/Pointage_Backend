@@ -152,9 +152,13 @@ Règles :
   - règle morte `/api/dossier-employe/*/photo` retirée ;
   - l'organigramme affichait `photoUrl` dans un `<img src>`, sans jeton, vers une URL qui ne correspond à aucun contrôleur : les photos ne s'affichaient pas. Elles sont maintenant chargées en blob avec le JWT, comme dans la liste des employés (`9f7e5a9`).
 
-### C7 — Routes inutilisées (moyenne) — `fd12f76` (garde-fou seulement)
+### C7 — Routes inutilisées (moyenne) — `fd12f76`, `fa61d34`, `cef31ed`, `67d7a45`
 
-`RoutesPubliquesIT` parcourt les ≈ 380 routes MVC exposées, les appelle sans jeton et exige 401 sauf pour la liste blanche écrite dans le test. **Aucune route n'a été retirée** : j'attends votre confirmation des journaux d'accès (§4).
+- **Garde-fou** (`fd12f76`) : `RoutesPubliquesIT` parcourt les ≈ 380 routes MVC exposées, les appelle sans jeton et exige 401 sauf pour la liste blanche écrite dans le test.
+- **Pas d'accès aux journaux nginx** : la preuve de non-utilisation prévue au §4 n'a pas pu être fournie. Les routes ont donc été triées selon le risque (§4).
+- **Règles mortes retirées** (`fa61d34`) : `/pointages/**`, `/api/planification/**`, `/api/dashboard_par_agence`. Aucun contrôleur ne les sert : un appel recevait déjà une 404.
+- **`ProduitController` supprimé** (`cef31ed`), sauf l'image publique, déplacée dans `ProduitImageController`.
+- **Comptage des routes en sursis** (`67d7a45`) : `SuiviRoutesLegacyFilter` compte les appels aux deux images publiques et au `POST /api/terrain/pointages`. Lecture sur `GET /api/securite/routes-legacy` (SUPERADMIN).
 
 ---
 
@@ -211,11 +215,44 @@ Règles :
 | Production chimie (MatieresPremieres, MouvementsStockChimie, Formulations, Ordres, Lots, ControlesQualite, GrillesControle, FormatsConditionnement) | GET `productionChimie.*` ; écritures `matieresPremieres` / `matieresPremieres` / `formulations` / `ordresFabrication` / `lots` / `controleQualite` / `controleQualite` / `conditionnement` |
 | TableauBordProductionController | `productionChimie.tableauBord` |
 | ParametresProductionChimieController | GET `productionChimie.*` ; PUT `productionChimie.formulations` |
-| ProduitController (`/api/produits`, legacy) | authentifié — **à supprimer** après preuve nginx |
+| ProduitImageController (`GET /api/produits/image/{codeProduit}`, reste de ProduitController) | public — **en sursis**, appels comptés |
+| SuiviRoutesLegacyController `GET /api/securite/routes-legacy` | `@droits.estSuperAdmin()` |
 
 ---
 
-## 4. Routes à retirer (C7) — en attente de votre confirmation
+## 4. Routes à retirer (C7)
+
+### 4.1 Décision prise sans accès aux journaux nginx (2026-11-23)
+
+Le VPS n'est pas accessible : les commandes du §4.3 n'ont pas été lancées. Tri selon le risque :
+
+| Route | Constat | Décision |
+|---|---|---|
+| `/pointages/**`, `/api/planification/**`, `/api/dashboard_par_agence` | aucun contrôleur, déjà 404 | règles retirées (`fa61d34`) |
+| `GET` / `DELETE /api/login` | déjà supprimés en C1 | — |
+| `/api/produits` (hors image) | aucun appel du front, stock historique remplacé par Stock v2 | supprimé (`cef31ed`) ; entité, dépôt, `ProduitService` et collection gardés |
+| `GET /api/produits/image/**`, `GET /api/employe-complet/image/**` | **encore publiques** ; l'image employé est citée comme utilisée par le mobile dans `CLAUDE.md` | gardées, **appels comptés** |
+| `POST /api/terrain/pointages` | protégé (JWT + `terrain.pointage`) ; contrôle GPS anti-triche, peut-être prévu pour une appli mobile dont le code n'est pas dans ces dépôts | gardé, **appels comptés** |
+
+### 4.2 Suivi des routes en sursis
+
+`SuiviRoutesLegacyFilter` (avant Spring Security) incrémente un compteur par route et par jour dans la collection `securite_appels_legacy` : nombre d'appels, répartition par code HTTP, premier et dernier appel, dernier `User-Agent` et `Origin` (ou `Referer`). Il ne stocke **ni l'URL réelle** (l'identifiant de l'image employé est le code de pointage de l'agent), **ni l'IP**, **ni le jeton**. Un échec d'écriture est loggé en WARN et ne bloque pas la requête. Chaque appel produit aussi une ligne WARN « Appel d'une route en sursis (C7) ».
+
+Lecture : `GET /api/securite/routes-legacy` avec le jeton d'un SUPERADMIN. Depuis la console du navigateur (F12 → Console), une fois connecté en SUPERADMIN à l'application en production :
+
+```js
+fetch('https://api.pointic-cleanic.com/api/securite/routes-legacy', {
+  headers: { Authorization: 'Bearer ' + localStorage.getItem('token') }
+}).then(r => r.json()).then(console.table)
+```
+
+Tableau vide = aucun appel depuis le déploiement.
+
+**Règle de décision** : après **au moins 4 semaines** d'usage normal en production (dont une fin de mois, pour la paie et les récapitulatifs) :
+- compteur absent ou à zéro → supprimer la route, la retirer de `SuiviRoutesLegacyFilter.ROUTES` et, pour les images, du `permitAll` de `SecurityConfig` et de la liste blanche de `RoutesPubliquesIT` ;
+- appels présents → le `User-Agent` et l'`Origin` indiquent le client à migrer avant toute suppression.
+
+### 4.3 Analyse initiale du code et commandes nginx (pour mémoire)
 
 **Front** (`pointage-agents`, recherche dans tout `src/`) : **aucun appel** à :
 - `/api/produits` (y compris `/image`) ;
@@ -254,11 +291,7 @@ docker inspect -f '{{.State.StartedAt}} {{.HostConfig.LogConfig}}' <nginx>
 
 La période réellement couverte est **la plus courte** de ces sources : `docker logs` repart de zéro quand le conteneur est recréé. Si elle ne dépasse pas quelques jours, prolongez l'observation avant de conclure.
 
-Une fois l'absence d'appels confirmée, je ferai un commit par point, avec la preuve dans le message :
-- suppression de `ProduitController`, en gardant l'entité, le dépôt et la collection `produits` ;
-- suppression de `POST /api/terrain/pointages` (les GET restent) ;
-- retrait des règles mortes `/pointages/**`, `/api/planification/**` et `/api/dashboard_par_agence` ;
-- retrait des `permitAll` d'images (`/api/produits/image/**` et `/api/employe-complet/image/**`), et de la liste blanche de `RoutesPubliquesIT`.
+Si l'accès au VPS devient possible, ces commandes restent la preuve la plus rapide. Elles peuvent remplacer l'attente du §4.2. Le nginx du front tourne dans son conteneur (`pointage-agents/nginx.conf`) : c'est le cas 3.
 
 **Reporté au lot 1, sans y toucher :**
 - les GET de `terrain_pointages` ;
@@ -330,7 +363,8 @@ Ordre de déploiement, rotation et purge de l'historique : `docs/securite/rotati
 
 ## 8. Ce qui n'a pas été fait, et pourquoi
 
-- **Suppressions C7 et fermeture des images publiques** : en attente de la preuve nginx (§4), conformément à la consigne.
+- **Fermeture des images publiques et suppression de `POST /api/terrain/pointages`** : en sursis, appels comptés (§4.2), décision après 4 semaines d'observation.
+- **`ProduitService`** n'est plus appelé que par son test depuis la suppression de `ProduitController` : à retirer au lot 1 avec le stock historique.
 - **Rotation des secrets, variables du VPS, purge de l'historique git** : actions manuelles qui vous reviennent (`rotation-secrets.md`). L'historique n'a pas été réécrit.
 - **MongoDB sans authentification et port 27018 publié** : procédure décrite (`rotation-secrets.md` §4), non appliquée à `docker-compose.yml` sans votre accord.
 - **`docker-compose.yml` du dossier parent** : hors dépôt, non modifié.
