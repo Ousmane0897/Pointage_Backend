@@ -12,7 +12,7 @@ Ce document ne contient aucune valeur de secret.
 
 | | `main` (7f6e176) | `fix/securite-lot-0` |
 |---|---|---|
-| Tests exécutés | 893 | **1 032** (+139 net ; détail §1.3) |
+| Tests exécutés | 893 | **1 025** (+132 net ; détail §1.3) |
 | Échecs | **0** | **0** |
 
 La référence a été mesurée dans un worktree propre de `main`, seul sur la machine (`./gradlew test`, 7 min 52 s). Une première mesure, lancée en parallèle d'autres builds, avait produit 159 échecs, tous des `MongoTimeoutException` dus à la saturation de la machine : elle a été écartée. **La mention « 18 tests legacy cassés » de la mémoire du projet est périmée** : `main` passe intégralement.
