@@ -67,6 +67,17 @@ rh:
     # = non retard. Ajustable sans recompilation (env RH_POINTAGE_TOLERANCE_RETARD_MINUTES).
     tolerance-retard-minutes: 15
 
+pointage:
+  # Limite de débit du pointage public POST /api/pointages (PointageLimiteurDebit, fenêtre
+  # glissante d'une minute). Le seuil par IP est large : beaucoup d'agents peuvent pointer
+  # derrière une seule IP (NAT d'un site, proxy qui ne transmet pas X-Forwarded-For).
+  limite:
+    par-ip-par-minute: 60
+    par-appareil-par-minute: 10
+    # Codes inconnus d'affilée (par IP et par appareil) avant blocage ; un succès remet à zéro.
+    codes-inconnus-avant-blocage: 5
+    duree-blocage-minutes: 15
+
 
 logging:
   level:

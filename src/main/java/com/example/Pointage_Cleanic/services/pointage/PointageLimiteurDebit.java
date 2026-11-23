@@ -1,5 +1,7 @@
 package com.example.Pointage_Cleanic.services.pointage;
 
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.time.Clock;
@@ -15,11 +17,13 @@ import java.util.concurrent.ConcurrentHashMap;
  * 10 000 combinaisons : sans limite, il suffit de les essayer toutes).
  *
  * <p>Deux règles, appliquées séparément <b>par adresse IP</b> et <b>par appareil</b>
- * ({@code deviceId}) :
+ * ({@code deviceId}), seuils réglables par propriétés {@code pointage.limite.*} :
  * <ol>
- *   <li>au plus {@value #MAX_APPELS} appels par fenêtre glissante d'une minute ;</li>
- *   <li>après {@value #MAX_CODES_INCONNUS} codes inconnus d'affilée, blocage de 15 minutes. Un
- *       pointage réussi remet le compteur à zéro.</li>
+ *   <li>au plus {@code par-ip-par-minute} (60) appels par IP et {@code par-appareil-par-minute}
+ *       (10) par appareil, par fenêtre glissante d'une minute. Le seuil par IP est large : un
+ *       site peut faire pointer beaucoup d'agents derrière une seule IP (NAT, proxy) ;</li>
+ *   <li>après {@code codes-inconnus-avant-blocage} (5) codes inconnus d'affilée, blocage de
+ *       {@code duree-blocage-minutes} (15). Un pointage réussi remet le compteur à zéro.</li>
  * </ol>
  *
  * <p>En mémoire, par instance : suffisant pour le déploiement actuel (une instance). L'IP est
@@ -31,19 +35,31 @@ import java.util.concurrent.ConcurrentHashMap;
 @Component
 public class PointageLimiteurDebit {
 
-    static final int MAX_APPELS = 10;
     static final Duration FENETRE = Duration.ofMinutes(1);
-    static final int MAX_CODES_INCONNUS = 5;
-    static final Duration BLOCAGE = Duration.ofMinutes(15);
     private static final int PURGE_AU_DELA_DE = 10_000;
+    private static final String PREFIXE_IP = "ip:";
 
     private final Clock clock;
+    private final int maxAppelsParIp;
+    private final int maxAppelsParAppareil;
+    private final int maxCodesInconnus;
+    private final Duration blocage;
     private final Map<String, Deque<Long>> appels = new ConcurrentHashMap<>();
     private final Map<String, Integer> echecs = new ConcurrentHashMap<>();
     private final Map<String, Long> bloqueJusqua = new ConcurrentHashMap<>();
 
-    public PointageLimiteurDebit(Clock clock) {
+    @Autowired
+    public PointageLimiteurDebit(
+            Clock clock,
+            @Value("${pointage.limite.par-ip-par-minute:60}") int maxAppelsParIp,
+            @Value("${pointage.limite.par-appareil-par-minute:10}") int maxAppelsParAppareil,
+            @Value("${pointage.limite.codes-inconnus-avant-blocage:5}") int maxCodesInconnus,
+            @Value("${pointage.limite.duree-blocage-minutes:15}") long dureeBlocageMinutes) {
         this.clock = clock;
+        this.maxAppelsParIp = maxAppelsParIp;
+        this.maxAppelsParAppareil = maxAppelsParAppareil;
+        this.maxCodesInconnus = maxCodesInconnus;
+        this.blocage = Duration.ofMinutes(dureeBlocageMinutes);
     }
 
     /**
@@ -68,7 +84,8 @@ public class PointageLimiteurDebit {
                     fenetre.pollFirst();
                 }
                 fenetre.addLast(maintenant);
-                depasse |= fenetre.size() > MAX_APPELS;
+                int max = cle.startsWith(PREFIXE_IP) ? maxAppelsParIp : maxAppelsParAppareil;
+                depasse |= fenetre.size() > max;
             }
         }
         return depasse
@@ -76,13 +93,13 @@ public class PointageLimiteurDebit {
                 : Optional.empty();
     }
 
-    /** Code inconnu : au {@value #MAX_CODES_INCONNUS}ᵉ d'affilée, blocage de 15 minutes. */
+    /** Code inconnu : au n-ième d'affilée ({@code codes-inconnus-avant-blocage}), blocage. */
     public void signalerCodeInconnu(String ip, String deviceId) {
         long maintenant = clock.millis();
         for (String cle : cles(ip, deviceId)) {
             int n = echecs.merge(cle, 1, Integer::sum);
-            if (n >= MAX_CODES_INCONNUS) {
-                bloqueJusqua.put(cle, maintenant + BLOCAGE.toMillis());
+            if (n >= maxCodesInconnus) {
+                bloqueJusqua.put(cle, maintenant + blocage.toMillis());
                 echecs.remove(cle);
             }
         }
@@ -96,7 +113,7 @@ public class PointageLimiteurDebit {
     }
 
     private static String[] cles(String ip, String deviceId) {
-        String a = "ip:" + (ip == null ? "?" : ip);
+        String a = PREFIXE_IP + (ip == null ? "?" : ip);
         return (deviceId == null || deviceId.isBlank()) ? new String[]{a} : new String[]{a, "app:" + deviceId};
     }
 

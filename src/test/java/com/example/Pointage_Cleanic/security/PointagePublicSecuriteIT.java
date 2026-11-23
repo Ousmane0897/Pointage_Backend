@@ -60,23 +60,50 @@ class PointagePublicSecuriteIT extends SecuriteITBase {
                 .andExpect(content().string(not(containsString("NomDeFamilleFactice"))));
     }
 
-    /** Code connu, appareils distincts, même IP : les 10 premiers passent, le 11ᵉ est refusé. */
+    /**
+     * Un site fait pointer 30 agents (30 appareils) depuis la même IP en une minute : aucun 429.
+     * Un agent par appel, pour que chaque pointage soit un vrai succès (arrivée).
+     */
     @Test
-    void onzieme_appel_dans_la_minute_429() throws Exception {
+    void trente_pointages_valides_meme_ip_sans_429() throws Exception {
+        String ipSite = "10.50.0.3";
+        for (int i = 0; i < 30; i++) {
+            String code = String.format("75%02d", i);
+            mongoTemplate.remove(new org.springframework.data.mongodb.core.query.Query(
+                    org.springframework.data.mongodb.core.query.Criteria.where("agentId").is(code)), DossierEmploye.class);
+            DossierEmploye agent = new DossierEmploye();
+            agent.setAgentId(code);
+            agent.setPrenom("Agent" + i);
+            mongoTemplate.save(agent);
+
+            mockMvc.perform(pointer(code, "appareil-c5-site-" + i, ipSite))
+                    .andExpect(status().isOk());
+        }
+    }
+
+    /**
+     * Même appareil, IP différente à chaque appel, agent connu : le 1ᵉʳ appel pointe, les 2ᵉ à
+     * 10ᵉ sont refusés par {@code canPoint} (appareil récemment utilisé, sans compter comme code
+     * inconnu), le 11ᵉ est refusé par le limiteur — d'où la vérification de son message propre.
+     */
+    @Test
+    void onzieme_appel_du_meme_appareil_refuse_par_le_limiteur() throws Exception {
         mongoTemplate.remove(new org.springframework.data.mongodb.core.query.Query(
-                org.springframework.data.mongodb.core.query.Criteria.where("agentId").is("7531")), DossierEmploye.class);
+                org.springframework.data.mongodb.core.query.Criteria.where("agentId").is("7600")), DossierEmploye.class);
         DossierEmploye agent = new DossierEmploye();
-        agent.setAgentId("7531");
-        agent.setPrenom("Ibrahima");
+        agent.setAgentId("7600");
+        agent.setPrenom("Fatou");
         mongoTemplate.save(agent);
 
-        String ipDebit = "10.50.0.3";
         for (int i = 0; i < 10; i++) {
-            int statut = mockMvc.perform(pointer("7531", "appareil-c5-debit-" + i, ipDebit))
-                    .andReturn().getResponse().getStatus();
-            org.assertj.core.api.Assertions.assertThat(statut).as("appel " + (i + 1)).isNotEqualTo(429);
+            String corps = mockMvc.perform(pointer("7600", "appareil-c5-unique", "10.51.0." + i))
+                    .andReturn().getResponse().getContentAsString(java.nio.charset.StandardCharsets.UTF_8);
+            org.assertj.core.api.Assertions.assertThat(corps).as("appel " + (i + 1))
+                    .doesNotContain("Trop de tentatives");
         }
-        mockMvc.perform(pointer("7531", "appareil-c5-debit-final", ipDebit)).andExpect(status().isTooManyRequests());
+        mockMvc.perform(pointer("7600", "appareil-c5-unique", "10.51.1.1"))
+                .andExpect(status().isTooManyRequests())
+                .andExpect(content().string(containsString("Trop de tentatives")));
     }
 
     @Test
