@@ -46,12 +46,12 @@ Les specs ajoutés ou modifiés par ce lot passent tous : intercepteur, garde de
 | `DroitsPaieSecuriteIT` | 6 | C4 paie |
 | `DroitsPersonnelSecuriteIT` | 6 | C4 dossiers, contrats, vue réduite |
 | `DroitsModulesSecuriteIT` | 70 | C4, une route par contrôleur (RH, Stock, Terrain, Chimie, pointages) + libre-service congés |
-| `PointagePublicSecuriteIT`, `PointageLimiteurDebitTest` | 4 + 5 | C5 |
+| `PointagePublicSecuriteIT`, `PointageLimiteurDebitTest` | 5 + 7 | C5, dont 30 pointages d'appareils différents depuis la même IP sans 429 |
 | `ReinitialisationMotDePasseSecuriteIT` | 3 | C6 réinitialisation (bout en bout) |
 | `ResetPasswordServiceTest`, `ResetPasswordTokenRepositoryTest`, `PasswordResetControllerTest` | 12 + 4 + 3 | réécrits pour le nouveau contrat |
 | `JwtChannelInterceptorTest`, `OriginesSecuriteIT` | 5 + 4 | C6 WebSocket et origines |
-| `ProfilProdSecuriteIT`, `DocumentationDevSecuriteIT` | 1 + 1 | C6 Swagger (profil prod réel / témoin) |
-| `RoutesPubliquesIT` | 2 | C7 garde-fou |
+| `ProfilProdSecuriteIT`, `DocumentationDevSecuriteIT` | 2 + 1 | C6 Swagger et journaux sans DEBUG (profil prod réel / témoin) |
+| `RoutesPubliquesIT` | 3 | C7 garde-fou, routes supprimées absentes |
 
 Front : `auth.interceptor.spec` (+1), `module.guard.spec` (6), `final-page1/2.spec` (réécrits, 3 + 3), `websocket.service.jeton.spec` (2), specs de réinitialisation adaptés.
 
@@ -122,11 +122,12 @@ Règles :
 
 - `GET /api/pointages/{codeSecret}`, qui renvoyait nom, GPS, adresse et appareil pour un code à 4 chiffres, est **supprimé** avec sa règle `permitAll`. Sans jeton, la route renvoie 401.
 - `POST /api/pointages` renvoie `PointageConfirmationDto` : prénom, statut, date, heures. Ni nom, ni GPS, ni adresse, ni appareil, ni code.
-- `PointageLimiteurDebit` :
-  - au plus **10 appels par minute par IP et par appareil** ;
-  - **blocage de 15 minutes après 5 codes inconnus d'affilée**, remis à zéro au premier succès ;
+- `PointageLimiteurDebit`, seuils réglables dans `application.yml` (`pointage.limite.*`) :
+  - au plus **60 appels par minute par IP** (`par-ip-par-minute`) et **10 par appareil** (`par-appareil-par-minute`), fenêtre glissante. Le seuil par IP est large : un site peut faire pointer beaucoup d'agents derrière une seule IP (testé : 30 pointages valides d'appareils différents depuis la même IP en une minute, aucun 429) ;
+  - **blocage de 15 minutes** (`duree-blocage-minutes`) **après 5 codes inconnus d'affilée** (`codes-inconnus-avant-blocage`), remis à zéro au premier succès ;
   - au-delà : 429. La limite `canPoint` existante est conservée.
 - L'IP est celle de la connexion. En prod, `server.forward-headers-strategy: native` fait que `X-Forwarded-For` n'est cru que s'il vient d'un mandataire interne : un client ne peut pas choisir son IP. Le `deviceId` est fourni par le client, donc la règle par IP est la protection principale.
+- `pointage-agents/nginx.conf` transmet `X-Real-IP`, `X-Forwarded-For` et désormais `X-Forwarded-Proto` sur `/api/` et `/ws`. ⚠ Ce fichier ne sert qu'au montage docker mono-hôte : en production, l'API est servie par `api.pointic-cleanic.com`, derrière un proxy du VPS que nous ne voyons pas. **Si ce proxy ne pose pas `X-Forwarded-For`, tous les clients partagent la même IP**, d'où le seuil à 60 par minute. À vérifier dès que l'accès au VPS est possible.
 - Front : la page PIN transmet la confirmation par l'état de navigation, et les pages finales n'appellent plus le GET. Les routes deviennent `pagefinal1` / `pagefinal2`, sans le code PIN dans l'URL. `PageCodeService` est supprimé.
 - L'historique authentifié ne change pas.
 
@@ -146,19 +147,19 @@ Règles :
   - origines : liste unique `OriginesAutorisees` pour le CORS et `/ws` (avant : `*` sur `/ws`), passée en `setAllowedOriginPatterns`. Les motifs locaux fonctionnent désormais ; le joker `*.ngrok-free.dev`, jamais effectif auparavant, n'est **pas** réactivé ; `http://localhost:4200` est ajouté pour le dev ;
   - front : le jeton est relu à chaque (re)connexion, et aucune tentative n'est faite sans jeton.
 - **Swagger** — `672bc7e` : désactivé en prod (`/v3/api-docs` et `/swagger-ui.html` → 404, testé avec le profil prod réel), toujours servi en dev.
-- **Journaux** — `672bc7e` : `org.springframework.security` et `org.springframework.web` repassent de DEBUG à INFO.
+- **Journaux** — `672bc7e` : `org.springframework.security` et `org.springframework.web` repassent de DEBUG à INFO. En prod, `MongoTemplate` (qui trace les requêtes Mongo, données personnelles comprises) et `com.example` passent aussi en INFO via `application-prod.yml` (`36fc9f0`) ; le DEBUG reste en dev. Vérifié par `ProfilProdSecuriteIT` sur le vrai profil prod (le test échoue sans le correctif).
 - **Photos des employés** :
-  - le front n'utilise **jamais** `/api/employe-complet/image/**` ni `/api/produits/image/**`, donc les fermer ne coûte rien. Leur `permitAll` attend néanmoins la preuve nginx (C7) ;
+  - le front n'utilise **jamais** `/api/employe-complet/image/**` ni `/api/produits/image/**` : ces deux images publiques sont **supprimées** (C7) ;
   - règle morte `/api/dossier-employe/*/photo` retirée ;
   - l'organigramme affichait `photoUrl` dans un `<img src>`, sans jeton, vers une URL qui ne correspond à aucun contrôleur : les photos ne s'affichaient pas. Elles sont maintenant chargées en blob avec le JWT, comme dans la liste des employés (`9f7e5a9`).
 
-### C7 — Routes inutilisées (moyenne) — `fd12f76`, `fa61d34`, `cef31ed`, `67d7a45`
+### C7 — Routes inutilisées (moyenne) — `fd12f76`, `fa61d34`, `cef31ed`, `2951707`
 
 - **Garde-fou** (`fd12f76`) : `RoutesPubliquesIT` parcourt les ≈ 380 routes MVC exposées, les appelle sans jeton et exige 401 sauf pour la liste blanche écrite dans le test.
-- **Pas d'accès aux journaux nginx** : la preuve de non-utilisation prévue au §4 n'a pas pu être fournie. Les routes ont donc été triées selon le risque (§4).
+- **Pas d'accès aux journaux nginx**, mais **aucune application mobile** : le seul client de l'API est `pointage-agents`, qui n'appelle aucune des routes retirées (§4). Ce constat tient lieu de preuve de non-utilisation.
 - **Règles mortes retirées** (`fa61d34`) : `/pointages/**`, `/api/planification/**`, `/api/dashboard_par_agence`. Aucun contrôleur ne les sert : un appel recevait déjà une 404.
-- **`ProduitController` supprimé** (`cef31ed`), sauf l'image publique, déplacée dans `ProduitImageController`.
-- **Comptage des routes en sursis** (`67d7a45`) : `SuiviRoutesLegacyFilter` compte les appels aux deux images publiques et au `POST /api/terrain/pointages`. Lecture sur `GET /api/securite/routes-legacy` (SUPERADMIN).
+- **`ProduitController` supprimé** (`cef31ed`).
+- **Routes en sursis supprimées** (`2951707`) : `GET /api/produits/image/**` (`ProduitImageController`) et `GET /api/employe-complet/image/**`, avec leur `permitAll` et leurs entrées dans la liste blanche, ainsi que `POST /api/terrain/pointages` (les GET de `terrain_pointages` restent jusqu'au correctif des alertes). Le comptage provisoire (`67d7a45` : `SuiviRoutesLegacyFilter`, `GET /api/securite/routes-legacy`, collection `securite_appels_legacy`, jamais déployée) est retiré avec elles. `RoutesPubliquesIT` vérifie que les trois routes n'existent plus.
 
 ---
 
@@ -168,11 +169,11 @@ Règles :
 
 | Contrôleur | Droit exigé |
 |---|---|
-| **Public** | `POST /api/login`, `POST /auth/forgot-password`, `POST /auth/reset-password`, `POST /api/pointages` (limité), `/ws/**` (JWT au CONNECT), `/error`, Swagger hors prod ; en attente de retrait : `GET /api/produits/image/**`, `GET /api/employe-complet/image/**` |
+| **Public** | `POST /api/login`, `POST /auth/forgot-password`, `POST /auth/reset-password`, `POST /api/pointages` (limité), `/ws/**` (JWT au CONNECT), `/error`, Swagger hors prod |
 | LoginController `POST /change-password` | authentifié |
 | UtilisateurController `/api/superadmin` | `@droits.estSuperAdmin()` |
 | PointagesController `GET /`, `/today`, `/historique/**` | `terrain.pointage` \| `rh.pointageCentralise` \| `dashboard` |
-| EmployeCompletController (legacy) | `rh.dossierEmploye` (image : publique, en attente) |
+| EmployeCompletController (legacy) | `rh.dossierEmploye` |
 | GrilleSalarialeController | `rh.grilleSalariale` ; GET aussi `rh.calculBulletin` |
 | BulletinPaieController | `rh.calculBulletin` ; GET liste, fiche, historique, PDF aussi `rh.historiquePaies` |
 | DeclarationSocialeController | `rh.declarations` |
@@ -208,49 +209,33 @@ Règles :
 | ValorisationController | `/parametrage` GET `stock.*`, PUT `coutUnitaire` (+ `HabilitationStock`) ; `/couts-produits` `coutUnitaire`, `/mouvements` `coutMouvements`, `/valeur-stock` `valeurStock`, `/cout-site` `coutSite`, `/chantiers` `coutChantier`, `/marges` `marges`, `/tableau-bord` `tableauBordFinancier` |
 | SitesClientsController | GET **R** ; écritures `terrain.sitesClients` |
 | PlanningController | GET `terrain.*` \| `dashboard` ; écritures `terrain.planning` |
-| PointagesTerrainController | GET `terrain.*` (`/aujourd-hui` aussi `dashboard`) ; POST `terrain.pointage` |
+| PointagesTerrainController | GET `terrain.*` (`/aujourd-hui` aussi `dashboard`) ; plus de POST |
 | AlertesController (escalade incluse) | GET `terrain.*` \| `dashboard` ; `/parametres` et écritures `terrain.alertes` |
 | InterventionsController / ControlesTerrainController / MaterielController / PhytosanitaireController | GET `terrain.*` ; écritures `terrain.interventions` / `controleQualite` / `materiel` / `phytosanitaire` |
 | TableauBordTerrainController | `terrain.tableauBord` |
 | Production chimie (MatieresPremieres, MouvementsStockChimie, Formulations, Ordres, Lots, ControlesQualite, GrillesControle, FormatsConditionnement) | GET `productionChimie.*` ; écritures `matieresPremieres` / `matieresPremieres` / `formulations` / `ordresFabrication` / `lots` / `controleQualite` / `controleQualite` / `conditionnement` |
 | TableauBordProductionController | `productionChimie.tableauBord` |
 | ParametresProductionChimieController | GET `productionChimie.*` ; PUT `productionChimie.formulations` |
-| ProduitImageController (`GET /api/produits/image/{codeProduit}`, reste de ProduitController) | public — **en sursis**, appels comptés |
-| SuiviRoutesLegacyController `GET /api/securite/routes-legacy` | `@droits.estSuperAdmin()` |
 
 ---
 
-## 4. Routes à retirer (C7)
+## 4. Routes retirées (C7)
 
-### 4.1 Décision prise sans accès aux journaux nginx (2026-11-23)
+### 4.1 Décision
 
-Le VPS n'est pas accessible : les commandes du §4.3 n'ont pas été lancées. Tri selon le risque :
+Le VPS n'est pas accessible : les commandes du §4.3 n'ont pas été lancées. Mais **il n'existe aucune application mobile** (la mention de `CLAUDE.md` était obsolète) : le seul client de l'API est `pointage-agents`, et l'analyse du §4.3 montre qu'il n'appelle aucune de ces routes. Elles sont donc toutes supprimées, sans période d'observation.
 
 | Route | Constat | Décision |
 |---|---|---|
 | `/pointages/**`, `/api/planification/**`, `/api/dashboard_par_agence` | aucun contrôleur, déjà 404 | règles retirées (`fa61d34`) |
-| `GET` / `DELETE /api/login` | déjà supprimés en C1 | — |
+| `GET` / `DELETE /api/login` | aucun appel du front | supprimés en C1 |
 | `/api/produits` (hors image) | aucun appel du front, stock historique remplacé par Stock v2 | supprimé (`cef31ed`) ; entité, dépôt, `ProduitService` et collection gardés |
-| `GET /api/produits/image/**`, `GET /api/employe-complet/image/**` | **encore publiques** ; l'image employé est citée comme utilisée par le mobile dans `CLAUDE.md` | gardées, **appels comptés** |
-| `POST /api/terrain/pointages` | protégé (JWT + `terrain.pointage`) ; contrôle GPS anti-triche, peut-être prévu pour une appli mobile dont le code n'est pas dans ces dépôts | gardé, **appels comptés** |
+| `GET /api/produits/image/**`, `GET /api/employe-complet/image/**` | publiques, aucun appel du front | supprimées avec leur `permitAll` (`2951707`) |
+| `POST /api/terrain/pointages` | aucun appel du front (`terrain-pointage.service.ts` `pointer` n'est appelé nulle part) | supprimé (`2951707`) ; les GET restent jusqu'au correctif des alertes |
 
-### 4.2 Suivi des routes en sursis
+### 4.2 Suivi des routes en sursis : retiré
 
-`SuiviRoutesLegacyFilter` (avant Spring Security) incrémente un compteur par route et par jour dans la collection `securite_appels_legacy` : nombre d'appels, répartition par code HTTP, premier et dernier appel, dernier `User-Agent` et `Origin` (ou `Referer`). Il ne stocke **ni l'URL réelle** (l'identifiant de l'image employé est le code de pointage de l'agent), **ni l'IP**, **ni le jeton**. Un échec d'écriture est loggé en WARN et ne bloque pas la requête. Chaque appel produit aussi une ligne WARN « Appel d'une route en sursis (C7) ».
-
-Lecture : `GET /api/securite/routes-legacy` avec le jeton d'un SUPERADMIN. Depuis la console du navigateur (F12 → Console), une fois connecté en SUPERADMIN à l'application en production :
-
-```js
-fetch('https://api.pointic-cleanic.com/api/securite/routes-legacy', {
-  headers: { Authorization: 'Bearer ' + localStorage.getItem('token') }
-}).then(r => r.json()).then(console.table)
-```
-
-Tableau vide = aucun appel depuis le déploiement.
-
-**Règle de décision** : après **au moins 4 semaines** d'usage normal en production (dont une fin de mois, pour la paie et les récapitulatifs) :
-- compteur absent ou à zéro → supprimer la route, la retirer de `SuiviRoutesLegacyFilter.ROUTES` et, pour les images, du `permitAll` de `SecurityConfig` et de la liste blanche de `RoutesPubliquesIT` ;
-- appels présents → le `User-Agent` et l'`Origin` indiquent le client à migrer avant toute suppression.
+Un comptage provisoire (`67d7a45`) devait observer ces routes pendant 4 semaines avant leur suppression. Sans client mobile, il n'a plus d'objet. Sont supprimés (`2951707`) : `SuiviRoutesLegacyFilter`, `SuiviRoutesLegacyService`, `SuiviRoutesLegacyController` (`GET /api/securite/routes-legacy`), `AppelRouteLegacy` et leurs tests. La collection `securite_appels_legacy` n'a jamais été déployée ; si elle existe dans une base de développement, elle peut être supprimée.
 
 ### 4.3 Analyse initiale du code et commandes nginx (pour mémoire)
 
@@ -291,11 +276,11 @@ docker inspect -f '{{.State.StartedAt}} {{.HostConfig.LogConfig}}' <nginx>
 
 La période réellement couverte est **la plus courte** de ces sources : `docker logs` repart de zéro quand le conteneur est recréé. Si elle ne dépasse pas quelques jours, prolongez l'observation avant de conclure.
 
-Si l'accès au VPS devient possible, ces commandes restent la preuve la plus rapide. Elles peuvent remplacer l'attente du §4.2. Le nginx du front tourne dans son conteneur (`pointage-agents/nginx.conf`) : c'est le cas 3.
+Si l'accès au VPS devient possible, ces commandes permettent de confirmer après coup qu'aucun client inconnu n'appelait ces routes. Le nginx du front tourne dans son conteneur (`pointage-agents/nginx.conf`) : c'est le cas 3.
 
 **Reporté au lot 1, sans y toucher :**
 - les GET de `terrain_pointages` ;
-- `EmployeCompletController` (import Excel, image) ;
+- `EmployeCompletController` (import Excel) ;
 - le dépôt `pointage_request` ;
 - `front: services/planification.service.ts` ;
 - les abonnements à `/topic/annulationRequests` (super-admin, notification).
@@ -303,6 +288,22 @@ Si l'accès au VPS devient possible, ces commandes restent la preuve la plus rap
 ---
 
 ## 5. Effets sur le front et écrans à retester à la main
+
+### 5.1 Changements de comportement pour le front
+
+- **Routes supprimées** (aucune n'était appelée par `pointage-agents`) :
+  - `GET /api/login`, `DELETE /api/login/{id}` ;
+  - `GET /api/pointages/{codeSecret}` ;
+  - toutes les routes `/api/produits/**`, image comprise ;
+  - `GET /api/employe-complet/image/{agentId}` ;
+  - `POST /api/terrain/pointages` ;
+  - Swagger en prod (`/v3/api-docs`, `/swagger-ui.html` → 404).
+- **401** : toute route hors liste blanche (§3) sans jeton ou avec un jeton invalide, dont `POST /api/login/change-password`.
+- **403** : `ACCES_REFUSE` si le compte n'a pas le droit du module ; `COMPTE_DESACTIVE` si le compte a été désactivé après l'émission du jeton.
+- **429** : pointage du kiosque au-delà de 60 appels par minute par IP ou de 10 par appareil, ou pendant les 15 minutes qui suivent 5 codes inconnus d'affilée.
+- **Nouvelle clé JWT** : au déploiement, tous les jetons en circulation deviennent invalides (401). Chaque utilisateur doit se reconnecter.
+
+### 5.2 Écrans à retester à la main
 
 1. **Connexion**, puis **changement de mot de passe à la première connexion** (`mustChangePassword`). Le jeton est désormais envoyé.
 2. **Gestion des privilèges** :
@@ -365,7 +366,6 @@ Ordre de déploiement, rotation et purge de l'historique : `docs/securite/rotati
 
 ## 8. Ce qui n'a pas été fait, et pourquoi
 
-- **Fermeture des images publiques et suppression de `POST /api/terrain/pointages`** : en sursis, appels comptés (§4.2), décision après 4 semaines d'observation.
 - **`ProduitService`** n'est plus appelé que par son test depuis la suppression de `ProduitController` : à retirer au lot 1 avec le stock historique.
 - **Rotation des secrets, variables du VPS, purge de l'historique git** : actions manuelles qui vous reviennent (`rotation-secrets.md`). L'historique n'a pas été réécrit.
 - **MongoDB sans authentification et port 27018 publié** : procédure décrite (`rotation-secrets.md` §4), non appliquée à `docker-compose.yml` sans votre accord.
@@ -373,7 +373,6 @@ Ordre de déploiement, rotation et purge de l'historique : `docs/securite/rotati
 - **Notifications Terrain ciblées** : `TerrainNotificationService` envoie à un **identifiant**, alors que le principal STOMP est l'**e-mail**. Ces messages ciblés n'arrivent toujours pas (les diffusions `/topic` fonctionnent). C'est un correctif fonctionnel, hors périmètre.
 - **Jeton après changement de mot de passe** : `change-password` régénère le JWT sans `CongeModuleEnricher` (comportement préexistant). Les drapeaux congés calculés à la connexion manquent jusqu'à la reconnexion suivante, sans effet sur la sécurité serveur.
 - **WebSocket** : si le service est instancié avant la connexion de l'utilisateur, il ne se reconnecte pas tout seul après la connexion. Les écrans qui l'injectent sont tous sous `/admin`, donc après la connexion.
-- **Journal `MongoTemplate` en DEBUG** (profil par défaut) : il trace les requêtes Mongo, qui peuvent contenir des données personnelles. À repasser en INFO en prod (lot 1).
 - **Erreurs de lecture avant contrôle de droit** : un paramètre obligatoire manquant ou un `@Valid` échoué donne 400 avant le contrôle `@PreAuthorize` (fonctionnement de Spring). Aucune donnée n'est renvoyée.
 - **Specs front non maintenus** (§1) : préexistants, non corrigés (hors sécurité).
 - **Droits V3** (5 niveaux, masquage de champs) : lot 1, comme prévu.
