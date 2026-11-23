@@ -8,11 +8,12 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * C6 — profil {@code prod} : Swagger et {@code /v3/api-docs} fermés. Les secrets requis par
+ * C6 — profil {@code prod} : Swagger et {@code /v3/api-docs} fermés, pas de journal DEBUG. Les secrets requis par
  * {@code SecretsRequisVerificateur} sont fournis avec des valeurs factices.
  */
 @ActiveProfiles("prod")
@@ -34,5 +35,16 @@ class ProfilProdSecuriteIT extends MongoTestContainer {
     void documentation_api_fermee_en_prod() throws Exception {
         mockMvc.perform(get("/v3/api-docs")).andExpect(status().isNotFound());
         mockMvc.perform(get("/swagger-ui.html")).andExpect(status().isNotFound());
+    }
+
+    /** Le DEBUG de application.yml (MongoTemplate, com.example) ne s'applique pas en prod. */
+    @Test
+    void pas_de_journal_debug_en_prod() {
+        assertThat(org.slf4j.LoggerFactory.getLogger(
+                org.springframework.data.mongodb.core.MongoTemplate.class).isDebugEnabled())
+                .as("MongoTemplate").isFalse();
+        assertThat(org.slf4j.LoggerFactory.getLogger(
+                com.example.Pointage_Cleanic.services.PointageServices.class).isDebugEnabled())
+                .as("com.example").isFalse();
     }
 }

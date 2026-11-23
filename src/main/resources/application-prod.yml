@@ -35,6 +35,14 @@ google:
     api:
       key: ${GOOGLE_MAPS_API_KEY}
 
+logging:
+  level:
+    # En prod, pas de DEBUG applicatif : MongoTemplate trace les requêtes Mongo (données
+    # personnelles comprises) et com.example peut journaliser des contenus métier. Le DEBUG
+    # de application.yml reste actif en dev.
+    org.springframework.data.mongodb.core.MongoTemplate: INFO
+    com.example: INFO
+
 server:
   # Derrière nginx/docker : l'IP cliente (limite de débit du pointage public) vient de
   # X-Forwarded-For uniquement si la requête arrive d'un mandataire interne (RemoteIpValve).
