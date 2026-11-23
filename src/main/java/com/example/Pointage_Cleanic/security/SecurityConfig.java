@@ -76,7 +76,6 @@ public class SecurityConfig {
 
                         // 🔹 Pointages — mobile public (pointage sans token)
                         .requestMatchers(HttpMethod.POST, "/api/pointages").permitAll()
-                        .requestMatchers("/pointages/**").permitAll() // chemin legacy mobile inchangé
 
                         // 🔹 Connexion : seul le POST est public. change-password exige le JWT
                         // (fallback anyRequest), GET/DELETE /api/login ont été supprimés.
@@ -99,8 +98,6 @@ public class SecurityConfig {
                         .requestMatchers("/ws/**").permitAll()
 
                         // 🔹 Routes sécurisées (JWT obligatoire)
-                        .requestMatchers("/api/dashboard_par_agence").authenticated()
-                        .requestMatchers("/api/planification/**").authenticated()
                         .requestMatchers("/ws/info").authenticated()
                         .requestMatchers("/api/terrain/**").authenticated()
                         .requestMatchers("/api/stock/**").authenticated()
