@@ -340,6 +340,8 @@ Ordre de déploiement, rotation et purge de l'historique : `docs/securite/rotati
 
 ## 7. Fusion des branches QR d'agence / réclamations
 
+> **Hors périmètre du lot 0 (décision du 2026-11-23).** Le lot 0 part de `main` (back) et `master` (front) : il **ne contient pas** les QR d'agence (`feature/pointage-qr-agence`) ni les réclamations (`feature/reclamation-qr-site`, commitées en l'état en `6718d78`, non vérifiées). Leur mise en conformité avec ce lot se fera **une fois ces fonctionnalités terminées**, en fusionnant `fix/securite-lot-0` dans leur branche, puis en appliquant la liste ci-dessous.
+
 `feature/reclamation-qr-site` (back) et ses équivalents front ne sont pas sur `main`/`master`. Leur fusion **après** ce lot (consigne : pas de fusion de la branche QR d'agence dans `main` sans votre feu vert) demandera :
 
 - **Conflit attendu sur `SecurityConfig`** : le bloc `permitAll` a été réécrit (`/api/login/**` remplacé par `POST /api/login`, suppression de `GET /api/pointages/{codeSecret}` et des règles mortes, CORS en `OriginesAutorisees`). Gardez la version de ce lot et rajoutez seulement les règles des branches :
