@@ -1,6 +1,6 @@
 # Correctifs de sécurité — lot 0
 
-Audit du 20/11/2026 (`pointage-agents/docs/audit/etat-des-lieux-v3.md`, §4.1). Branche `fix/securite-lot-0` dans les deux dépôts, créée depuis `main` (back) et `master` (front) dans des worktrees séparés (`../Pointage-Cleanic-Backend-securite`, `../pointage-agents-securite`) : les arbres de travail en cours (QR d'agence, réclamations) n'ont pas été touchés. **Rien n'a été poussé ni fusionné.**
+Audit du 20/11/2026 (`docs/audit/etat-des-lieux-v3.md`, §4.1 ; dans le dépôt front jusqu'au 23/11). Branche `fix/securite-lot-0` dans les deux dépôts, créée depuis `main` (back) et `master` (front) dans des worktrees séparés (`../Pointage-Cleanic-Backend-securite`, `../pointage-agents-securite`) : les arbres de travail en cours (QR d'agence, réclamations) n'ont pas été touchés. **Rien n'a été poussé ni fusionné.**
 
 Ce document ne contient aucune valeur de secret.
 

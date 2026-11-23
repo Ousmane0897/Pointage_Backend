@@ -1,6 +1,49 @@
 # Lot 1 V3 — Conception du socle
 
-Document de conception, rédigé le 23/11/2026 sur la branche `refonte/v3` (backend et frontend). **Aucun code n'a été modifié.** Ce document attend votre validation avant la création de toute sous-branche.
+Document de conception, rédigé le 23/11/2026 sur la branche `refonte/v3` (backend et frontend). **Aucun code n'a été modifié.** Conception validée le 23/11 avec corrections, intégrées dans la révision ci-dessous. **La sous-branche 1a attend une nouvelle validation.**
+
+## Révision du 23/11
+
+Le CDC est désormais versionné (`docs/cdc/PointIC_CDC.pdf`, version texte `docs/cdc/cdc-pointic-v1.4.txt`). Ses réponses remplacent les hypothèses « à confirmer » correspondantes. Les références « CDC §x » renvoient à ses sections.
+
+### R.1 Questions tranchées par le CDC ou par vous
+
+| Question | Réponse retenue | Source | Effet dans ce document |
+|---|---|---|---|
+| Q5 Magasins | Plusieurs magasins : central, atelier de production, stock déporté sur site si besoin ; transfert entre magasins par bon. Un seul stock dans PointIC, le magasin de l'Industrie en est une vue. | CDC §8.1 « Magasins », §8 intro | Nouveau référentiel `magasins` (D8). Un magasin n'est pas un site : un stock déporté est un magasin de type `DEPORTE` rattaché à un `siteId`. Bascule des soldes sur `magasinId` et bons de transfert : lot 3. |
+| Q6 Sites | `SiteClient` = le « local » du CDC : unité servie, porteuse d'un QR de pointage et d'un QR d'appréciation, effectif prévu par local et par jour, rattachée à un client (et à un contrat). Pas de niveau « agence » supplémentaire. | CDC §6.1 « QR code », §6.2 « Contrôles », §3 référentiels, votre correction | D8 : champ `type` retiré du site, `clientId` obligatoire. §3.2 : les libellés « Agence … » des affectations RH se rattachent à un local par le fichier de décisions, sans objet agence. |
+| Q7 Numérotation | Format `DEV-2026-0001` : type, exercice, compteur sur **4 chiffres minimum** (le compteur s'allonge au-delà de 9999). Exercice = année civile. Numérotation continue, par type et par exercice. | CDC §3 « Services communs », §14 « Intégrité comptable », votre correction | D4 réécrit. Codes de type repris du CDC (`DEV`, `FAC`, `BS`, `BE`, `OF`, `LOT`, `DD`, `BC`, `BCA`, `CHQ`). Les nouvelles séries partent de `0001` ; les références existantes restent telles quelles. 1b n'est plus bloquée. |
+| Q8 Conservation (en partie) | Pièces et écritures : 10 ans (Acte uniforme OHADA), dans une archive longue durée distincte de la sauvegarde. GPS et photos de pointage : 12 mois (exemple déclaré à la CDP). Justificatifs médicaux : durée de l'absence plus le délai légal. Sanctions : selon le Code du travail. Puis purge ou anonymisation tracée. Sauvegarde quotidienne, conservée 30 jours, copie hors du serveur principal, restauration testée chaque trimestre. | CDC §14 « Conservation et archivage », « Sauvegarde », « Données personnelles » | D15 réécrit. **Reste à la Direction** : les autres durées (ex-employés, candidats, journaux), la déclaration à la CDP, le lieu d'hébergement, avec son conseil juridique (CDC §16). |
+| Q9 Code agent | Code à 4 chiffres **choisi par l'agent** à la première connexion ; le SMS porte un **code d'activation** ; compte lié à **un seul téléphone** ; ce compte servira au pointage QR (lot 2), le PIN de kiosque disparaîtra. | CDC §13.2, §14 « Connexion des agents », §6.3 « Anti-fraude », votre correction | D11 réécrit, avec l'appareil lié et le pointage QR anticipés sans être implémentés. |
+| Q11 Contrat | Le « contrat » des fiches minimales est le **contrat client** : client, sites couverts, prestations, effectif, montant mensuel HT, début, durée, reconduction, préavis, clause de révision, délai de paiement ; en option pénalités de non-couverture et volume d'heures. | CDC §9.4, §6.1 « Pénalités », « Contrats en heures », §15 lot 1 | D8 : fiche minimale définie. 1f n'est plus bloquée. |
+| Q12 Familles | Six familles : matières premières, emballages, produits finis, consommables, EPI et tenues, matériel. Le matériel est une famille d'articles ; le parc (unités numérotées) porte **toujours** un `articleId`. | CDC §8.1 « Articles », §3, votre correction | D8, §2.2, §3.3 : `terrain_materiel` reçoit un `articleId` obligatoire et entre dans la migration des articles. 1e n'est plus bloquée par Q12. |
+| Q13 Circuits | Le tableau des circuits du CDC §13 fait foi. Case « Direction en dernier » par circuit, cochée partout sauf les congés ; réglage Stock à trois positions (toujours, au-dessus du seuil, jamais) ; seuil Direction de départ : 0 F ; la Direction valide les congés des responsables ; une pièce née d'une pièce validée ne repasse pas en validation ; délégation tracée. | CDC §13 « Circuits de validation », §8.10, §5.3 « Validation », §13.4 « Seuils de référence » | D10 réécrit. 1h n'est plus bloquée. |
+| Q14 Droits sensibles, 2FA | Cinq droits sensibles cochés un par un, jamais par défaut : salaires nominatifs, CA et rentabilité des sites, prix d'achat, exporter, valider en dernier. Matrice de départ par profil. Double authentification pour la Direction et les Finances. Blocage temporaire après **3** codes faux. Données de santé visibles par la RH et la personne seulement. | CDC §13.1 « Profils et droits », matrice des droits sensibles, §14 « Sécurité », « Hébergement et données de santé » | D6, D9 réécrits (seuil de blocage 3 au lieu de 5). 2FA par SMS, livrée en 1k. |
+| Q15 RIB, IPRES, CSS | Le **mode de paiement** (virement, Wave, Orange Money, espèces) et son compte sont portés par l'employé ; leur changement passe par la RH avec une pièce. Les numéros IPRES et CSS **de l'employeur** sont des paramètres d'entreprise. | CDC §5.2 « Identité et poste », §13.2 « Mes informations », §5.7 « Identité » | D8, §3.5 : la grille ne porte plus rien de tout cela. Le numéro d'immatriculation IPRES **du salarié**, que le CDC ne cite pas, reste sur l'employé (`@Sensible`). Comme le code ne dit pas si les valeurs actuelles de la grille sont celles de l'employeur ou des salariés, la migration les fait trancher valeur par valeur. |
+| Q-A Périmètre F009 / F014 | Oui : registre serveur minimal et Mon espace en consultation au lot 1. | votre réponse | §0.3 validé. |
+| Q-B Emplacement | Documentation de refonte dans le backend ; l'audit est déplacé dans `docs/audit/` du backend. | votre réponse | Fait : `docs/audit/etat-des-lieux-v3.md` et `checklist-v3.csv`, retirés du dépôt front. §0.1 mis à jour. |
+| Q-C Migrations | Mongock, avec le spike d'un jour, repli sur l'exécuteur maison. | votre réponse | D2 confirmé tel quel. |
+| Q-D Pile technique | On garde Angular, Spring Boot et MongoDB, en service aujourd'hui, et non React, Node.js et PostgreSQL cités au CDC §14. | votre réponse du 23/11 | Tout le document reste valable. 1a n'est plus bloquée par aucune question. |
+
+### R.2 Autres corrections
+
+1. **Profils DIRECTION et ADMIN distincts** (D9). `DIRECTION` est un profil métier : tout en lecture, validation finale, tous les droits sensibles (CDC §13). `ADMIN` est un profil technique : comptes, profils, circuits, seuils et listes, imports, journal des accès (CDC §13.4, §5.7), sans aucun droit métier, sans droit sensible, jamais valideur. Le compte SUPERADMIN actuel reçoit un profil transitoire `MIGRE-SUPERADMIN` qui reproduit ses droits d'aujourd'hui, jusqu'à la réponse à Q1.
+2. **D7 : dates d'effet passées interdites hors migration.** Seule une ChangeUnit peut écrire une version de date d'effet passée. Le niveau VALIDATION pour une date passée disparaît.
+3. **Propriétaire des fournisseurs : les Finances** (CDC §3, §8.1 « Fournisseurs »), et non Stock / Achats. Le Stock y ajoute délais constatés et évaluation annuelle.
+4. **Périmètre du compte** (sites, magasin), cité par le CDC §13.1 : ajouté à `comptes` (D9).
+5. **Sauvegardes** alignées sur le CDC §14 : rétention 30 jours, restauration testée chaque trimestre, plus une archive longue durée annuelle distincte (D15).
+
+### R.3 Points relevés à la lecture du CDC, à votre attention
+
+- **Pile technique.** Le CDC §14 « Technologies » cite **React, Node.js, PostgreSQL**. Cette conception garde la pile en service (Angular, Spring Boot, MongoDB), puisque le CDC §6 précise que l'Exploitation « est déjà en service » et demande d'indiquer ce qui existe. C'était la question **Q-D** : vous avez confirmé ce choix le 23/11 (R.1).
+- **Date de référence d'un paramètre.** Le CDC §13.4 dit qu'un changement « s'applique aux pièces créées après sa date d'effet ». C'est la règle par défaut (D7). Exception proposée pour la paie : un bulletin lit les valeurs en vigueur **sur sa période**, comme le demande le CDC §5.7 (« un changement s'applique à partir du mois choisi et ne touche pas aux paies déjà clôturées »).
+- **Valeurs de départ divergentes.** Le CDC §13.4 fixe des valeurs de départ qui diffèrent du code actuel : tolérance de retard 10 min (15 aujourd'hui, `rh.pointage.tolerance-retard-minutes`), stock dormant 90 jours (3 mois côté serveur, 6 mois côté front). La migration reprend les valeurs **actuelles**, pour ne rien changer à la mise en service. Les valeurs du CDC sont proposées à la Direction comme une version future datée, à confirmer dans « Seuils et listes » (CDC §16 : « les confirmer suffit »).
+- **Circuit des bons.** Le CDC (§13, §8.10) met la Direction en dernier sur tous les bons. Aujourd'hui, un SUPERADMIN ou un CONTROLEUR_STOCK valide seul. Le circuit de départ du lot 1 suit le CDC : un bon validé par le magasinier attend ensuite la Direction. Le contrat d'API (`/valider`, 409 sur transition invalide) est conservé, mais le passage à `EFFECTIF` n'a lieu qu'à la dernière étape. Le front doit afficher l'étape en cours.
+- **Hors lot 1, noté pour plus tard** : méthode de valorisation unique CUMP (CDC §8.4, alors que 7.6 propose aussi DERNIER_PRIX et FIXE) ; « un seul stock » incluant le stock chimie (CDC §8 intro) ; hors ligne et PWA du pointage (CDC §14 « Mobile ») ; WhatsApp en option (CDC §14, §16).
+
+### R.4 Questions restantes
+
+Pour la Direction : **Q1, Q2, Q3, Q4, Q8 (reste), Q10**. Pour vous : **Q16** (accès au VPS, stockage hors serveur), qui relève de l'exploitation plutôt que de la Direction. Voir §5.
 
 ## 0. Cadre
 
@@ -8,15 +51,15 @@ Document de conception, rédigé le 23/11/2026 sur la branche `refonte/v3` (back
 
 | Source | Chemin |
 |---|---|
-| État des lieux V3 (audit du 20/11/2026) | `pointage-agents/docs/audit/etat-des-lieux-v3.md` (cité « audit ») |
-| Checklist V3 | `pointage-agents/docs/audit/checklist-v3.csv` |
-| Lot 0 sécurité | `Pointage-Cleanic-Backend/docs/securite/correctifs-lot-0.md` (cité « lot 0 ») |
-| Documentation des modules | `Pointage-Cleanic-Backend/CLAUDE.md`, `.claude/docs/module-*.md` |
-| CDC V3 | WTK-CDC-2026-005 V1.4 : **absent des dépôts**. Seules la définition du lot 1 et les six règles transmises avec la demande ont été utilisées. Le libellé exact de chaque ligne F n'est pas disponible : il est déduit de la colonne « Écart » de la checklist. |
+| État des lieux V3 (audit du 20/11/2026) | `docs/audit/etat-des-lieux-v3.md` du backend (cité « audit » ; déplacé depuis le dépôt front le 23/11) |
+| Checklist V3 | `docs/audit/checklist-v3.csv` du backend |
+| Lot 0 sécurité | `docs/securite/correctifs-lot-0.md` du backend (cité « lot 0 ») |
+| Documentation des modules | `CLAUDE.md`, `.claude/docs/module-*.md` du backend |
+| CDC V3 | WTK-CDC-2026-005 V1.4 : `docs/cdc/PointIC_CDC.pdf` (référence), `docs/cdc/cdc-pointic-v1.4.txt` (version texte, cité « CDC §x »). La première version de ce document a été écrite sans lui ; la révision du 23/11 l'intègre. |
 
 **Convention des preuves** (la même que l'audit) : `back:` désigne `src/main/java/com/example/Pointage_Cleanic/` du backend, `front:` désigne `src/app/` du frontend, et les fichiers de racine sont nommés tels quels.
 
-« **À confirmer** » marque une hypothèse que ni le code ni le CDC transmis ne tranchent.
+« **À confirmer** » marque une hypothèse que ni le code ni le CDC ne tranchent. Après la révision du 23/11, il ne reste que des points techniques, tranchés dans leur sous-branche.
 
 ### 0.2 Constats vérifiés sur `refonte/v3` en complément de l'audit
 
@@ -35,11 +78,11 @@ L'audit porte sur `feature/reclamation-qr-site` et sur un arbre de travail non c
 | Front : `shared/` ne contient que `confirm-dialog` et `text-normalize.util.ts`. Les gardes sont `auth.guard.ts` et `module.guard.ts` (lot 0). | `front:shared/`, `front:guards/` |
 | `Droits` relit `Utilisateur.modulesAutorises` (booléens) et le rôle (`utilisateur`, sinon `login`). `RoleAdmin` ne contient pas SUPERADMIN. | `back:security/Droits.java`, `back:Enum/RoleAdmin.java` |
 
-### 0.3 Écart de périmètre à valider par vous
+### 0.3 Écart de périmètre (validé le 23/11)
 
-Les lignes de checklist transmises **excluent F009** (registre des pièces, barre Lit / Alimente) **et F014** (Mon espace). Or la définition du lot 1 dans le CDC cite « registre des pièces et liens entre modules » et « Mon espace en consultation », et le test de recette exige que les agents « ne voient que Mon espace ».
+Les lignes de checklist transmises **excluent F009** (registre des pièces, barre Lit / Alimente) **et F014** (Mon espace). Or la définition du lot 1 dans le CDC (§15) cite « registre des pièces et liens entre modules » et « Mon espace en consultation », et le test de recette exige que les agents « ne voient que Mon espace ».
 
-Proposition : un registre des pièces **minimal côté serveur**, alimenté par les événements (1b), et un Mon espace **en consultation limitée** (profil, planning, soldes de congés, bulletins validés) dans 1m.
+Retenu (Q-A) : un registre des pièces **minimal côté serveur**, alimenté par les événements (1b), et un Mon espace **en consultation limitée** dans 1m : mes informations, mon planning et mes pointages, mon solde de congés, mes bulletins validés (sous-rubriques du CDC §13.2, sans les demandes). Mon espace est ouvert à **tout salarié** ayant un compte, « de l'agent à la Directrice » (CDC §13.2), pas seulement aux agents.
 
 La barre Lit / Alimente (F009) et Mon espace complet (F014 : demandes, attestations, EPI, avances) restent aux lots 2 et 6.
 
@@ -96,7 +139,7 @@ Format : **Contexte** (avec preuves), **Décision**, **Écarté**, **Conséquenc
   - chacun devient une ChangeUnit d'ordre `0001` à `0012` ;
   - une ChangeUnit `0000-baseline` marque comme appliquées celles dont l'effet est déjà présent (même test d'idempotence que le runner actuel) ;
   - les **seeds de démonstration** (`TerrainDataLoader`, grilles et formations d'exemple de `DataLoader`) passent sous un profil `demo`, absent en prod (audit §4.3 « Seed de sites fictifs actif en production »).
-- **Spike préalable** (1 jour) : Mongock 5 avec Boot 3.3.6 / Spring Data MongoDB 4.3.6 et les transactions. **Repli** si le spike échoue : un exécuteur maison d'environ 150 lignes (interface `Migration { String id(); void executer(MongoTemplate) }`, collection `migrations_appliquees`, verrou par document `findAndModify` à bail).
+- **Spike préalable** (1 jour, retenu le 23/11, Q-C), premier livrable de 1a : Mongock 5 avec Boot 3.3.6 / Spring Data MongoDB 4.3.6 et les transactions. **Repli** si le spike échoue : un exécuteur maison d'environ 150 lignes (interface `Migration { String id(); void executer(MongoTemplate) }`, collection `migrations_appliquees`, verrou par document `findAndModify` à bail).
 
 **Écarté.** Garder des `CommandLineRunner` idempotents : pas de registre ni de verrou, et chaque démarrage coûte un balayage complet ; Flyway / Liquibase : le support MongoDB est payant ou limité, et ces outils sont pensés pour SQL ; scripts mongosh manuels : ni testés ni rejoués de la même façon partout.
 
@@ -122,7 +165,7 @@ Format : **Contexte** (avec preuves), **Décision**, **Écarté**, **Conséquenc
 
 **Décision.**
 - **Classe de base `PieceBase`** (incorporée dans chaque document de pièce) :
-  - `type` (`TypePiece` : CONGE, BE, BS, INV, MVT, BULLETIN, DECLARATION, SANCTION, IMPORT…) ;
+  - `type` (`TypePiece`). Codes imposés par le CDC §3 : `DEV`, `FAC`, `BS`, `BE`, `OF`, `LOT`, `DD`, `BC`, `BCA`, `CHQ`. Codes proposés pour les pièces que le CDC ne code pas : `CNG` (congé), `INV`, `MVT`, `BUL` (bulletin), `DSO` (déclaration sociale), `SAN` (sanction), `IMP` (import) ;
   - `numero` (nul tant que la pièce n'est pas validée), `exercice` ;
   - `statut` (`BROUILLON → SOUMISE → VALIDEE`, branches `REFUSEE`, `ANNULEE`, `ABANDONNEE`) ;
   - `creePar` / `creeLe`, `soumisePar` / `soumiseLe`, `valideePar` / `valideeLe` (identifiants de compte + **instantané** du nom) ;
@@ -130,8 +173,8 @@ Format : **Contexte** (avec preuves), **Décision**, **Écarté**, **Conséquenc
 - **Numérotation** :
   - un service unique `NumerotationService`, une collection unique `compteurs_pieces`, `_id = "<TYPE>-<EXERCICE>"` ;
   - `findAndModify($inc)` **dans la transaction de validation** : si la validation échoue, l'incrément est annulé avec elle, donc ni trou ni doublon ;
-  - format `<TYPE>-<EXERCICE>-<NNNNNN>` (ex. `BS-2027-000123`) ;
-  - exercice = année civile en `Africa/Dakar` via l'horloge injectée (`back:configurations/TimeConfig.java`), début d'exercice en paramètre daté (**à confirmer**, Q7) ;
+  - format `<TYPE>-<EXERCICE>-<NNNN>` (CDC §3 : `DEV-2026-0001`), compteur sur **4 chiffres minimum**, qui s'allonge sans troncature au-delà de 9999 (`BS-2027-12345`). Le tri des numéros se fait donc sur `(exercice, compteur)`, jamais sur la chaîne ;
+  - exercice = **année civile** (Q7), calculée en `Africa/Dakar` à la date de validation, via l'horloge injectée (`back:configurations/TimeConfig.java`). L'heure du serveur fait foi (CDC §14 « Intégrité comptable ») ;
   - un brouillon s'affiche sous `BROUILLON-<6 derniers caractères de l'id>`.
 - **Fin des suppressions** :
   - plus aucun `@DeleteMapping` métier : `POST /{id}/annuler {motif}` (au moins 10 caractères, comme `MOTIF_MIN` de `SuppressionDefinitiveService`) pour une pièce validée, `POST /{id}/abandonner` pour un brouillon (conservé, statut `ABANDONNEE`) ;
@@ -147,7 +190,7 @@ Format : **Contexte** (avec preuves), **Décision**, **Écarté**, **Conséquenc
 
 **Écarté.** Numéro au brouillon : trous inévitables ; séquence sans transaction avec numéro « réservé puis libéré » : complexe et sujet aux trous ; suppression logique par `deleted=true` : ne trace ni qui ni pourquoi, et contredit la règle 5.
 
-**Conséquences.** Les contrats du front changent : les boutons « Supprimer » deviennent « Annuler » ou « Abandonner », et le numéro est vide en brouillon ; les références existantes (`BE-20260617-001`) sont conservées telles quelles : pas de renumérotation de l'historique ; les nouveaux numéros commencent à `000001` sur l'exercice courant, ou après le maximum existant si la Direction veut la continuité (Q7).
+**Conséquences.** Les contrats du front changent : les boutons « Supprimer » deviennent « Annuler » ou « Abandonner », et le numéro est vide en brouillon ; les références existantes (`BE-20260617-001`) sont conservées telles quelles : pas de renumérotation de l'historique. Leur format diffère du nouveau, donc pas de collision : les nouvelles séries commencent à `0001` sur l'exercice de mise en service.
 
 ### D5 — Événements de domaine et outbox Mongo
 
@@ -187,7 +230,8 @@ Format : **Contexte** (avec preuves), **Décision**, **Écarté**, **Conséquenc
 - **`journal_acces`** :
   - connexions réussies et échouées (écouteurs `AuthenticationSuccessEvent` / `AbstractAuthenticationFailureEvent`, plus la connexion agent de D11), refus 403, exports (D13), consultation de données sensibles (fiche de paie, salaire, RIB) ;
   - champs : `{le, identifiantSaisi (masqué partiellement), compteId?, resultat, motif, ip, userAgent}`.
-- **Blocage** : après N échecs en M minutes, le compte est verrouillé T minutes (3 paramètres datés, valeurs initiales 5 / 15 / 15, alignées sur `pointage.limite.*` du lot 0).
+- **Blocage** : après N échecs en M minutes, le compte est verrouillé T minutes (3 paramètres datés). Valeurs initiales **3** / 15 / 15 : le CDC (§13.1 « Journal des accès », §14 « Sécurité ») impose le blocage après 3 codes faux, pour les mots de passe comme pour les codes agents. Le limiteur du kiosque (`pointage.limite.*`, lot 0) est un autre mécanisme et reste inchangé jusqu'au lot 2.
+- Le journal des accès trace aussi **tout changement de droit** et les actions sensibles citées par le CDC §13.1 (export de la paie, consultation des salaires, validation finale). Il n'est pas modifiable.
 - Les historiques locaux restent en place (contrats d'API du front), mais ne sont plus la source de l'audit.
 - Écran de consultation filtrable, droit `parametres.journaux` au niveau LECTURE.
 
@@ -208,18 +252,23 @@ Des valeurs vivent aussi dans `application.yml` (`rh.pointage.tolerance-retard-m
   - **le catalogue est du code, les valeurs sont des données.**
 - **`parametres`** : `{cle, valeur, dateEffet, saisiPar, saisiLe, motif, annulee?}`.
   - On n'édite jamais une version : une erreur s'annule (règle 5), une évolution est une nouvelle version datée ;
-  - une version dont la date d'effet est passée est immuable ;
+  - **une date d'effet passée est interdite hors migration** : `dateEffet >= aujourd'hui` (en `Africa/Dakar`) pour toute saisie par l'API, sinon 422 `DATE_EFFET_PASSEE`. Seule une ChangeUnit (D2) peut écrire une version rétroactive, et elle l'écrit avec l'auteur « migration » ;
+  - une version dont la date d'effet est atteinte est immuable ; une version future peut être annulée (motif obligatoire) avant sa date ;
   - index unique `(cle, dateEffet)`.
-- **Lecture à date** : `ParametreService.valeurA(cle, LocalDate date)` renvoie la dernière version de `dateEffet <= date`, avec un cache invalidé à l'écriture. Un calcul (bulletin, retard, valorisation) passe **toujours** la date du fait, jamais `now()`. Exemple : le bulletin de mars utilise les taux en vigueur en mars.
+- **Lecture à date** : `ParametreService.valeurA(cle, LocalDate date)` renvoie la dernière version non annulée de `dateEffet <= date`, avec un cache invalidé à l'écriture. Un calcul passe **toujours** une date de référence, jamais `now()` :
+  - par défaut, la **date de création de la pièce** : « chaque changement s'applique aux pièces créées après sa date d'effet » (CDC §13.4) ;
+  - exception déclarée par le type de pièce : le **bulletin** lit les valeurs en vigueur sur **sa période** (CDC §5.7 : « un changement s'applique à partir du mois choisi et ne touche pas aux paies déjà clôturées »). Le bulletin de mars recalculé en avril garde les taux de mars.
 - **Paramètres composites** (barème IR par tranches, paliers d'ancienneté des congés) : type `BAREME` ou `JSON` avec schéma. Les 5 singletons sont migrés vers des clés du catalogue (une ChangeUnit par singleton). La première version prend `dateEffet = 01/01/2000`, pour couvrir tout l'historique avec la valeur actuelle, et l'auteur « migration ».
 - **`listes_choix`** : `{liste ("rh.typesConge"), code, libelle, ordre, actif, dateDebut, dateFin, attributs (ex. décompte du solde oui/non)}`.
   - Les enums métier extensibles y migrent au fil des lots ; les enums de **statut** restent du code ;
-  - lot 1 : le moteur, plus les listes nécessaires aux fiches minimales (motifs de désactivation, motifs d'annulation, familles d'articles, natures, unités).
-- **Écran « Seuils et listes »** (front), sous Paramètres et accès :
+  - lot 1 : le moteur, plus les listes nécessaires aux fiches minimales (motifs de désactivation, motifs d'annulation, familles d'articles avec leur compte comptable en attribut, natures, unités, modes de paiement, types de magasin) ;
+  - les listes suivent la même règle de date que les paramètres : `dateDebut` passée interdite hors migration.
+- **Écran « Seuils et listes »** (front), sous Paramètres et accès (CDC §13.4) :
   - une page par module ;
   - pour chaque clé : valeur courante, valeur future programmée et historique ;
-  - saisie d'une nouvelle valeur datée avec motif ;
-  - droit `parametres.seuils` niveau SAISIE, et niveau VALIDATION pour une date d'effet passée (**à confirmer** : faut-il interdire purement les dates passées ?).
+  - saisie d'une nouvelle valeur datée avec motif, date d'effet à partir d'aujourd'hui (sélecteur de date borné) ;
+  - droit `parametres.seuils` niveau SAISIE.
+- **Valeurs de départ.** La migration des singletons reprend les valeurs **actuelles** du code (aucun changement de comportement à la mise en service). Quand le CDC §13.4 « Seuils de référence » fixe une autre valeur de départ (tolérance de retard 10 min contre 15 aujourd'hui ; stock dormant 90 jours contre 3 mois côté serveur et 6 côté front), la ChangeUnit l'écrit comme une **version future** datée au premier jour du mois suivant la mise en service, que la Direction confirme ou annule dans « Seuils et listes » (CDC §16 : « les confirmer suffit »).
 - Le front ne garde **aucune** valeur de seuil : `GET /api/parametres/valeurs?module=stock&date=` remplace `front:constants/stock-v2-valorisation.constants.ts` et `stock.constants.ts`. Les constantes réglementaires (`paie.constants.ts`) suivent le même chemin.
 
 **Écarté.** Un document « jeu complet » par module et par date : une modification d'une seule valeur recopie tout, et les différentiels sont illisibles ; Spring Cloud Config : pas de notion de date d'effet.
@@ -228,7 +277,7 @@ Des valeurs vivent aussi dans `application.yml` (`rh.pointage.tolerance-retard-m
 
 ### D8 — Référentiels uniques
 
-**Contexte.** La seule donnée partagée par identifiant est le site (`sites_clients`, via `back:services/stockv2/ReferentielSiteService.java`). Ailleurs (audit §1, « Données dupliquées ») :
+**Contexte.** Le CDC §3 « Référentiels partagés » fixe un propriétaire par donnée. Dans le code, la seule donnée partagée par identifiant est le site (`sites_clients`, via `back:services/stockv2/ReferentielSiteService.java`). Ailleurs (audit §1, « Données dupliquées ») :
 - employé en 3 collections ;
 - article en 5 listes ;
 - client et fournisseur en texte libre ;
@@ -238,23 +287,26 @@ Des valeurs vivent aussi dans `application.yml` (`rh.pointage.tolerance-retard-m
 
 | Référentiel | Collection cible | Propriétaire | Champs minimaux | Références (par id) | Instantanés autorisés |
 |---|---|---|---|---|---|
-| Employé | `dossiers_employes` (conservée) | RH / Personnel | matricule, agentId (pointage), nom, prénom, **téléphone (E.164)**, e-mail, poste, département, statut, dateEmbauche, dateSortie, affectations[{siteId, dateDebut, dateFin, horaires}], superieurHierarchiqueId, RIB / n° IPRES / CSS (`@Sensible`) | siteId → `sites_clients`, categorieCode → grille, superieur → dossier | nom, prénom, matricule dans congés, bulletins, absences, HS, sanctions, bons |
-| Site | `sites_clients` (conservée) | Commercial dans la cible, Exploitation tant que le Commercial n'existe pas (**à confirmer**, Q10) | code (unique), nom, **clientId**, **contratClientId**, type (SITE, AGENCE, MAGASIN, **à confirmer** Q5/Q6), adresse, GPS, rayon, actif | clientId, contratClientId | code, nom dans bons, mouvements, pointages, affectations |
-| Article | **`articles`** (renommage de `stockv2_produits`, **ids conservés**) | Stock / Achats | code (unique), libellé, famille (liste), nature (consommable, durable), unité (liste), catégorie, fournisseurPrincipalId, actif, prix (`@Sensible PRIX_ACHAT`) | categorieId, fournisseurId | code, libellé, unité, coût unitaire dans lignes de bon, mouvements, inventaires |
-| Extensions article | `production_chimie_matieres_premieres` (+ `articleId`), `produits_phyto` (+ `articleId`) | Industrie / Exploitation pour les champs propres (MA %, FDS, homologation, délais) | articleId + champs métier propres | articleId | — |
-| Client | **`clients`** (nouvelle) | Commercial (lot 5) ; fiche minimale au lot 1 | code, raison sociale, NINEA (**à confirmer**), contacts, adresse, statut (PROSPECT, CLIENT, ANCIEN), actif | — | raison sociale dans bons, chantiers, futures factures |
-| Fournisseur | **`fournisseurs`** (nouvelle) | Achats / Stock | code, raison sociale, NINEA, contacts, adresse, conditions de paiement (liste), actif | — | raison sociale dans bons d'entrée, mouvements chimie |
-| Contrat client (minimal) | **`contrats_clients`** (nouvelle) | Commercial | numéro, clientId, siteIds[], dateDebut, dateFin, statut, effectif contractuel par site | clientId, siteIds | numéro dans site et futures factures |
-| Grille des salaires | `categories_professionnelles` (conservée, **versions datées**) | RH / Paie | code, libellé, niveau, échelon, salaire de base et primes **par date d'effet** (D7) | — | code et montants figés dans le bulletin (déjà le cas : `back:entities/rh/BulletinPaie.java`) |
+| Employé | `dossiers_employes` (conservée) | RH / Personnel (CDC §3) | matricule, agentId (code de kiosque, voué à disparaître au lot 2, voir D11), nom, prénom, **téléphone (E.164)**, e-mail, poste, département, statut, dateEmbauche, dateSortie, personne à prévenir, affectations[{siteId, dateDebut, dateFin, horaires}], superieurHierarchiqueId, **mode de paiement** {mode (liste : VIREMENT, WAVE, ORANGE_MONEY, ESPECES), compte (RIB ou numéro de portefeuille)} et **n° IPRES du salarié** (`@Sensible`, CDC §5.2) | siteId → `sites_clients`, categorieCode → grille, superieur → dossier | nom, prénom, matricule dans congés, bulletins, absences, HS, sanctions, bons ; mode et compte de paiement figés dans le bulletin |
+| Site (« local » du CDC) | `sites_clients` (conservée) | Commercial à la signature du contrat ; Exploitation pour le GPS, le rayon, les horaires et les QR (CDC §3, §6.1). Au lot 1, sans module Commercial : voir Q10 | code (unique), nom, **clientId (obligatoire)**, **contratClientId**, adresse, contact sur place, GPS, rayon (200 m par défaut, CDC §6.3), horaires et jours de service, superviseurId, actif. **Réservés pour le lot 2** : `qrPointage` et `qrAppreciation` (jetons régénérables, CDC §6.1), effectif prévu par jour | clientId, contratClientId, superviseurId | code, nom dans bons, mouvements, pointages, affectations |
+| Magasin | **`magasins`** (nouvelle, Q5) | Stock | code (unique), libellé, type (liste : CENTRAL, ATELIER, DEPORTE), **siteId (obligatoire si DEPORTE, interdit sinon)**, actif | siteId | code, libellé dans bons et mouvements (lot 3) |
+| Article | **`articles`** (renommage de `stockv2_produits`, **ids conservés**) | Stock (CDC §3, §8.1 « Catalogue unique ») | code (unique), libellé, **famille** (liste à 6 valeurs, Q12), nature (CONSOMMABLE, ou DURABLE avec durée de vie en mois), unité (liste), catégorie, seuil d'alerte, stock de sécurité, suivi par lot (oui / non), fournisseurPrincipalId, actif, coût (`@Sensible PRIX_ACHAT`). Compte comptable porté par la famille | categorieId, fournisseurId | code, libellé, unité, coût unitaire dans lignes de bon, mouvements, inventaires |
+| Extensions article | `production_chimie_matieres_premieres` (+ `articleId`), `produits_phyto` (+ `articleId`), **`terrain_materiel` (+ `articleId` obligatoire)** | Industrie pour les matières (MA %, FDS) ; Exploitation pour le phyto (homologation, délais) et le parc (numéro, date et valeur d'achat, affectation, entretiens, CDC §6.7) | articleId + champs métier propres | articleId | — |
+| Client | **`clients`** (nouvelle) | Commercial (CDC §3) ; fiche minimale au lot 1 | code, raison sociale, secteur, **NINEA**, registre de commerce, contacts, adresse (CDC §9.1), statut (PROSPECT, CLIENT, ANCIEN), actif | — | raison sociale dans bons, chantiers, futures factures |
+| Fournisseur | **`fournisseurs`** (nouvelle) | **Finances** (CDC §3, §11.5) ; le Stock y ajoute délais constatés et évaluation annuelle (CDC §8.1) | code, raison sociale, NINEA, contacts, adresse, conditions de paiement (liste), actif | — | raison sociale dans bons d'entrée, mouvements chimie |
+| Contrat client (minimal, Q11) | **`contrats_clients`** (nouvelle) | Commercial | numéro (pièce, type proposé `CTR`), clientId, sites couverts [{siteId, effectif prévu}], prestations (texte), montant mensuel HT (`@Sensible CA_SITES`), dateDebut, durée en mois, reconduction (oui / non), préavis en jours, clause de révision (texte), délai de paiement en jours, statut. Facultatifs : pénalité de non-couverture {montant ou %, délai}, volume d'heures mensuel (CDC §9.4, §6.1). Avenants : lot 5 | clientId, siteIds | numéro dans site et futures factures |
+| Grille des salaires | `categories_professionnelles` (conservée, **versions datées**) | RH / Paie | code, libellé, niveau, échelon, salaire de base et primes **par date d'effet** (D7). Ne porte plus ni RIB, ni IPRES, ni CSS (Q15) | — | code et montants figés dans le bulletin (déjà le cas : `back:entities/rh/BulletinPaie.java`) |
 
 Points particuliers :
-- **Contrat** : le lot 1 du CDC cite « contrat » entre « client » et « site ». On suppose le **contrat client** (F085), puisque le contrat de travail existe déjà (`back:entities/rh/Contrat.java`). **À confirmer** (Q11).
-- **RIB, IPRES, CSS** : aujourd'hui portés par la grille et recopiés dans le bulletin depuis elle (`CalculPaieService.orchestrer`, audit RH « Données dupliquées »). Cible : sur l'employé (`@Sensible`). **À confirmer** (Q15).
-- **Solde chimie** : `MatierePremiere.quantiteEnStock` reste provisoirement dans son module. C'est une dette nommée, levée au lot 3 (stock) ou 8 (Industrie). Le lot 1 n'unifie que le **catalogue**, comme demandé.
-- **Matériel** (`back:entities/terrain/Materiel.java`) : bien durable suivi à l'unité, ce n'est pas un article. Il reste à part, avec un `articleId` facultatif (**à confirmer** avec F061 / F106).
-- **Lecture « selon les droits »** : chaque référentiel expose `GET /api/referentiels/<x>` (recherche, sélecteur). Les champs sont masqués par D9. Le droit `referentiels.lecture` est accordé par défaut à tout profil non agent.
+- **Contrat** : c'est le **contrat client** (Q11, CDC §9.4 et §15 lot 1). Le contrat de travail existe déjà (`back:entities/rh/Contrat.java`) et n'est pas touché.
+- **Site actif ⇒ contrat en cours** (CDC §6.1 « Lien contrat ») : la règle est écrite au lot 1 mais pilotée par un paramètre daté `exploitation.site.contratObligatoire`, à `false` jusqu'à la reprise des contrats (CDC §14 « Reprise des données » : liste des sites à valider). Sans cela, la mise en service désactiverait tous les sites existants, qui n'ont pas de contrat. La désactivation automatique en fin de contrat vient au lot 5.
+- **Mode de paiement, IPRES, CSS** (Q15) : aujourd'hui `numeroIpres`, `numeroCss`, `rib`, `banque` sont portés par la grille et recopiés dans le bulletin depuis elle (`CalculPaieService.orchestrer`). Cible : mode et compte de paiement, n° IPRES du salarié sur l'employé ; numéros IPRES et CSS **de l'employeur** en paramètres d'entreprise (CDC §5.7 « Identité »). Un changement de compte de paiement est une demande à la RH avec une pièce jointe (CDC §13.2), donc au lot 6 pour Mon espace ; au lot 1, la RH le saisit, avec journal d'audit.
+- **Solde chimie** : `MatierePremiere.quantiteEnStock` reste provisoirement dans son module. C'est une dette nommée, levée au lot 3 (stock) ou 8 (Industrie), puisque le CDC §8 veut « un seul stock », dont le magasin de l'Industrie est une vue. Le lot 1 n'unifie que le **catalogue**.
+- **Magasins** (Q5) : le lot 1 crée le référentiel et deux fiches de départ, `MAG-CENTRAL` et `MAG-ATELIER`. Les soldes de `StockParSite` restent indexés par site au lot 1 ; leur bascule sur `magasinId` (le seau `siteId = null` de `StockEntrepotUniqueMigrationRunner` devient `MAG-CENTRAL`) et les bons de transfert entre magasins viennent au lot 3, qui touche ces services.
+- **Matériel** (Q12) : famille d'articles. Le catalogue dit *ce que c'est* (« monobrosse 17 pouces »), le parc `terrain_materiel` suit *chaque unité* (numéro, affectation, entretiens) et porte toujours un `articleId`. Le lien avec les immobilisations (CDC §6.7) vient au lot 4/7.
+- **Lecture « selon les droits »** : chaque référentiel expose `GET /api/referentiels/<x>` (recherche, sélecteur). Les champs sont masqués par D9. Le niveau LECTURE des référentiels est accordé par défaut à tout profil non agent : le CDC §13 donne à chaque responsable de module la « lecture des référentiels des autres modules ».
 
-**Écarté.** Un « méga-référentiel » générique de tiers (client et fournisseur fusionnés) : séduisant pour la comptabilité, mais aucune demande du CDC transmis. À revoir au lot 4 ; laisser chaque module garder sa liste avec une synchronisation : c'est la situation actuelle.
+**Écarté.** Un « méga-référentiel » générique de tiers (client et fournisseur fusionnés) : séduisant pour la comptabilité, mais le CDC §3 leur donne deux propriétaires différents (Commercial et Finances). À revoir au lot 4 ; laisser chaque module garder sa liste avec une synchronisation : c'est la situation actuelle ; un niveau « agence » au-dessus du site : le CDC n'en a pas (Q6).
 
 **Conséquences.** Les sélecteurs du front pointent vers les routes de référentiel. Les écritures de fiches passent par leur module propriétaire. Il faut 5 migrations de rapprochement (§3).
 
@@ -264,19 +316,27 @@ Points particuliers :
 
 **Décision.**
 - **`comptes`**, collection unique qui remplace `login` et `utilisateur` :
-  - `{id, employeId (obligatoire sauf type TECHNIQUE), type (INTERNE, AGENT, EXTERNE, TECHNIQUE), identifiants: {email?, telephone?}, motDePasseHash?, codeConnexionHash? (D11), profilIds[], actif, motifDesactivation, dateExpiration (accès externe daté), mustChangePassword, echecs, verrouilleJusqua, version}` ;
-  - unicité de l'e-mail et du téléphone (index unique sparse).
-- **Désactivation automatique à la sortie** : consommateur de l'événement `EmployeSorti` (F010).
-- **`profils`** : `{code, libelle, droits: {"<module>.<sousRubrique>": NIVEAU}, droitsSensibles: [..], actif}`.
-  - **Niveaux ordonnés** : `AUCUN < LECTURE < SAISIE < VALIDATION < TOUT`. `TOUT` ajoute l'annulation de pièces validées et le paramétrage de la sous-rubrique.
-  - **Droits sensibles** (cumulatifs, indépendants des niveaux) : `SALAIRES`, `DONNEES_PERSONNELLES`, `PRIX_ACHAT`, `CHIFFRE_AFFAIRES`, `EXPORT`. **À confirmer** (Q14).
+  - `{id, employeId (obligatoire sauf type TECHNIQUE et EXTERNE), type (INTERNE, AGENT, EXTERNE, TECHNIQUE), modeConnexion (MOT_DE_PASSE, CODE_TELEPHONE), identifiants: {email?, telephone?}, motDePasseHash?, codeConnexionHash? et appareil? (D11), profilIds[], perimetre: {siteIds[], magasinIds[]}, doubleAuthentification (booléen, dérivé des profils), actif, motifDesactivation, dateExpiration (accès externe daté, obligatoire pour EXTERNE), mustChangePassword, echecs, verrouilleJusqua, derniereConnexion, version}` ;
+  - unicité de l'e-mail et du téléphone (index unique sparse) ;
+  - « un compte part toujours d'une fiche du Personnel » (CDC §13.1) : un compte INTERNE ou AGENT se crée **depuis** le dossier employé, jamais par ressaisie de l'identité.
+- **Création automatique du compte agent** : consommateur de `EmployeCree` quand le dossier a un téléphone et un poste d'agent (CDC §13.1, §13.3 « Agent »), voir D11.
+- **Désactivation automatique à la sortie**, le jour même : consommateur de l'événement `EmployeSorti` (F010, CDC §13.1).
+- **Périmètre** (CDC §13.1 « périmètre (sites, dépôt) », §13 « Superviseur terrain : ses sites et ses agents ») : vide = pas de restriction. `@droits.dansPerimetre(siteId)` est livré au lot 1 et appliqué aux référentiels site et employé (un superviseur ne voit que ses sites et les agents qui y sont affectés). Les modules l'appliquent à leurs pièces dans leur lot.
+- **`profils`** : `{code, libelle, nature (METIER, TECHNIQUE), droits: {"<module>.<sousRubrique>": NIVEAU}, droitsSensibles: [..], doubleAuthentification, actif}`.
+  - **Niveaux ordonnés** (CDC §13.1) : `AUCUN < LECTURE < SAISIE < VALIDATION < TOUT`. `TOUT` ajoute l'annulation de pièces validées et le paramétrage de la sous-rubrique. Une sous-rubrique à `AUCUN` disparaît du menu, et ses données n'apparaissent dans aucun tableau de bord de l'utilisateur.
+  - **Droits sensibles** (Q14, CDC §13.1), cumulatifs, indépendants des niveaux, **jamais accordés par défaut** : `SALAIRES` (salaires nominatifs), `CA_SITES` (CA et rentabilité des sites), `PRIX_ACHAT`, `EXPORTER`, `VALIDER_EN_DERNIER`. La matrice de départ du CDC §13.1 sert de seed aux profils.
+  - **Données de santé** (maladie, visite médicale, accidents) : règle fixe, hors droits cochables : visibles par la RH (niveau ≥ LECTURE sur `rh.absences`) et par la personne concernée ; les autres voient seulement « absent » (CDC §14). Annotation `@Sensible(SANTE)` traitée par le même mécanisme de masquage.
   - Un compte cumule ses profils au maximum par sous-rubrique.
+- **Profils de départ** (seed, modifiables ensuite) : ceux du CDC §13 (Direction Générale, Responsable de module, Superviseur terrain, Agent, Chimiste, Magasinier, Commercial, Caissier, Comptable, Expert-comptable ou auditeur), plus `ADMIN`. Deux profils sont structurants :
+  - **`DIRECTION`** (nature METIER) : LECTURE sur toutes les sous-rubriques, les 5 droits sensibles, dont `VALIDER_EN_DERNIER`, et double authentification. Elle valide par les étapes « Direction » des circuits (D10), pas par un niveau `TOUT` : le CDC §13 dit « Tout, en lecture. Validation finale ».
+  - **`ADMIN`** (nature TECHNIQUE) : `TOUT` sur `parametres.*` (utilisateurs, profils et droits, circuits, seuils et listes, imports et modèles, journal des accès, CDC §13.4) et sur le paramétrage d'entreprise (CDC §5.7), `AUCUN` sur tout le reste, aucun droit sensible. Il n'est jamais valideur d'une pièce métier : un circuit refuse une étape qui désigne un profil TECHNIQUE.
+  - **Garde-fous** (testés) : un compte ne modifie jamais ses propres profils, droits ou périmètre ; seul un compte DIRECTION peut attribuer le profil DIRECTION ou un droit sensible ; chaque changement de droit va au journal des accès (CDC §13.1).
 - **Catalogue des sous-rubriques** en code (`CatalogueDroits`), généré à partir des sous-modules actuels (19 RH, 27 Stock, 9 Terrain, 7 Chimie) plus `parametres.*` et `referentiels.*`.
 - **API de contrôle** (évolution de `Droits`) :
   - `@droits.peut('stock.bonsSortie', 'SAISIE')` ;
   - la forme du lot 0 `@droits.peut('stock.bonsSortie')` est conservée et vaut `LECTURE` pour les GET, ce qui rend la migration progressive ;
   - `@droits.sensible('SALAIRES')` ;
-  - `estSuperAdmin()` devient `aProfil('DIRECTION')` (Q1).
+  - `estSuperAdmin()` disparaît : les routes de gestion des comptes passent à `@droits.peut('parametres.utilisateurs', 'SAISIE')` (profil ADMIN), les validations finales à l'étape Direction du circuit.
   - Les droits restent **relus en base** : cache de 30 s par compte, invalidé à la modification du compte ou du profil.
 - **Masquage dans les DTO** :
   - annotation `@Sensible(DroitSensible.SALAIRES)` sur les champs des DTO de sortie ;
@@ -288,14 +348,15 @@ Points particuliers :
 - **Migration** :
   1. chaque `utilisateur` devient un `comptes` (même id), relié au dossier par e-mail **exact et unique** ; sinon il part au rapport (§3.1) ;
   2. chaque combinaison distincte de drapeaux devient un profil `MIGRE-<n>` : drapeau vrai donne `SAISIE`, sauf les sous-rubriques de lecture pure (tableaux de bord, analyses), qui donnent `LECTURE` ;
-  3. rôles : `CONTROLEUR_STOCK` → `VALIDATION` sur `stock.bonsEntree`/`bonsSortie`/`inventaires` ; `RH` → `TOUT` sur `rh.*` ; `SUPERADMIN` (`login`) → profil `DIRECTION` (`TOUT` partout + tous les droits sensibles) ;
+  3. rôles : `CONTROLEUR_STOCK` → `VALIDATION` sur `stock.bonsEntree`/`bonsSortie`/`inventaires` ; `RH` → `TOUT` sur `rh.*` ; `SUPERADMIN` (`login`) → profil **transitoire** `MIGRE-SUPERADMIN` (`TOUT` partout + tous les droits sensibles), qui reproduit exactement ses droits d'aujourd'hui. À la réponse de Q1, ce compte reçoit `DIRECTION`, `ADMIN` ou les deux, et le profil transitoire est désactivé (opération tracée, pas une migration) ;
   4. test `MigrationDroitsIT` : pour chaque compte d'un jeu représentatif et chaque route de `DroitsModulesSecuriteIT`, la décision avant et après migration est **identique**.
 - **JWT** : il ne porte plus `modules`, seulement `sub`, `type` et `employeId`. Le front lit `GET /api/moi/droits`, utilisé par la sidebar et `module.guard.ts`.
-- **F018** : déconnexion après inactivité (paramètre, 30 min proposées), jeton de rafraîchissement en cookie HttpOnly (rotation, révocation à la désactivation), durée du jeton d'accès ramenée à 15 min. Double authentification : **décision de la Direction** (Q14), conçue comme une étape de plus de la connexion si elle est retenue.
+- **F018** : déconnexion après inactivité (paramètre, 30 min proposées), jeton de rafraîchissement en cookie HttpOnly (rotation, révocation à la désactivation), durée du jeton d'accès ramenée à 15 min.
+- **Double authentification** (Q14, CDC §14 : « pour la Direction et les Finances ») : exigée pour tout compte dont un profil porte `doubleAuthentification` (seed : DIRECTION, Responsable Finances, Comptable, Caissier). Après le mot de passe, un code à usage unique de 6 chiffres part par SMS au téléphone du compte (5 min de validité, 3 essais, puis blocage D6) ; le jeton n'est émis qu'après ce code. Le modèle et l'étape de connexion sont posés en 1g ; l'envoi passe par `FournisseurSms`, donc la fonction est livrée en **1k**. En prod, elle n'est activable qu'avec un vrai fournisseur (Q3).
 
 **Écarté.** RBAC Spring par `hasAuthority` sur des chaînes : les niveaux ordonnés et le masquage ne s'y expriment pas ; garder les deux collections de comptes : c'est la source de la duplication du mot de passe (audit §5.6).
 
-**Conséquences.** L'écran `front:adminPage/gestion-privilege/` est réécrit en deux écrans, Profils et Comptes ; les 49 specs front cassés du lot 0 sur ces écrans (lot 0 §1) seront remplacés, pas réparés.
+**Conséquences.** L'écran `front:adminPage/gestion-privilege/` est réécrit en deux écrans, Profils (matrice profil × rubrique avec « Détail n/N » et aperçu du menu de chaque profil, CDC §13.1) et Comptes ; les 49 specs front cassés du lot 0 sur ces écrans (lot 0 §1) seront remplacés, pas réparés.
 
 ### D10 — Moteur de circuits de validation
 
@@ -306,15 +367,22 @@ Points particuliers :
 Il n'y a ni seuil ni délégation.
 
 **Décision.**
+Le CDC §13 « Circuits de validation » est la **référence unique** des circuits ; les sections des modules y renvoient (CDC §8.10).
+
 - **`circuits_validation`** :
-  - `{typePiece, code, dateEffet, conditions: {montantMin?, montantMax?, siteIds?, typeSortie?}, etapes: [{ordre, valideur: {genre: PROFIL | SUPERIEUR_HIERARCHIQUE | RESPONSABLE_SITE | COMPTE, ref}, delaiHeures, escaladeVers?}], actif}` ;
+  - `{typePiece, code, dateEffet, conditions: {sousType? (ex. type de bon : ACHAT, PRODUCTION, RETOUR_SITE, LIVRAISON_SITE, DOTATION, CASSE…), siteIds?, profilBeneficiaire?}, etapes: [{ordre, libelle, valideur: {genre: PROFIL | SUPERIEUR_HIERARCHIQUE | RESPONSABLE_SITE | DEMANDEUR | COMPTE, ref}, delaiHeures, escaladeVers?}], direction: {mode: TOUJOURS | AU_DESSUS_DU_SEUIL | JAMAIS, seuilMontant?, casAnormaux[]?}, actif}` ;
+  - l'étape **Direction** n'est pas une étape saisie : le moteur l'ajoute en dernier selon `direction.mode`. C'est la case « Direction en dernier » du CDC §13.1, et le réglage à trois positions du CDC §8.10 ;
+  - `AU_DESSUS_DU_SEUIL` fait monter la pièce si son montant dépasse `seuilMontant` (paramètre daté, D7) **ou** si elle présente un cas anormal déclaré (CDC §8.10 : dépassement de plus de 20 % de la moyenne d'un site, nouveau fournisseur, importation, casse, perte, don ; les détecteurs de ces cas viennent avec leur lot) ;
   - versionné par date d'effet, comme D7 : une pièce garde le circuit en vigueur **à sa soumission**.
 - **Choix du circuit** : le plus spécifique dont les conditions sont remplies. Si aucun circuit ne convient, la soumission est refusée (422 `CIRCUIT_ABSENT`).
+- **Pièce née d'une pièce validée** : elle ne repasse pas en validation (CDC §13 : bon de commande issu d'une demande de dépense validée, bon de caisse…). Le moteur la valide d'office si son `pieceOrigineId` désigne une pièce `VALIDEE` d'un type déclaré parent ; la décision est tracée « validée par la pièce n° … ».
 - **Invariants vérifiés par le moteur, et testés** :
-  1. **Personne ne valide sa propre pièce**, ni directement ni par délégation : l'auteur et le bénéficiaire (congé) sont exclus de toutes les étapes ;
-  2. **Direction en dernier** : si le circuit contient une étape Direction, c'est la dernière, ce qui est contrôlé à l'enregistrement du circuit. Au-delà du seuil paramétré par type de pièce, une étape Direction est exigée ;
+  1. **Personne ne valide sa propre demande** (CDC §13), ni directement ni par délégation : l'auteur et le bénéficiaire (congé, avance) sont exclus de toutes les étapes ;
+  2. **Direction en dernier** : l'étape Direction est toujours la dernière, et ses valideurs doivent avoir le droit sensible `VALIDER_EN_DERNIER` ;
   3. un même compte ne valide pas deux étapes d'une même pièce ;
-  4. refus = motif obligatoire (au moins 10 caractères, comme `MOTIF_REFUS_MIN_LENGTH` de `CongeWorkflowService`).
+  4. un profil de nature TECHNIQUE (ADMIN) n'est jamais valideur ;
+  5. refus = motif obligatoire (au moins 10 caractères, comme `MOTIF_REFUS_MIN_LENGTH` de `CongeWorkflowService`).
+- **Réglage de départ** (Q13), seedé depuis le tableau du CDC §13 : Direction `TOUJOURS` sur toutes les pièces, sauf les congés (`JAMAIS`). Seuil « montant au-dessus duquel la Direction valide » : 0 F (CDC §13.4). Les seuils réels des pièces financières (bon de caisse, demande de dépense, chèque) restent à fixer par la Direction (CDC §16) et se règlent au lot 4, sans développement.
 - **`delegations`** : `{delegantCompteId, delegataireCompteId, typesPiece[], dateDebut, dateFin, motif, creePar}`. Chevauchements autorisés, délégation de délégation interdite. Tout est journalisé (D6).
 - **`instances_validation`** : `{pieceType, pieceId, circuitId, circuitVersion, etapeCourante, statut, decisions: [{etape, compteId, pourLeCompteDe? (délégation), decision, motif, le}]}`.
 - **API commune** :
@@ -323,38 +391,52 @@ Il n'y a ni seuil ni délégation.
   - les routes existantes `/valider` et `/refuser` des modules deviennent des façades.
 - **Effets** : la dernière décision favorable passe la pièce en `VALIDEE`, attribue le numéro (D4) et publie `PieceValidee` (D5), dans une seule transaction. Les notifications aux valideurs passent par D14.
 - **Premier cas porté** : les congés.
-  - Circuit initial = Supérieur → RH → Direction, ce qui reproduit `NiveauValidationConge` ;
-  - les contrats d'API de `TempsPresencesCongeController` sont conservés (`/demandes/a-valider`, `/valider`, `/refuser`) ;
-  - le comportement actuel sert d'oracle de non-régression (tests `CongeWorkflowService*` existants).
-- **Deuxième cas** : les bons d'entrée et de sortie, avec un circuit initial à une étape `VALIDATION` sur `stock.bons*`, ce qui reproduit le SUPERADMIN / CONTROLEUR_STOCK actuel. Les transitions invalides restent en **409** (contrat figé, CLAUDE.md Stock 7.4).
+  - Circuit de départ selon le CDC (§13, §5.3) : Superviseur → RH, Direction `JAMAIS` ; un second circuit, de condition `profilBeneficiaire = responsable de module`, ajoute la Direction (« la Direction valide les congés des responsables ») ;
+  - **écart avec l'existant** : `NiveauValidationConge` impose aujourd'hui Supérieur → RH → DG pour tous. Les tests `CongeWorkflowService*` existants servent d'oracle de non-régression **du moteur**, joués avec un circuit Supérieur → RH → Direction configuré dans le test ; le circuit seedé, lui, suit le CDC. Ce changement de comportement est annoncé à la RH ;
+  - les contrats d'API de `TempsPresencesCongeController` sont conservés (`/demandes/a-valider`, `/valider`, `/refuser`).
+- **Deuxième cas** : les bons d'entrée et de sortie, avec les circuits du CDC §8.10 : par exemple entrée d'achat = magasinier → Direction, sortie casse / perte / don = magasinier (photo et motif) → Direction. Au lot 1, le type de bon existant (`TypeSortie`, catégories d'entrée) sert de `sousType` ; les étapes qui supposent des pièces du lot 3 (besoins du site relevés par le superviseur, préparation) sont seedées mais n'agissent qu'au lot 3. **Écart avec l'existant** : un bon validé par le magasinier attend désormais la Direction avant de devenir `EFFECTIF`. Les routes `/valider` et `/refuser` restent, les transitions invalides restent en **409** (contrat figé, CLAUDE.md Stock 7.4), et la réponse indique l'étape en cours.
 
 **Écarté.** Moteur BPMN (Flowable, Camunda) : poids, base relationnelle requise, et circuits simples ; un enum de niveaux par module : la situation actuelle.
 
-**Conséquences.** Les seuils et les étapes réels sont une décision de la Direction (Q13). Le lot 1 livre le moteur et deux types de pièce. Les autres pièces (paie, caisse, achats) s'y branchent dans leur lot.
+**Conséquences.** Les étapes de départ viennent du CDC ; la Direction les ajuste ensuite dans Paramètres et accès › Circuits de validation, sans développement. Le lot 1 livre le moteur et deux types de pièce. Les autres pièces (paie, caisse, achats) s'y branchent dans leur lot.
 
-### D11 — Connexion agent par téléphone et code à 4 chiffres
+### D11 — Connexion agent : téléphone, code choisi, appareil lié
 
 **Contexte.** La connexion actuelle se fait par e-mail et mot de passe (`back:controllers/LoginController.java`). Aucun SMS (F013, audit §5). Le code à 4 chiffres existant (`DossierEmploye.agentId`) est le **code de pointage**, saisi sur un kiosque partagé et visible des collègues : il ne doit pas devenir un secret de connexion.
+
+Le CDC tranche le mode de connexion (Q9) : « l'agent s'y connecte avec son numéro de téléphone et un code à 4 chiffres choisi à la première connexion (le SMS porte un code d'activation) ; le même compte sert au pointage QR » (§13.2) ; « un compte agent est lié à un seul téléphone » (§6.3 « Anti-fraude ») ; passerelle SMS « d'un opérateur sénégalais », WhatsApp en option (§14).
 
 **Décision.**
 - Interface **`FournisseurSms`** (`ResultatEnvoi envoyer(String numeroE164, String message, String reference)`) :
   - implémentation **`FournisseurSmsFactice`** active par défaut (`sms.fournisseur=factice`) : elle écrit dans `sms_envoyes` (numéro, message, date) et **n'envoie rien**. Un écran de développement, profil non-prod et droit `parametres.journaux`, affiche les SMS « envoyés » ;
   - en prod, le démarrage est refusé si `sms.fournisseur=factice` sans drapeau explicite, sur le modèle de `SecretsRequisVerificateur` ;
-  - un vrai fournisseur viendra dans une classe à part, choisie par propriété (Q3).
-- **Envoi** toujours via notifications et outbox (D14), jamais dans la transaction. Nouvel essai géré par le dispatcher.
-- **Activation** :
-  1. l'import (D13) ou la fiche employé crée un compte `AGENT` (profil `AGENT`, seul droit `monEspace.*` en LECTURE) ;
-  2. un **code de connexion à 4 chiffres** est tiré par `SecureRandom`, distinct de `agentId` (Q9), puis **haché** (BCrypt) ;
-  3. le SMS d'activation part avec le code. `mustChangeCode` est facultatif (**à confirmer** : l'agent choisit-il son code ?).
-- **Connexion** `POST /api/agent/connexion {telephone, code}` :
-  - numéro normalisé E.164 (`+221` par défaut, paramètre), **5 échecs ⇒ verrouillage 15 min**, puis renvoi d'un nouveau code par SMS sur demande (`POST /api/agent/code-oublie`, réponse identique que le numéro existe ou non, comme `ResetPasswordService` au lot 0) ;
-  - limite de débit par IP et par téléphone, réutilisant le principe de `back:services/pointage/PointageLimiteurDebit.java`.
-- **Jeton agent** : `type=AGENT`. Toute route hors `/api/moi/**` refuse ce type (règle globale dans `Droits`, plus un test qui parcourt les routes comme `RoutesPubliquesIT`).
-- Routes publiques nouvelles : `POST /api/agent/connexion`, `POST /api/agent/code-oublie`. Elles sont ajoutées à `SecurityConfig` **et** à la liste blanche de `RoutesPubliquesIT`.
+  - la passerelle de l'opérateur viendra dans une classe à part, choisie par propriété (Q3). WhatsApp serait une seconde implémentation de la même interface.
+- **Envoi** toujours via notifications et outbox (D14), jamais dans la transaction. Nouvel essai géré par le dispatcher. Le texte d'un SMS ne contient jamais le code de connexion choisi, seulement un code d'activation.
+- **Cycle de vie du compte agent** :
+  1. **Création** : la RH crée le dossier, ou l'importe (D13). L'événement `EmployeCree` crée le compte `AGENT` (CDC §13.1 : « son compte Agent est créé tout seul »), état `EN_ATTENTE_ACTIVATION`, profil `AGENT` (seul droit `monEspace.*` en LECTURE, données de l'agent seulement).
+  2. **Code d'activation** : 6 chiffres tirés par `SecureRandom`, **haché**, à usage unique, valable 72 h (paramètre daté), envoyé par SMS. Un nouvel envoi invalide le précédent. Six chiffres et non quatre : ce code circule par SMS et n'est pas mémorisé, il peut donc être plus long.
+  3. **Première connexion** `POST /api/agent/activation {telephone, codeActivation, codeChoisi, cleAppareil}` :
+     - l'agent **choisit** son code à 4 chiffres. Sont refusés : les codes triviaux (4 chiffres identiques, suites croissantes ou décroissantes), le code égal à son `agentId` de kiosque, et le code égal aux 4 derniers chiffres de son téléphone ;
+     - le code choisi est haché (BCrypt) dans `codeConnexionHash` ;
+     - **liaison de l'appareil** : la PWA génère au navigateur une paire de clés ECDSA P-256 **non extractible** (WebCrypto, conservée dans IndexedDB) et envoie la clé publique. Le compte enregistre `appareil {clePublique, empreinte (sha256 de la clé), libelle (user-agent abrégé), lieLe}` ;
+     - le compte passe `ACTIF`.
+- **Connexion** `POST /api/agent/connexion {telephone, code, defi, signature}` :
+  - `defi` est un nonce à usage unique obtenu par `POST /api/agent/defi {telephone}` (valable 2 min). La PWA le signe avec la clé de l'appareil : sans **ce téléphone-là**, le bon code ne suffit pas ;
+  - numéro normalisé E.164 (`+221` par défaut, paramètre) ;
+  - **3 échecs ⇒ blocage 15 min** (D6, CDC §13.1 et §14), que l'échec porte sur le code ou sur la signature. Une signature d'un autre appareil va au journal des accès avec le motif `APPAREIL_INCONNU` ;
+  - limite de débit par IP et par téléphone, sur le principe de `back:services/pointage/PointageLimiteurDebit.java`.
+- **Code oublié** `POST /api/agent/code-oublie {telephone}` : nouveau code d'activation par SMS, réponse identique que le numéro existe ou non (comme `ResetPasswordService` au lot 0). La réactivation exige la signature de l'appareil déjà lié : un code oublié ne change pas de téléphone.
+- **Changement de téléphone**, ou données du navigateur effacées (la clé est perdue) : action de la RH ou du superviseur, `POST /api/comptes/{id}/reinitialiser-appareil {motif}`. Elle délie l'appareil, remet le compte en `EN_ATTENTE_ACTIVATION` et renvoie un code d'activation **au numéro du dossier**. Journalisée.
+- **Jeton agent** : `type=AGENT`, plus l'empreinte de l'appareil. Toute route hors `/api/moi/**` refuse ce type (règle globale dans `Droits`, plus un test qui parcourt les routes comme `RoutesPubliquesIT`). La durée de session des agents est un paramètre daté, distinct de celle des comptes de bureau (F018).
+- Routes publiques nouvelles : `POST /api/agent/defi`, `/activation`, `/connexion`, `/code-oublie`. Elles sont ajoutées à `SecurityConfig` **et** à la liste blanche de `RoutesPubliquesIT`.
+- **Anticipation du lot 2, sans implémentation au lot 1** :
+  - le pointage QR sera une route authentifiée de Mon espace (`POST /api/moi/pointages`), qui exigera le jeton AGENT **et** une signature, par la clé de l'appareil, du contenu du scan (jeton du QR de pointage du local, heure, position GPS). C'est la règle « un compte agent est lié à un seul téléphone » du CDC §6.3. Une signature se calcule sans réseau, ce qui reste compatible avec le pointage hors ligne « différé » du même §6.3 ;
+  - le PIN de kiosque disparaîtra alors : `DossierEmploye.agentId`, la route publique `POST /api/pointages` et `PointageLimiteurDebit` seront retirés au lot 2, avec la décision « quelle source fait foi » (§2.2). Au lot 1, **rien ne s'authentifie par `agentId`** et le kiosque continue de fonctionner tel quel ;
+  - le pointage par le chef d'équipe pour les agents sans smartphone (CDC §6.3) sera un droit du compte superviseur, borné par son périmètre (D9), au lot 2.
 
-**Écarté.** Réutiliser `agentId` : secret partagé de fait ; lien magique par SMS : plus coûteux en SMS, inutilisable sur un téléphone partagé ; OTP à chaque connexion : un SMS par connexion, coût récurrent (**à revoir** avec le choix du fournisseur).
+**Écarté.** Code tiré par le serveur : le CDC veut un code choisi ; réutiliser `agentId` : secret partagé de fait ; secret d'appareil stocké en clair dans le navigateur : copiable vers un autre téléphone ; empreinte du navigateur (*fingerprinting*) : instable sur Android d'entrée de gamme, et donnée personnelle de plus ; lien magique par SMS : plus coûteux en SMS, inutilisable sur un téléphone partagé ; OTP à chaque connexion : un SMS par connexion, coût récurrent.
 
-**Conséquences.** 4 chiffres donnent 10 000 combinaisons : la sécurité repose **entièrement** sur le verrouillage et la limite de débit, qui sont testés. Mon espace ne montre que des données de l'agent lui-même (`employeId` du jeton).
+**Conséquences.** 4 chiffres donnent 10 000 combinaisons : la sécurité repose sur le blocage après 3 échecs, la limite de débit **et** la possession du téléphone lié. Les trois sont testés. Un changement de téléphone coûte une action RH et un SMS. Mon espace ne montre que des données de l'agent lui-même (`employeId` du jeton).
 
 ### D12 — Fichiers et pièces jointes
 
@@ -429,15 +511,27 @@ Il n'existe ni annulation d'import (F015), ni export Word, ni filtrage des expor
 **Contexte.** Aucune purge ni anonymisation (F019). Aucune sauvegarde dans les dépôts : seulement le volume Docker `mongo_data` (F020, `docker-compose.yml`). Mongo est sans authentification et le port 27018 publié (lot 0 §8). L'existence d'une sauvegarde hors dépôt sur le serveur n'est pas connue (audit §4.6 Q11).
 
 **Décision.**
-- **Catalogue de conservation** : paramètres datés (D7) `conservation.<categorie>` pour les ex-employés (identité, contrat, paie), les candidats, les positions GPS des pointages, les journaux d'accès et d'audit, les SMS factices, les événements traités et les fichiers par catégorie. **Durées à fixer par la Direction** avec son conseil (loi sénégalaise 2008-12 sur les données personnelles et obligations sociales, **à confirmer**, Q8).
+- **Catalogue de conservation** : paramètres datés (D7) `conservation.<categorie>`. Valeurs de départ tirées du CDC §14 « Conservation et archivage » :
+
+  | Catégorie | Durée de départ | Source | Au terme |
+  |---|---|---|---|
+  | Pièces de gestion et écritures comptables | 10 ans après la clôture de l'exercice | CDC §14 (Acte uniforme OHADA relatif au droit comptable) | archive longue durée, jamais purgées avant |
+  | Positions GPS et photos de pointage | 12 mois | CDC §14 (exemple déclaré à la CDP) | GPS tronqué, photo effacée |
+  | Justificatifs médicaux | durée de l'absence + délai légal (**délai à fournir** par le conseil juridique) | CDC §14 | fichier effacé, absence conservée sans motif médical |
+  | Sanctions | selon le Code du travail (**durée à fournir**) | CDC §14, §5.10 | anonymisation |
+  | Ex-employés (identité, contrat, paie), candidats, journaux d'accès et d'audit | **à fixer** par la Direction (Q8, reste) | — | anonymisation |
+  | SMS factices, événements traités, fichiers orphelins | durées techniques proposées (30 j, 10 ans, 7 j) | — | suppression (liste blanche D4) |
+
+  Tant qu'une durée vaut « à fixer », le `PurgeService` ne touche pas à la catégorie. Les durées retenues sont celles **déclarées à la CDP** (loi 2008-12, CDC §14 « Données personnelles »), déclaration qui reste à la charge de la Direction.
 - **`PurgeService`** `@Scheduled` mensuel :
   - il **anonymise** et ne supprime pas : les pièces restent, l'identité est remplacée par un pseudonyme stable, les coordonnées GPS sont tronquées, les fichiers d'identité sont archivés puis effacés de GridFS ;
   - il trace chaque passage dans `purges` (`{le, categorie, critere, nombre, idsAffectes (hachés)}`) et dans le journal d'audit ;
   - mode « à blanc » qui produit le rapport sans écrire, obligatoire avant le premier vrai passage ;
   - c'est la seule exception documentée à la règle 5 pour les fichiers.
 - **Sauvegardes** (actions d'exploitation, scriptées dans le dépôt sous `ops/sauvegarde/`) :
-  - `mongodump --oplog --gzip` quotidien, chiffrement (`age` ou `gpg`, **à confirmer**), copie **hors serveur** (stockage à désigner, Q16), rotation 7 jours / 4 semaines / 12 mois ;
-  - **test de restauration mensuel** scripté : restauration dans un conteneur jetable, puis contrôles de comptage et d'intégrité (`IndexesAttendusIT` en mode lecture), compte rendu horodaté ;
+  - `mongodump --oplog --gzip` **quotidien**, chiffrement (`age` ou `gpg`, choix technique de 1l), copie **hors du serveur principal** (stockage à désigner, Q16), **conservée 30 jours** (CDC §14 « Sauvegarde ») ;
+  - **test de restauration trimestriel** au minimum (CDC §14), scripté : restauration dans un conteneur jetable, puis contrôles de comptage et d'intégrité (`IndexesAttendusIT` en mode lecture), compte rendu horodaté ;
+  - **archive longue durée**, distincte de la sauvegarde (CDC §14) : à la clôture de chaque exercice, un export chiffré et signé (sha256) des pièces et écritures de l'exercice, conservé 10 ans sur un support séparé, avec sa procédure de relecture ;
   - authentification Mongo activée et port non publié, en même temps que le replica set (1a).
 
 **Écarté.** Suppression physique des ex-employés : elle casserait les pièces (bulletins, déclarations) à conserver légalement ; snapshot de disque du VPS seul : non testé, et pas hors site.
@@ -446,10 +540,10 @@ Il n'existe ni annulation d'import (F015), ni export Word, ni filtrage des expor
 
 ### D16 — Multi-entreprises
 
-**Contexte.** Aucun `tenantId` (F021). Valeurs Cleanic en dur : e-mail HTML de `ResetPasswordService`, grille « Grille générique Cleanic » de `DataLoader`, CORS dans `back:security/OriginesAutorisees.java`, expéditeur de `EmailService`. La décision de la Direction (propriété du logiciel, revente) est en attente (Q4).
+**Contexte.** Aucun `tenantId` (F021). Valeurs Cleanic en dur : e-mail HTML de `ResetPasswordService`, grille « Grille générique Cleanic » de `DataLoader`, CORS dans `back:security/OriginesAutorisees.java`, expéditeur de `EmailService`. Le CDC §14 exige des « données cloisonnées par entreprise, pour la commercialisation future de PointIC », et le CDC §5.7 un paramétrage par entreprise (identité, NINEA, numéros IPRES et CSS de l'employeur, organisation…) « de sorte qu'un nouveau client démarre sans développement ». La propriété du logiciel et le calendrier de revente restent en attente (Q4).
 
 **Décision (coût minimal aujourd'hui, porte ouverte).**
-- **Une base par entreprise, donc un déploiement par entreprise.** Aucun champ `entrepriseId` au lot 1.
+- **Une base par entreprise, donc un déploiement par entreprise.** C'est le cloisonnement le plus fort demandé par le CDC §14. Aucun champ `entrepriseId` au lot 1.
 - Toutes les valeurs propres à Cleanic deviennent des **paramètres** (D7 : raison sociale, logo, expéditeur, préfixe téléphonique, en-têtes de PDF) ou des variables d'environnement (origines CORS, URL publique).
 - Règle de conception, vérifiée en revue : aucune requête ne suppose qu'il n'existe qu'**une** entreprise dans le monde. Par exemple, pas de singleton nommé « Cleanic ». Les compteurs, les paramètres et les profils sont déjà « par base ».
 - Si la Direction choisit plus tard une base partagée : une ChangeUnit ajoute `entrepriseId` partout (valeur unique pour les données existantes), plus un filtre global par aspect sur `MongoTemplate`. Le coût est connu et différé.
@@ -466,8 +560,10 @@ Il n'existe ni annulation d'import (F015), ni export Word, ni filtrage des expor
 
 | Collection | Champs clés | Références | Index |
 |---|---|---|---|
-| `comptes` | type, identifiants.email, identifiants.telephone, employeId, profilIds, actif, dateExpiration, verrouilleJusqua, version | employeId → `dossiers_employes`, profilIds → `profils` | email unique sparse ; telephone unique sparse ; employeId unique sparse ; (actif, type) |
-| `profils` | code, libellé, droits{}, droitsSensibles[] | — | code unique |
+| `comptes` | type, modeConnexion, identifiants.email, identifiants.telephone, employeId, profilIds, perimetre, appareil.empreinte, statut d'activation, actif, dateExpiration, verrouilleJusqua, version | employeId → `dossiers_employes`, profilIds → `profils`, perimetre → `sites_clients`, `magasins` | email unique sparse ; telephone unique sparse ; employeId unique sparse ; appareil.empreinte unique sparse ; (actif, type) |
+| `profils` | code, libellé, nature (METIER, TECHNIQUE), droits{}, droitsSensibles[], doubleAuthentification | — | code unique |
+| `codes_usage_unique` | compteId, usage (ACTIVATION, DEUXIEME_FACTEUR, DEFI), hash, expireLe, essais | compte | (compteId, usage) ; expireLe (TTL) |
+| `magasins` | code, libellé, type, siteId, actif, version | site | code unique ; siteId sparse |
 | `compteurs_pieces` | _id `TYPE-EXERCICE`, compteur | — | _id |
 | `registre_pieces` | type, numero, exercice, statut, siteId, montant, amont[], aval[] | pièce (type + id), sites | (type, numero) unique sparse ; (type, pieceId) unique ; siteId ; statut |
 | `evenements_domaine` | type, agregatType, agregatId, statut, prochainEssai, survenuLe | agrégat | (statut, prochainEssai) ; (agregatType, agregatId, survenuLe) ; survenuLe |
@@ -485,16 +581,16 @@ Il n'existe ni annulation d'import (F015), ni export Word, ni filtrage des expor
 | `articles` (ex `stockv2_produits`) | code, libellé, famille, nature, unité, categorieId, fournisseurPrincipalId, actif, version | catégorie, fournisseur | code unique ; categorieId ; (famille, actif) |
 | `clients` | code, raisonSociale, ninea, statut, actif, version | — | code unique ; ninea unique sparse ; raisonSociale (texte) |
 | `fournisseurs` | code, raisonSociale, ninea, actif, version | — | code unique ; ninea unique sparse ; raisonSociale (texte) |
-| `contrats_clients` | numero, clientId, siteIds[], dateDebut, dateFin, statut | client, sites | numero unique ; clientId ; siteIds |
+| `contrats_clients` | numero, clientId, sites[{siteId, effectifPrevu}], montantMensuelHt, dateDebut, dureeMois, reconduction, preavisJours, delaiPaiementJours, statut, penalite?, volumeHeures? | client, sites | numero unique ; clientId ; sites.siteId |
 | `migration_rapports` | migrationId, executeLe, comptages, rejets[] | — | (migrationId, executeLe) |
 | `sms_envoyes` (factice) | numero, message, le, reference | — | le (TTL selon paramètre) |
 | `purges` | le, categorie, nombre | — | le |
 
 Champs ajoutés aux collections conservées :
-- `dossiers_employes` : `telephone` normalisé (index unique sparse), `affectations[].siteId`, `version`, `idsHistoriques` (ids des fiches `employes` / `employes_complet` fusionnées) ;
-- `sites_clients` : `clientId`, `contratClientId`, `type`, `version` ; création de l'index unique `code` ;
-- `categories_professionnelles` : versions datées (D7) ;
-- `production_chimie_matieres_premieres` et `produits_phyto` : `articleId` ;
+- `dossiers_employes` : `telephone` normalisé (index unique sparse), `affectations[].siteId`, `modePaiement {mode, compte}`, `numeroIpres`, `personneAPrevenir`, `version`, `idsHistoriques` (ids des fiches `employes` / `employes_complet` fusionnées) ;
+- `sites_clients` : `clientId` (obligatoire), `contratClientId`, `superviseurId`, `version` ; champs réservés au lot 2 `qrPointage`, `qrAppreciation` ; création de l'index unique `code`. **Pas** de champ `type` (Q6) ;
+- `categories_professionnelles` : versions datées (D7) ; champs `numeroIpres`, `numeroCss`, `rib`, `banque` retirés après la migration §3.5 ;
+- `production_chimie_matieres_premieres` et `produits_phyto` : `articleId` ; `terrain_materiel` : `articleId` obligatoire ;
 - `stockv2_bons_entree`, `production_chimie_mouvements_stock` : `fournisseurId` + instantané ;
 - `stockv2_bons_sortie` (`destinataire.clientId`), `stockv2_chantiers` : `clientId` + instantané ;
 - toutes les pièces : bloc `PieceBase` (D4).
@@ -514,8 +610,8 @@ Champs ajoutés aux collections conservées :
 | `stockv2_produits` | `back:entities/stockv2/ProduitStock.java` | **Renommée** `articles` (ids conservés) ; photo et fiche technique vers GridFS |
 | `production_chimie_matieres_premieres` | `back:entities/productionchimie/MatierePremiere.java` | **Conservée en extension** (+ `articleId`) ; code, nom, unité, fournisseur lus depuis l'article ; `quantiteEnStock` provisoire |
 | `produits_phyto` | `back:entities/terrain/ProduitPhytosanitaire.java` | **Conservée en extension** (+ `articleId`) |
-| `terrain_materiel` | `back:entities/terrain/Materiel.java` | **Conservée**, hors référentiel article (à confirmer) |
-| `categories_professionnelles` | `back:entities/rh/CategorieProfessionnelle.java` | **Conservée**, versions datées ; RIB / IPRES / CSS déplacés vers l'employé (à confirmer, Q15) |
+| `terrain_materiel` | `back:entities/terrain/Materiel.java` | **Conservée** comme parc (unités numérotées), **+ `articleId` obligatoire** vers un article de famille MATERIEL (Q12, §3.3) |
+| `categories_professionnelles` | `back:entities/rh/CategorieProfessionnelle.java` | **Conservée**, versions datées ; RIB et banque déplacés vers le mode de paiement de l'employé, numéros IPRES et CSS de l'employeur vers les paramètres d'entreprise (Q15, §3.5) |
 | `contrats` (travail) | `back:entities/rh/Contrat.java` | **Conservée** ; fichier vers GridFS |
 | `stockv2_compteurs`, `production_chimie_compteurs_of`, `production_chimie_compteurs_lots`, `compteurs_terrain` | `CompteurStockService`, `CompteurOfService`, `CompteurLotService`, `CompteurTerrainService` | **Remplacées** par `compteurs_pieces` pour les nouveaux numéros ; anciennes collections conservées en lecture. Le format des lots (`AAAAMMJJ-NNN`) reste au lot 8 (F069). |
 | `stockv2_suppressions` | `back:entities/stockv2/SuppressionStockLog.java` | **Conservée en lecture** ; plus alimentée (annulation tracée, D4) |
@@ -550,7 +646,7 @@ Algorithme, pour chaque document de `employes_complet`, puis de `employes` :
 
 Doublons internes de `dossiers_employes` (index uniques jamais créés, D3) : la recherche de doublons sur `matricule`, `agentId` et téléphone **précède** tout, sous la forme d'un rapport et de décisions humaines.
 
-**Comptes ↔ dossiers** : `utilisateur.email` normalisé = `dossier.email` normalisé, avec exactement un dossier. Sinon le rapport conduit à une décision (`LIER` à un dossier, ou compte `TECHNIQUE` / `EXTERNE` sans employé). Le compte SUPERADMIN de `login` (`diarra.niang@…`, `DataLoader.seedSuperadmin`) est relié à son dossier s'il existe, sinon il devient un compte `INTERNE` à relier (**à confirmer**).
+**Comptes ↔ dossiers** : `utilisateur.email` normalisé = `dossier.email` normalisé, avec exactement un dossier. Sinon le rapport conduit à une décision (`LIER` à un dossier, ou compte `TECHNIQUE` / `EXTERNE` sans employé). Le compte SUPERADMIN de `login` (`diarra.niang@…`, `DataLoader.seedSuperadmin`) est relié à son dossier s'il existe, sinon il devient un compte `INTERNE` à relier ; ses profils finaux dépendent de Q1 (D9, profil transitoire).
 
 Vérification : tout compte INTERNE ou AGENT a un `employeId` valide ; chaque id de `employes_complet` et `employes` figure dans un `idsHistoriques` ou dans une décision `IGNORER` ; les `employeId` des pièces RH, des affectations terrain et des bons pointent tous vers un dossier.
 
@@ -564,26 +660,28 @@ Algorithme :
 - zéro ou plusieurs sites : rejet `SITE_INCONNU` / `SITE_AMBIGU`, avec la liste des candidats et le nombre d'affectations concernées. Les décisions se prennent **par libellé** (un « Agence Plateau » est tranché une fois pour toutes ses occurrences).
 - `siteAffecte` reste un champ **dérivé** de lecture, recalculé depuis les `siteId` (CLAUDE.md, mémoire « Affectations multi-sites »).
 
-La confusion « agence / site client » (audit §4.6 Q7) est tranchée **avant** cette migration (Q6). Si une agence est un objet distinct, une liste `type=AGENCE` est créée d'abord.
+La confusion « agence / site client » (audit §4.6 Q7) est tranchée par le CDC (Q6) : il n'y a que des **locaux** (`sites_clients`), rattachés à un client. Un libellé « Agence Plateau » désigne un local (par exemple l'agence d'une banque cliente) et se rattache à lui par le fichier de décisions ; aucun objet agence n'est créé. Un libellé qui désigne en fait un dépôt Cleanic ou un siège (ni local servi, ni client) est rejeté `SITE_NON_LOCAL` et tranché à la main (`IGNORER`, ou création d'un local d'un client interne « Cleanic »).
+
+Les sites existants sans client reçoivent leur `clientId` par §3.4 (un client par `raisonSociale` validée), **avant** que `clientId` devienne obligatoire.
 
 Vérification : 0 affectation active sans `siteId` ; l'effectif par site avant (par libellé) et après (par id) est identique sur la copie.
 
 ### 3.3 Articles : 5 listes vers le catalogue unique
 
 Ordre et algorithme :
-1. **`stockv2_produits` → `articles`** : renommage, ids conservés. Aucune référence à réécrire (mouvements, bons, états, historique de coût).
+1. **`stockv2_produits` → `articles`** : renommage, ids conservés. Aucune référence à réécrire (mouvements, bons, états, historique de coût). **Famille** posée depuis `TypeProduit` (Q12, CDC §8.1) : `MATIERE_PREMIERE` → matières premières, `PRODUIT_FINI` → produits finis, `CONSOMMABLE` → consommables, `EPI` → EPI et tenues. Les familles **emballages** et **matériel** n'ont pas d'équivalent : un article actuel classé ailleurs mais qui en relève (bidon vide, étiquette, monobrosse) n'est reclassé que par le fichier de décisions, sur une liste proposée par recherche de mots-clés dans le libellé. Nature : `DURABLE` pour la famille matériel, `CONSOMMABLE` sinon, sauf décision.
 2. **`produits`** (legacy, sans écran) : rapprochement par `codeProduit` = `articles.code` (normalisé), sinon par libellé normalisé. Trouvé : lien historique seulement. Non trouvé : rejet `ARTICLE_LEGACY_ORPHELIN`, puis décision `CREER` (article inactif) ou `IGNORER`. Ensuite, archivage.
 3. **`production_chimie_matieres_premieres`** :
    - par `code`, puis par libellé normalisé, contre `articles` ;
    - trouvé avec unité identique : `articleId` posé ;
    - trouvé avec unité différente : rejet `UNITE_DIVERGENTE` (kg contre L, sans densité, voir audit F071) ;
-   - non trouvé : **création** de l'article (famille matière première, **à confirmer** Q12), `articleId` posé ;
+   - non trouvé : **création** de l'article (famille matières premières, ou emballages selon la catégorie de la matière), `articleId` posé ;
    - le code ou le libellé d'un autre article déjà pris donne un rejet `CONFLIT_CODE`.
    - Les références des formulations, OF et mouvements chimie (`matierePremiereId`) **ne changent pas**.
 4. **`produits_phyto`** : même algorithme sur `nomCommercial`, création si absent.
-5. `terrain_materiel` : pas de migration (D8).
+5. **`terrain_materiel`** (Q12) : chaque unité du parc reçoit un `articleId` de famille matériel. Regroupement **proposé** par type et désignation normalisés (« Monobrosse 17" » ×4 donne un seul article, 4 unités), sans rien écrire ; validation humaine par l'Exploitation et le Stock ; puis création des articles et pose des `articleId`. Les champs du parc (numéro, date et valeur d'achat, affectation, entretiens) restent sur l'unité. Une unité sans décision fait échouer la migration (§3.0, règle 3), puisque l'`articleId` devient obligatoire.
 
-Vérification : toute matière première et tout produit phyto actifs ont un `articleId` existant ; aucun code d'article en double ; somme des `quantiteEnStock` chimie inchangée (non migrée) ; valeur du stock Stock v2 inchangée (`ValeurStockService` avant/après sur la copie).
+Vérification : toute matière première et tout produit phyto actifs ont un `articleId` existant ; toute unité du parc a un `articleId` de famille matériel ; aucun code d'article en double ; somme des `quantiteEnStock` chimie inchangée (non migrée) ; valeur du stock Stock v2 inchangée (`ValeurStockService` avant/après sur la copie).
 
 ### 3.4 Fournisseurs et clients en texte libre
 
@@ -602,8 +700,13 @@ Vérification : 0 document postérieur à la migration avec un fournisseur ou cl
 
 ### 3.5 Grille des salaires et contrats clients
 
-- **Grille** : chaque `categories_professionnelles` reçoit une version datée `dateEffet = 01/01/2000` portant les montants actuels (D7). Si Q15 est validée, RIB / IPRES / CSS sont recopiés de la grille vers **chaque employé** rattaché par `categorieCode`, uniquement si le champ de l'employé est vide. Un conflit (valeurs différentes déjà présentes) est rejeté.
-- **Contrats clients** : aucune source dans le code. Création manuelle ou par import (D13) après validation de Q11.
+- **Grille** : chaque `categories_professionnelles` reçoit une version datée `dateEffet = 01/01/2000` portant les montants actuels (D7, écriture rétroactive permise parce que c'est une migration).
+- **RIB, banque, IPRES, CSS de la grille** (Q15) : le code les appelle « champs perso du bulletin », mais une valeur portée par une grille vaut pour tous ses employés. La migration ne devine pas leur nature :
+  1. rapport des valeurs distinctes par grille, avec le nombre d'employés rattachés par `categorieCode` ;
+  2. décision par valeur : `EMPLOYEUR` (numéro IPRES ou CSS de Cleanic → paramètre d'entreprise, CDC §5.7), `EMPLOYE` (recopiée vers chaque employé rattaché **dont le champ est vide** ; RIB et banque → `modePaiement {VIREMENT, compte}`), ou `IGNORER` ;
+  3. un conflit (valeur différente déjà présente sur l'employé) est rejeté `CONFLIT_CHAMP` ;
+  4. les champs de la grille sont retirés une fois la décision appliquée, et `CalculPaieService` lit l'employé et les paramètres d'entreprise.
+- **Contrats clients** : aucune source dans le code. Saisie ou import (D13) à partir de la liste des clients, contrats et sites validée par la Direction (CDC §14 « Reprise des données », §16 « Liste définitive des clients, contrats et sites »). Tant qu'elle n'est pas faite, `exploitation.site.contratObligatoire` reste à `false` (D8).
 
 ### 3.6 Fichiers en `byte[]`
 
@@ -662,7 +765,8 @@ Chaque sous-branche est créée depuis `refonte/v3` et fusionnée dans `refonte/
   - `SoldeConcurrentIT` : 50 sorties concurrentes sur un stock de 10, solde jamais négatif ;
   - `MigrationsIT` : base vide, toutes les ChangeUnits, puis rejeu sans effet. Base « existante » (jeu représentatif), baseline sans rejouer les 12 runners ;
   - `IndexesAttendusIT` vert ; détection de doublons qui fait échouer la ChangeUnit d'index sur un jeu piégé ;
-  - `docker-compose up` démarre un replica set initialisé.
+  - `docker-compose up` démarre un replica set initialisé ;
+  - compte rendu du spike Mongock (Q-C) joint à la sous-branche : Mongock retenu, ou repli sur l'exécuteur maison avec la raison.
 - **Taille** : M.
 - **Bloquée par** : Q16 (accès VPS) pour la mise en production, pas pour le développement.
 
@@ -672,14 +776,14 @@ Chaque sous-branche est créée depuis `refonte/v3` et fusionnée dans `refonte/
 - **Lignes** : F002, F003, F004 (et base de F009).
 - **Dépendances** : 1a.
 - **Critères d'acceptation** :
-  - `NumerotationIT` : 100 validations concurrentes donnent 100 numéros consécutifs sans trou ; validation en échec, numéro non consommé ; changement d'exercice, repart à 1 ;
+  - `NumerotationIT` : 100 validations concurrentes donnent 100 numéros consécutifs sans trou ; validation en échec, numéro non consommé ; changement d'exercice au 1er janvier (heure de Dakar), repart à `0001` ; passage de `9999` à `10000` sans erreur ni troncature ;
   - `RoutesSuppressionIT` : 0 route DELETE hors liste blanche ;
   - test ArchUnit des appels `delete*` ;
   - bons de stock (premier type porté) : annulation d'un bon EFFECTIF qui génère les mouvements inverses par événement, sans suppression ;
   - `OutboxIT` : événement écrit seulement si la transaction est validée ; consommateur rejoué 2 fois, effet une seule fois ; échec répété, `EN_ERREUR` après 10 tentatives ;
   - `JournalAuditIT` : chaque transition de pièce a sa ligne, champs sensibles masqués.
 - **Taille** : L.
-- **Bloquée par** : Q7 (exercice, continuité de la numérotation).
+- **Bloquée par** : aucune (Q7 tranchée par le CDC §3).
 
 ### 1c — Paramètres datés et listes de choix
 
@@ -687,7 +791,8 @@ Chaque sous-branche est créée depuis `refonte/v3` et fusionnée dans `refonte/
 - **Lignes** : F006, F021 (paramétrage des valeurs propres à l'entreprise).
 - **Dépendances** : 1a ; 1b (audit des saisies).
 - **Critères d'acceptation** :
-  - `ParametreServiceTest` : lecture à date (avant, à et après la date d'effet), version passée immuable (409) ;
+  - `ParametreServiceTest` : lecture à date (avant, à et après la date d'effet), version atteinte immuable (409), **date d'effet passée refusée par l'API (422) et acceptée par une ChangeUnit** ;
+  - valeurs du CDC §13.4 qui diffèrent de l'existant écrites en versions futures, valeurs actuelles inchangées le jour de la mise en service ;
   - migration des 5 singletons et des 3 propriétés `application.yml` : valeurs lues identiques avant et après (test par clé) ;
   - bulletin recalculé pour un mois passé avec les taux de ce mois (test sur 2 versions) ;
   - front : plus aucune valeur de seuil dans `constants/stock*.ts` (test de grep en CI) ;
@@ -706,12 +811,15 @@ Chaque sous-branche est créée depuis `refonte/v3` et fusionnée dans `refonte/
   - `NiveauxDroitsIT` : LECTURE refusée en écriture (403), SAISIE refusée en validation, TOUT autorise l'annulation ;
   - `MasquageSerialisationTest` : champ `@Sensible` à `null` et listé dans `_masques` sans le droit ;
   - `EmployeSortiIT` : sortie d'un employé, compte désactivé, jeton suivant en 403 ;
-  - `VerrouillageConnexionIT` : 5 échecs, verrouillage, journal ;
+  - `VerrouillageConnexionIT` : **3** échecs, verrouillage, journal ;
+  - `ProfilsDirectionAdminIT` : ADMIN gère comptes et profils mais reçoit 403 sur toute route métier ; DIRECTION lit tout et n'écrit nulle part ; un compte ne modifie pas ses propres droits ; seul un compte DIRECTION attribue DIRECTION ou un droit sensible ;
+  - `PerimetreIT` : un superviseur ne voit que les sites et agents de son périmètre ;
+  - `DonneesSanteIT` : motif médical visible par la RH et l'intéressé, « absent » pour les autres ;
   - `RafraichissementJetonIT` ;
   - les tests du lot 0 (`SecuriteITBase` et suivants) restent verts ;
   - front : écrans Profils et Comptes avec specs ; sidebar et `module.guard.ts` alimentés par `/api/moi/droits`.
 - **Taille** : L.
-- **Bloquée par** : Q1 (SUPERADMIN = Direction), Q2, Q14 (droits sensibles, 2FA).
+- **Bloquée par** : Q2 (qui reçoit le profil ADMIN). Q1 ne bloque pas : le profil transitoire `MIGRE-SUPERADMIN` garde l'existant jusqu'à la réponse.
 
 ### 1d — Référentiels employé et site (+ migration)
 
@@ -721,11 +829,11 @@ Chaque sous-branche est créée depuis `refonte/v3` et fusionnée dans `refonte/
 - **Critères d'acceptation** :
   - migrations §3.1 et §3.2 jouées sur la copie anonymisée avec 0 cas non résolu, rapport joint ;
   - `ReferentielEmployeIT` : un employé créé dans RH est lisible par Stock, Terrain et Chimie avec le masquage selon le profil ;
-  - `ReferentielSiteIT` : un site créé est sélectionnable dans RH (affectation par `siteId`), Stock et Terrain ;
+  - `ReferentielSiteIT` : un site créé est sélectionnable dans RH (affectation par `siteId`), Stock et Terrain ; création refusée sans `clientId` ; `contratObligatoire` respecté quand il est activé ;
   - index uniques `matricule`, `agentId`, `telephone`, `sites_clients.code` créés ;
   - `/api/employe-complet` absent (`RoutesPubliquesIT` et test de route).
 - **Taille** : L.
-- **Bloquée par** : Q5, Q6 (agence / site / local, magasins), Q10 (propriétaire du site).
+- **Bloquée par** : Q10 (qui crée la fiche site tant que le module Commercial n'existe pas). Q5 et Q6 sont tranchées par le CDC.
 
 ### 1e — Référentiel article unique (+ migration, stock chimie compris pour le catalogue)
 
@@ -737,9 +845,12 @@ Chaque sous-branche est créée depuis `refonte/v3` et fusionnée dans `refonte/
   - `ReferentielArticleIT` : un article créé une fois est visible dans Stock, dans la fiche matière première (Chimie) et dans les produits phyto ;
   - la formulation lit code, libellé et unité depuis l'article ;
   - valeur de stock et soldes chimie inchangés (tests de comparaison) ;
-  - collection `produits` archivée, `ProduitService` supprimé.
+  - collection `produits` archivée, `ProduitService` supprimé ;
+  - les 6 familles du CDC §8.1 en liste de choix, chaque article actif dans une famille ;
+  - parc : toute unité de `terrain_materiel` porte un `articleId` de famille matériel ; création d'une unité sans article refusée ;
+  - référentiel `magasins` avec `MAG-CENTRAL` et `MAG-ATELIER` ; magasin `DEPORTE` refusé sans `siteId`.
 - **Taille** : L.
-- **Bloquée par** : Q12 (familles), Q5.
+- **Bloquée par** : aucune (Q5, Q12 tranchées par le CDC).
 
 ### 1f — Référentiels client, fournisseur, contrat minimal, grille des salaires
 
@@ -753,7 +864,7 @@ Chaque sous-branche est créée depuis `refonte/v3` et fusionnée dans `refonte/
   - grille datée : bulletin d'un mois passé avec le salaire de base de ce mois ;
   - aucun nouveau document avec fournisseur ou client en texte seul (test de service).
 - **Taille** : M.
-- **Bloquée par** : Q11 (contrat), Q15 (RIB / IPRES / CSS).
+- **Bloquée par** : aucune (Q11, Q15 tranchées par le CDC). La saisie des contrats réels attend la liste validée par la Direction (CDC §16), pas le développement.
 
 ### 1i — Fichiers et pièces jointes
 
@@ -771,7 +882,7 @@ Chaque sous-branche est créée depuis `refonte/v3` et fusionnée dans `refonte/
 
 ### 1k — Notifications persistées et interface SMS
 
-- **Objectif** : D14, et l'interface plus le fournisseur factice de D11.
+- **Objectif** : D14, l'interface plus le fournisseur factice de D11, et la double authentification par SMS (D9).
 - **Lignes** : F008.
 - **Dépendances** : 1b (outbox), 1g (destinataires = comptes).
 - **Critères d'acceptation** :
@@ -779,6 +890,7 @@ Chaque sous-branche est créée depuis `refonte/v3` et fusionnée dans `refonte/
   - lu / non lu ;
   - panne SMTP : création d'un bon réussie et e-mail réessayé ;
   - `FournisseurSmsFacticeIT` : le SMS apparaît dans `sms_envoyes` ;
+  - `DoubleAuthentificationIT` : compte DIRECTION ou Finances sans le code SMS, pas de jeton ; code expiré ou 3 codes faux, refus et blocage ;
   - démarrage prod refusé en `factice` sans drapeau ;
   - cloche du header avec spec ; abonnements front morts retirés.
 - **Taille** : M.
@@ -790,13 +902,14 @@ Chaque sous-branche est créée depuis `refonte/v3` et fusionnée dans `refonte/
 - **Lignes** : F005.
 - **Dépendances** : 1b, 1g, 1k.
 - **Critères d'acceptation** :
-  - `MoteurCircuitTest` : auteur exclu (y compris par délégation), Direction en dernier exigée au-delà du seuil, délégation datée active ou expirée, circuit absent = 422 ;
+  - `MoteurCircuitTest` : auteur et bénéficiaire exclus (y compris par délégation) ; étape Direction toujours dernière, en mode `TOUJOURS`, `AU_DESSUS_DU_SEUIL` (montant, cas anormal) et `JAMAIS` ; valideur Direction sans `VALIDER_EN_DERNIER` refusé ; profil TECHNIQUE refusé comme valideur ; pièce née d'une pièce validée validée d'office ; délégation datée active ou expirée ; circuit absent = 422 ;
+  - congés : circuit seedé Superviseur → RH, avec Direction pour un bénéficiaire responsable ;
   - tests existants `CongeWorkflowService*` et `BonWorkflowServiceIT` verts **sans modification des assertions de contrat** ;
   - validation finale qui émet `PieceValidee` et notifie l'auteur ;
   - `GET /api/validations/a-traiter` agrégé congés + bons ;
   - écran de paramétrage des circuits et délégations avec spec.
 - **Taille** : L.
-- **Bloquée par** : Q1, Q13 (étapes et seuils réels).
+- **Bloquée par** : aucune (Q13 tranchée par le CDC §13). Q1 désigne qui porte le profil DIRECTION, sans bloquer le moteur.
 
 ### 1j — Import / export génériques et écrans allégés
 
@@ -822,10 +935,11 @@ Chaque sous-branche est créée depuis `refonte/v3` et fusionnée dans `refonte/
 - **Critères d'acceptation** (**test de recette du lot**) :
   - `RecetteLot1IT` : import de 20 agents par le modèle Excel, 20 comptes AGENT, 20 SMS dans le fournisseur factice. Chaque agent se connecte avec téléphone + code et n'accède qu'à `/api/moi/**` (toutes les autres routes renvoient 403, parcours automatique comme `RoutesPubliquesIT`) ;
   - un client, un site, un employé et un article créés une fois sont lus par chaque module, selon le profil ;
-  - `ConnexionAgentIT` : 5 échecs, verrouillage ; code oublié avec réponse identique ; code de pointage refusé comme code de connexion ;
+  - `ActivationAgentIT` : création du dossier, compte en attente, SMS d'activation ; activation avec code choisi ; codes triviaux, `agentId` et fin du téléphone refusés ; code d'activation expiré ou déjà utilisé refusé ;
+  - `ConnexionAgentIT` : **3** échecs, verrouillage ; bon code signé par un autre appareil refusé et journalisé ; défi rejoué refusé ; code oublié avec réponse identique ; réinitialisation de l'appareil par la RH ;
   - front : écran de connexion agent et Mon espace (profil, planning, soldes, bulletins validés) avec specs.
 - **Taille** : M.
-- **Bloquée par** : Q9 (code distinct), Q3 (en production).
+- **Bloquée par** : Q3 (en production seulement). Q9 tranchée par le CDC.
 
 ### 1l — Données personnelles, sauvegardes
 
@@ -837,7 +951,7 @@ Chaque sous-branche est créée depuis `refonte/v3` et fusionnée dans `refonte/
   - scripts `ops/sauvegarde/` testés en local (dump, chiffrement, restauration dans un conteneur, contrôles) ;
   - procédure `docs/exploitation/sauvegarde.md`.
 - **Taille** : M.
-- **Bloquée par** : Q8 (durées), Q16 (stockage hors serveur, accès VPS).
+- **Bloquée par** : Q8 pour les durées encore « à fixer » (le moteur est livré, la catégorie reste inactive), Q16 (stockage hors serveur, accès VPS).
 
 ### Récapitulatif des lignes de la checklist
 
@@ -857,43 +971,40 @@ Chaque sous-branche est créée depuis `refonte/v3` et fusionnée dans `refonte/
 
 ---
 
-## 5. Questions bloquantes pour la Direction
+## 5. Questions restantes
 
-| # | Question | Pourquoi le code ne tranche pas | Bloque |
+### 5.1 Pour la Direction
+
+| # | Question | Ce que le CDC en dit déjà | Bloque |
 |---|---|---|---|
-| Q1 | Le SUPERADMIN est-il la « Direction » du CDC ? Qui d'autre a le profil Direction ? | SUPERADMIN n'existe que dans `login` (`DataLoader.seedSuperadmin`), absent de `RoleAdmin` ; « DG » existe dans `NiveauValidationConge` | 1g, 1h |
-| Q2 | Qui administre « Paramètres et accès » (comptes, profils, circuits, seuils) ? Une seule personne ou un binôme (saisie / validation) ? | Aujourd'hui, seul le SUPERADMIN gère les comptes (lot 0 C2) | 1c, 1g |
-| Q3 | Quel fournisseur SMS (Orange, opérateur agrégateur…), avec quel budget mensuel, quel nom d'expéditeur et quel engagement de délivrabilité ? | Aucune dépendance SMS dans le code | 1k (vrai fournisseur), 1m (prod) |
-| Q4 | Multi-entreprises : PointIC servira-t-il d'autres sociétés ? Qui est propriétaire du logiciel ? | Aucun `tenantId` ; valeurs Cleanic en dur | 1c (D16) |
-| Q5 | Stock : plusieurs magasins avec transferts, ou entrepôt unique ? Un magasin est-il un « site » ? | `StockEntrepotUniqueMigrationRunner` a ramené les soldes à un entrepôt unique (`siteId = null`) | 1d, 1e |
-| Q6 | Agence, site et local : quelles définitions ? Un QR par site ou par local ? | Le code confond agence et site client (`SiteClient`, audit §4.6 Q7) | 1d |
-| Q7 | Exercice = année civile ? Les nouveaux numéros repartent-ils à 1 ou continuent-ils l'existant ? | Séquences actuelles journalières, sauf `CH` annuel | 1b |
-| Q8 | Durées de conservation par catégorie (ex-employés, candidats, GPS, journaux) : avec quel conseil juridique ? | Aucune règle dans le code | 1l |
-| Q9 | Le code de connexion de l'agent est-il distinct du code de pointage ? (Recommandé : oui.) L'agent peut-il le changer ? | `agentId` à 4 chiffres saisi sur un kiosque partagé | 1m |
-| Q10 | Qui crée et possède la fiche site : le Commercial (cible du CDC) ou l'Exploitation, tant que le Commercial n'existe pas ? | Site créé par l'Exploitation aujourd'hui (F051) | 1d |
-| Q11 | Le « contrat » des fiches minimales est-il le contrat **client** ? Quels champs minimaux ? | Seul le contrat de travail existe (`entities/rh/Contrat.java`) | 1f |
-| Q12 | Correspondance entre les 6 familles d'articles du CDC et les 4 `TypeProduit` actuels (PRODUIT_FINI, MATIERE_PREMIERE, CONSOMMABLE, EPI) ? | Écart signalé en F072 | 1e |
-| Q13 | Étapes et seuils réels des circuits (congés, bons d'entrée et de sortie), et seuil au-delà duquel la Direction valide ? | Circuits figés aujourd'hui | 1h |
-| Q14 | Liste des droits sensibles (salaires, prix d'achat, CA, export, données personnelles…) et double authentification : pour qui ? | Aucun droit sensible aujourd'hui (F011) | 1g |
-| Q15 | RIB, n° IPRES et CSS portés par l'employé (et non la grille) : confirmé ? | Copiés depuis la grille vers le bulletin (`CalculPaieService.orchestrer`) | 1f |
-| Q16 | Accès au VPS, et stockage hors serveur pour les sauvegardes (où, chiffrement, qui détient la clé) ? | Hébergeur non trouvé ; proxy de prod non visible (lot 0 C5) | 1a (prod), 1l, §3.7 |
+| Q1 | Le SUPERADMIN actuel (`diarra.niang@…`) reçoit-il le profil DIRECTION, le profil ADMIN, ou les deux ? Qui d'autre a le profil DIRECTION ? | Profil « Direction Générale » : tout en lecture, validation finale, tous les droits sensibles (§13) | Rien : le profil transitoire `MIGRE-SUPERADMIN` garde l'existant ; la réponse règle l'attribution finale (1g, 1h) |
+| Q2 | Qui administre Paramètres et accès (profil ADMIN) : la Directrice Générale seule, ou un administrateur qu'elle désigne ? | « réservé à la Direction (ou à un administrateur qu'elle désigne) » (§13.1) ; question ouverte au §16 | 1c, 1g |
+| Q3 | Quelle passerelle SMS, avec quel budget mensuel, quel nom d'expéditeur et quel engagement de délivrabilité ? SMS seul, ou SMS et WhatsApp ? | « passerelle SMS d'un opérateur sénégalais (WhatsApp en option, à trancher) » (§14) ; « coût des SMS à prévoir au budget » (§14) ; question ouverte au §16 | 1k et 1m **en production** seulement (le fournisseur factice suffit au développement et à la recette en test) ; double authentification en production |
+| Q4 | Propriété du logiciel et calendrier de commercialisation : faut-il prévoir plus d'une entreprise sur un même serveur ? | « Données cloisonnées par entreprise, pour la commercialisation future » (§14) ; paramétrage par entreprise (§5.7) | 1c (figer D16 : une base par entreprise suffit-elle ?) |
+| Q8 (reste) | Durées de conservation des ex-employés (identité, contrat, paie), des candidats, des journaux d'accès et d'audit ; délai légal des justificatifs médicaux ; durée des sanctions ; déclaration à la CDP et lieu d'hébergement | 10 ans pour les pièces et écritures, 12 mois pour le GPS et les photos de pointage (§14) ; conseil juridique à consulter (§16) | 1l (les catégories sans durée restent inactives) |
+| Q10 | Tant que le module Commercial (lot 5) n'existe pas, qui crée la fiche site, la fiche client et le contrat client : l'Exploitation, ou un utilisateur désigné comme « Commercial » dès le lot 1 ? | Cible : le Commercial crée le site à la signature, l'Exploitation le complète (GPS, rayon, horaires, QR) (§3, §6.1) | 1d (droits de saisie sur `referentiels.sites`, `clients`, `contratsClients`) |
 
-**Questions pour vous** (pas pour la Direction) :
-- Q-A : périmètre F009 / F014 (§0.3) : un registre serveur minimal et un Mon espace en consultation limité au lot 1, cela vous convient-il ?
-- Q-B : ce document est placé dans le dépôt backend (`docs/refonte/`), l'audit restant dans le dépôt front. Faut-il le déplacer ou le dupliquer ?
-- Q-C : Mongock (nouvelle dépendance) ou l'exécuteur maison d'emblée ?
+### 5.2 Pour vous
+
+| # | Question | Pourquoi | Bloque |
+|---|---|---|---|
+| Q16 | Accès au VPS, et stockage hors du serveur principal pour les sauvegardes et l'archive longue durée (où, chiffrement, qui détient la clé) ? | Hébergeur non trouvé ; proxy de prod non visible (lot 0 C5) ; CDC §14 « copie hors du serveur principal » | 1a (mise en production du replica set), 1l, §3.7 |
+
+### 5.3 Questions closes
+
+Q5, Q6, Q7, Q9, Q11, Q12, Q13, Q14, Q15 (tranchées par le CDC et vos corrections), Q-A, Q-B, Q-C, Q-D (vos réponses). Détail et sources : « Révision du 23/11 », R.1.
 
 ---
 
 ## 6. Résumé
 
-1. Le lot 1 commence par un socle technique (1a) : replica set, `MongoTransactionManager`, `@Version`, soldes atomiques, Mongock, index versionnés.
-2. Une pièce commune (1b) reçoit son numéro par type et par exercice **à la validation, dans la transaction**, donc sans trou ; les 39 DELETE deviennent des annulations tracées.
+1. Le lot 1 commence par un socle technique (1a) : replica set, `MongoTransactionManager`, `@Version`, soldes atomiques, Mongock (après un spike d'un jour, repli maison), index versionnés.
+2. Une pièce commune (1b) reçoit son numéro **par type et par exercice civil**, au format du CDC (`DEV-2026-0001`, 4 chiffres minimum), **à la validation, dans la transaction**, donc sans trou ; les 39 DELETE deviennent des annulations tracées.
 3. Les effets passent par une outbox Mongo avec des consommateurs idempotents : pas d'appel croisé entre modules, base des futures écritures comptables.
-4. Toute règle chiffrée devient un paramètre daté lu « à la date du fait », et le front ne garde plus aucun seuil.
-5. Les droits passent à 5 niveaux par sous-rubrique, plus des droits sensibles, avec masquage central par `@Sensible`. Migration testée « décisions identiques avant et après ».
-6. Sept référentiels ont chacun un propriétaire. `stockv2_produits` devient `articles` (ids conservés), la chimie et le phyto s'y rattachent, et le solde chimie reste provisoirement dans son module.
-7. Chaque fusion (employés, sites par nom, articles, tiers en texte libre, fichiers) produit un rapport de rejet et se pilote par fichier de décisions, sans jamais fusionner en silence.
-8. Les migrations se répètent sur une copie de production pseudonymisée de façon déterministe, sur un poste unique sécurisé.
-9. 13 sous-branches, avec un ordre corrigé : droits avant référentiels, notifications avant circuits, connexion agent après l'import. Le test de recette du lot est automatisé (`RecetteLot1IT`).
-10. 16 questions pour la Direction (dont Q1 Direction, Q3 SMS, Q5/Q6 magasins et sites, Q16 accès VPS) et 3 pour vous. **J'attends votre validation avant de créer 1a.**
+4. Toute règle chiffrée devient un paramètre daté ; une date d'effet passée est interdite hors migration ; le front ne garde plus aucun seuil. La migration garde les valeurs actuelles et propose celles du CDC en versions futures.
+5. Les droits passent à 5 niveaux par sous-rubrique, plus les 5 droits sensibles du CDC, avec masquage central par `@Sensible` et périmètre par sites. **DIRECTION** (métier : lecture, validation finale) et **ADMIN** (technique : comptes, paramètres) sont deux profils distincts. Double authentification par SMS pour la Direction et les Finances ; blocage après 3 codes faux.
+6. Le moteur de circuits reprend le tableau du CDC §13 : Direction en dernier (toujours, au-dessus du seuil, jamais), personne ne valide sa propre demande, délégation tracée. Les congés passent à Superviseur → RH (Direction pour les responsables), les bons de stock à magasinier → Direction.
+7. Huit référentiels ont chacun le propriétaire fixé par le CDC §3. Le site est le « local » du CDC, rattaché à un client et à un contrat client ; les magasins forment un référentiel à part ; l'article a 6 familles, matériel compris, et le parc porte toujours un `articleId`.
+8. L'agent active son compte par un code reçu par SMS, choisit son code à 4 chiffres, et son compte est lié à son téléphone par une clé non extractible : c'est ce qui permettra au lot 2 de remplacer le PIN de kiosque par le pointage QR.
+9. Chaque fusion (employés, sites par nom, articles et parc, tiers en texte libre, champs de paie de la grille, fichiers) produit un rapport de rejet et se pilote par fichier de décisions, sans jamais fusionner en silence, sur une copie de production pseudonymisée.
+10. 13 sous-branches. Blocages Direction restants : 1c (Q2, Q4), 1g (Q2), 1d (Q10) ; 1l livre son moteur et attend Q8 pour les durées manquantes ; Q3 ne bloque que la production de 1k et 1m. 1a n'attend aucune question pour démarrer, seulement Q16 pour sa mise en production. Il reste 6 questions pour la Direction et 1 pour vous (Q16). **J'attends votre validation avant de créer 1a.**
