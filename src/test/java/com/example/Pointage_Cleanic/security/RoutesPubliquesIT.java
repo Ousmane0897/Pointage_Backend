@@ -39,11 +39,14 @@ class RoutesPubliquesIT extends SecuriteITBase {
             "GET /v3/api-docs.yaml",
             "GET /v3/api-docs/swagger-config",
             "GET /swagger-ui.html",
-            "GET /error",
-            // ⚠ Images publiques en attente de la preuve de non-utilisation (journaux nginx, C7) :
-            // à retirer de SecurityConfig et d'ici une fois l'absence d'appels confirmée.
+            "GET /error"
+    );
+
+    /** Routes supprimées au lot 0 (C7) : elles ne doivent pas réapparaître. */
+    private static final Set<String> ROUTES_SUPPRIMEES = Set.of(
             "GET /api/produits/image/{codeProduit}",
-            "GET /api/employe-complet/image/{agentId}"
+            "GET /api/employe-complet/image/{agentId}",
+            "POST /api/terrain/pointages"
     );
 
     @Autowired
@@ -80,6 +83,34 @@ class RoutesPubliquesIT extends SecuriteITBase {
             }
         }
         assertThat(publiquesNonPrevues).as("routes accessibles sans jeton hors liste blanche").isEmpty();
+    }
+
+    /** Les routes en sursis du lot 0 ont disparu, et ne répondent pas sans jeton. */
+    @Test
+    void les_routes_supprimees_n_existent_plus() throws Exception {
+        assertThat(routesExposees()).doesNotContainAnyElementsOf(ROUTES_SUPPRIMEES);
+        mockMvc.perform(request(HttpMethod.GET, "/api/produits/image/P001"))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.status().isUnauthorized());
+        mockMvc.perform(request(HttpMethod.GET, "/api/employe-complet/image/1234"))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.status().isUnauthorized());
+        mockMvc.perform(request(HttpMethod.POST, "/api/terrain/pointages")
+                        .contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.status().isUnauthorized());
+    }
+
+    private Set<String> routesExposees() {
+        Set<String> routes = new TreeSet<>();
+        for (RequestMappingInfo info : mappings.getHandlerMethods().keySet()) {
+            Set<RequestMethod> methodes = info.getMethodsCondition().getMethods();
+            for (String motif : info.getPatternValues()) {
+                if (methodes.isEmpty()) {
+                    routes.add("GET " + motif);
+                } else {
+                    methodes.forEach(m -> routes.add(m.name() + " " + motif));
+                }
+            }
+        }
+        return routes;
     }
 
     /** La liste blanche ne doit pas garder de route qui n'existe plus. */

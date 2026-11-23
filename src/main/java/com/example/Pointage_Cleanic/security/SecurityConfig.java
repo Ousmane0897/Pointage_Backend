@@ -74,7 +74,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/pointages/historique/**").authenticated() // search + exports excel/pdf
                         .requestMatchers(HttpMethod.GET, "/api/pointages").authenticated() // getAll
 
-                        // 🔹 Pointages — mobile public (pointage sans token)
+                        // 🔹 Pointage public du kiosque (sans jeton, limité par PointageLimiteurDebit)
                         .requestMatchers(HttpMethod.POST, "/api/pointages").permitAll()
 
                         // 🔹 Connexion : seul le POST est public. change-password exige le JWT
@@ -90,10 +90,6 @@ public class SecurityConfig {
                                 "/swagger-ui.html",
                                 "/error",
                                 "/error/**"
-                        ).permitAll()
-                        .requestMatchers(
-                                "/api/produits/image/**",
-                                "/api/employe-complet/image/**"
                         ).permitAll()
                         .requestMatchers("/ws/**").permitAll()
 

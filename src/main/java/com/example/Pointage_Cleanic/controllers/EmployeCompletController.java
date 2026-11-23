@@ -111,17 +111,6 @@ public class EmployeCompletController {
         return ResponseEntity.ok(employeCompletService.getByAgentId(AgentId));
     }
 
-    @PreAuthorize("permitAll()")
-    @GetMapping("/image/{agentId}")
-    public ResponseEntity<byte[]> getEmployeImage(@PathVariable String agentId) {
-        return employeCompletRepository.findByAgentId(agentId)
-                .filter(e -> e.getPhoto() != null)
-                .map(p -> ResponseEntity.ok()
-                        .contentType(MediaType.IMAGE_JPEG)
-                        .body(p.getPhoto()))
-                .orElse(ResponseEntity.notFound().build());
-    }
-
     @GetMapping("/prenomNom")
     public ResponseEntity<EmployeComplet> searchEmploye(
             @RequestParam String prenom,

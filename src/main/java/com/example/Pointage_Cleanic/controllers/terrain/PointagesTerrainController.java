@@ -7,10 +7,8 @@ import com.example.Pointage_Cleanic.Enum.terrain.StatutPointage;
 import com.example.Pointage_Cleanic.Enum.terrain.TypePointage;
 import com.example.Pointage_Cleanic.services.terrain.PointageTerrainService;
 import com.example.Pointage_Cleanic.util.PageResponse;
-import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
-import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
@@ -23,12 +21,6 @@ import java.util.List;
 public class PointagesTerrainController {
 
     private final PointageTerrainService service;
-
-    @PreAuthorize("@droits.peut('terrain.pointage')")
-    @PostMapping
-    public ResponseEntity<PointageTerrainDto> create(@Valid @RequestBody PointageTerrainDto dto) {
-        return ResponseEntity.status(201).body(service.create(dto));
-    }
 
     @GetMapping("/jour")
     public List<PointageTerrainDto> jour(@RequestParam String employeId) {
