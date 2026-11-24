@@ -1,6 +1,6 @@
 # Lot 1 V3 — Conception du socle
 
-Document de conception, rédigé le 23/11/2026 sur la branche `refonte/v3` (backend et frontend). **Aucun code n'a été modifié.** Conception validée le 23/11 avec corrections, intégrées dans la révision ci-dessous. **La sous-branche 1a attend une nouvelle validation.**
+Document de conception, rédigé le 23/11/2026 sur la branche `refonte/v3` (backend et frontend). **Aucun code n'a été modifié.** Conception validée le 23/11 avec corrections, intégrées dans la révision ci-dessous. **Révision validée le 24/11 ; la sous-branche 1a est lancée** (`refonte/v3-1a-socle-technique`, compte rendu dans `docs/refonte/1a-socle-technique.md`).
 
 ## Révision du 23/11
 
@@ -23,7 +23,8 @@ Le CDC est désormais versionné (`docs/cdc/PointIC_CDC.pdf`, version texte `doc
 | Q-A Périmètre F009 / F014 | Oui : registre serveur minimal et Mon espace en consultation au lot 1. | votre réponse | §0.3 validé. |
 | Q-B Emplacement | Documentation de refonte dans le backend ; l'audit est déplacé dans `docs/audit/` du backend. | votre réponse | Fait : `docs/audit/etat-des-lieux-v3.md` et `checklist-v3.csv`, retirés du dépôt front. §0.1 mis à jour. |
 | Q-C Migrations | Mongock, avec le spike d'un jour, repli sur l'exécuteur maison. | votre réponse | D2 confirmé tel quel. |
-| Q-D Pile technique | On garde Angular, Spring Boot et MongoDB, en service aujourd'hui, et non React, Node.js et PostgreSQL cités au CDC §14. | votre réponse du 23/11 | Tout le document reste valable. 1a n'est plus bloquée par aucune question. |
+| Q-D Pile technique | On garde Angular 19, Spring Boot et MongoDB, en service aujourd'hui, et non React, Node.js et PostgreSQL cités au CDC §14. Décision prise ; WOORTECH corrigera le CDC. | votre réponse du 23/11, confirmée le 24/11 | Tout le document reste valable. 1a n'est plus bloquée par aucune question. |
+| Q16 Accès au serveur, stockage hors serveur | Accès SSH au VPS : oui. Aucun stockage hors du serveur principal n'est prévu. | votre réponse du 24/11 | 1a : la mise en production du replica set est possible (procédure dans `docs/refonte/1a-socle-technique.md`). D15 / 1l : sauvegarde et archive sur le serveur seulement ; **écart avec le CDC §14** (« copie hors du serveur principal »), signalé comme risque, non bloquant. §3.7 : extraction possible par SSH. |
 
 ### R.2 Autres corrections
 
@@ -35,7 +36,7 @@ Le CDC est désormais versionné (`docs/cdc/PointIC_CDC.pdf`, version texte `doc
 
 ### R.3 Points relevés à la lecture du CDC, à votre attention
 
-- **Pile technique.** Le CDC §14 « Technologies » cite **React, Node.js, PostgreSQL**. Cette conception garde la pile en service (Angular, Spring Boot, MongoDB), puisque le CDC §6 précise que l'Exploitation « est déjà en service » et demande d'indiquer ce qui existe. C'était la question **Q-D** : vous avez confirmé ce choix le 23/11 (R.1).
+- **Pile technique.** Le CDC §14 « Technologies » cite **React, Node.js, PostgreSQL**. Cette conception garde la pile en service (Angular, Spring Boot, MongoDB), puisque le CDC §6 précise que l'Exploitation « est déjà en service » et demande d'indiquer ce qui existe. C'était la question **Q-D** : vous avez confirmé ce choix le 23/11 (R.1). **La décision est prise : WOORTECH corrigera le CDC §14.** Ce n'est pas un blocage ; d'ici là, l'écart entre le CDC et la pile retenue est connu et assumé.
 - **Date de référence d'un paramètre.** Le CDC §13.4 dit qu'un changement « s'applique aux pièces créées après sa date d'effet ». C'est la règle par défaut (D7). Exception proposée pour la paie : un bulletin lit les valeurs en vigueur **sur sa période**, comme le demande le CDC §5.7 (« un changement s'applique à partir du mois choisi et ne touche pas aux paies déjà clôturées »).
 - **Valeurs de départ divergentes.** Le CDC §13.4 fixe des valeurs de départ qui diffèrent du code actuel : tolérance de retard 10 min (15 aujourd'hui, `rh.pointage.tolerance-retard-minutes`), stock dormant 90 jours (3 mois côté serveur, 6 mois côté front). La migration reprend les valeurs **actuelles**, pour ne rien changer à la mise en service. Les valeurs du CDC sont proposées à la Direction comme une version future datée, à confirmer dans « Seuils et listes » (CDC §16 : « les confirmer suffit »).
 - **Circuit des bons.** Le CDC (§13, §8.10) met la Direction en dernier sur tous les bons. Aujourd'hui, un SUPERADMIN ou un CONTROLEUR_STOCK valide seul. Le circuit de départ du lot 1 suit le CDC : un bon validé par le magasinier attend ensuite la Direction. Le contrat d'API (`/valider`, 409 sur transition invalide) est conservé, mais le passage à `EFFECTIF` n'a lieu qu'à la dernière étape. Le front doit afficher l'étape en cours.
@@ -43,7 +44,7 @@ Le CDC est désormais versionné (`docs/cdc/PointIC_CDC.pdf`, version texte `doc
 
 ### R.4 Questions restantes
 
-Pour la Direction : **Q1, Q2, Q3, Q4, Q8 (reste), Q10**. Pour vous : **Q16** (accès au VPS, stockage hors serveur), qui relève de l'exploitation plutôt que de la Direction. Voir §5.
+Pour la Direction : **Q1, Q2, Q3, Q4, Q8 (reste), Q10**. Plus aucune pour vous : Q16 est tranchée le 24/11 (R.1). Voir §5.
 
 ## 0. Cadre
 
@@ -120,7 +121,7 @@ Format : **Contexte** (avec preuves), **Décision**, **Écarté**, **Conséquenc
 
 **Écarté.** Garder les compensations : elles ne protègent pas d'un arrêt du processus ; replica set à 3 nœuds : un seul serveur est connu, il n'apporte pas de haute disponibilité sur une machine unique ; verrou pessimiste par document « lock » : réinvente ce que fait la transaction.
 
-**Conséquences.** Opération d'exploitation sur le VPS (accès requis, voir Q16) ; les tests IT existants restent valides (déjà sur replica set) ; tout test « concurrence » devient écrivable : 2 validations simultanées ⇒ 1 seule réussit.
+**Conséquences.** Opération d'exploitation sur le VPS (accès SSH disponible, Q16) ; les tests IT existants restent valides (déjà sur replica set) ; tout test « concurrence » devient écrivable : 2 validations simultanées ⇒ 1 seule réussit.
 
 ### D2 — Migrations de données versionnées
 
@@ -529,7 +530,7 @@ Il n'existe ni annulation d'import (F015), ni export Word, ni filtrage des expor
   - mode « à blanc » qui produit le rapport sans écrire, obligatoire avant le premier vrai passage ;
   - c'est la seule exception documentée à la règle 5 pour les fichiers.
 - **Sauvegardes** (actions d'exploitation, scriptées dans le dépôt sous `ops/sauvegarde/`) :
-  - `mongodump --oplog --gzip` **quotidien**, chiffrement (`age` ou `gpg`, choix technique de 1l), copie **hors du serveur principal** (stockage à désigner, Q16), **conservée 30 jours** (CDC §14 « Sauvegarde ») ;
+  - `mongodump --oplog --gzip` **quotidien**, chiffrement (`age` ou `gpg`, choix technique de 1l), copie **hors du serveur principal** demandée par le CDC, **non prévue** (Q16, 24/11 : aucun stockage hors serveur ; écart signalé comme risque), **conservée 30 jours** (CDC §14 « Sauvegarde ») ;
   - **test de restauration trimestriel** au minimum (CDC §14), scripté : restauration dans un conteneur jetable, puis contrôles de comptage et d'intégrité (`IndexesAttendusIT` en mode lecture), compte rendu horodaté ;
   - **archive longue durée**, distincte de la sauvegarde (CDC §14) : à la clôture de chaque exercice, un export chiffré et signé (sha256) des pièces et écritures de l'exercice, conservé 10 ans sur un support séparé, avec sa procédure de relecture ;
   - authentification Mongo activée et port non publié, en même temps que le replica set (1a).
@@ -718,7 +719,7 @@ Vérification : nombre de `byte[]` non vides en phase 1 = nombre de `fichiers` c
 
 ### 3.7 Copie anonymisée de la production
 
-Préalable : accès au VPS (Q16). Procédure (`ops/copie-anonymisee/`, scripts versionnés, aucune donnée versionnée) :
+Préalable : accès SSH au VPS (Q16, disponible). Procédure (`ops/copie-anonymisee/`, scripts versionnés, aucune donnée versionnée) :
 
 1. **Extraction** par l'exploitant, sur le serveur : `mongodump --gzip --archive` vers un fichier chiffré, transfert vers **un seul poste sécurisé** désigné. La copie n'y est jamais décompressée hors d'un conteneur.
 2. **Restauration** dans un conteneur `mongo:7.0` isolé (réseau Docker sans sortie, volume chiffré).
@@ -768,7 +769,7 @@ Chaque sous-branche est créée depuis `refonte/v3` et fusionnée dans `refonte/
   - `docker-compose up` démarre un replica set initialisé ;
   - compte rendu du spike Mongock (Q-C) joint à la sous-branche : Mongock retenu, ou repli sur l'exécuteur maison avec la raison.
 - **Taille** : M.
-- **Bloquée par** : Q16 (accès VPS) pour la mise en production, pas pour le développement.
+- **Bloquée par** : rien (Q16 tranchée le 24/11 : accès SSH disponible pour la mise en production).
 
 ### 1b — Pièces : numérotation, annulation tracée, fin des suppressions, audit, outbox
 
@@ -951,7 +952,7 @@ Chaque sous-branche est créée depuis `refonte/v3` et fusionnée dans `refonte/
   - scripts `ops/sauvegarde/` testés en local (dump, chiffrement, restauration dans un conteneur, contrôles) ;
   - procédure `docs/exploitation/sauvegarde.md`.
 - **Taille** : M.
-- **Bloquée par** : Q8 pour les durées encore « à fixer » (le moteur est livré, la catégorie reste inactive), Q16 (stockage hors serveur, accès VPS).
+- **Bloquée par** : Q8 pour les durées encore « à fixer » (le moteur est livré, la catégorie reste inactive). Q16 tranchée : pas de stockage hors serveur, donc la copie hors site du CDC §14 n'est pas livrée (risque signalé).
 
 ### Récapitulatif des lignes de la checklist
 
@@ -986,13 +987,11 @@ Chaque sous-branche est créée depuis `refonte/v3` et fusionnée dans `refonte/
 
 ### 5.2 Pour vous
 
-| # | Question | Pourquoi | Bloque |
-|---|---|---|---|
-| Q16 | Accès au VPS, et stockage hors du serveur principal pour les sauvegardes et l'archive longue durée (où, chiffrement, qui détient la clé) ? | Hébergeur non trouvé ; proxy de prod non visible (lot 0 C5) ; CDC §14 « copie hors du serveur principal » | 1a (mise en production du replica set), 1l, §3.7 |
+Aucune. Q16 (accès au VPS, stockage hors serveur) est tranchée le 24/11 : accès SSH oui, aucun stockage hors serveur prévu (R.1).
 
 ### 5.3 Questions closes
 
-Q5, Q6, Q7, Q9, Q11, Q12, Q13, Q14, Q15 (tranchées par le CDC et vos corrections), Q-A, Q-B, Q-C, Q-D (vos réponses). Détail et sources : « Révision du 23/11 », R.1.
+Q5, Q6, Q7, Q9, Q11, Q12, Q13, Q14, Q15 (tranchées par le CDC et vos corrections), Q-A, Q-B, Q-C, Q-D, Q16 (vos réponses). Détail et sources : « Révision du 23/11 », R.1.
 
 ---
 
@@ -1007,4 +1006,4 @@ Q5, Q6, Q7, Q9, Q11, Q12, Q13, Q14, Q15 (tranchées par le CDC et vos correction
 7. Huit référentiels ont chacun le propriétaire fixé par le CDC §3. Le site est le « local » du CDC, rattaché à un client et à un contrat client ; les magasins forment un référentiel à part ; l'article a 6 familles, matériel compris, et le parc porte toujours un `articleId`.
 8. L'agent active son compte par un code reçu par SMS, choisit son code à 4 chiffres, et son compte est lié à son téléphone par une clé non extractible : c'est ce qui permettra au lot 2 de remplacer le PIN de kiosque par le pointage QR.
 9. Chaque fusion (employés, sites par nom, articles et parc, tiers en texte libre, champs de paie de la grille, fichiers) produit un rapport de rejet et se pilote par fichier de décisions, sans jamais fusionner en silence, sur une copie de production pseudonymisée.
-10. 13 sous-branches. Blocages Direction restants : 1c (Q2, Q4), 1g (Q2), 1d (Q10) ; 1l livre son moteur et attend Q8 pour les durées manquantes ; Q3 ne bloque que la production de 1k et 1m. 1a n'attend aucune question pour démarrer, seulement Q16 pour sa mise en production. Il reste 6 questions pour la Direction et 1 pour vous (Q16). **J'attends votre validation avant de créer 1a.**
+10. 13 sous-branches. Blocages Direction restants : 1c (Q2, Q4), 1g (Q2), 1d (Q10) ; 1l livre son moteur et attend Q8 pour les durées manquantes ; Q3 ne bloque que la production de 1k et 1m. 1a n'attend aucune question (Q16 tranchée le 24/11). Il reste 6 questions pour la Direction, aucune pour vous. Conception validée le 24/11 : 1a est lancée.
