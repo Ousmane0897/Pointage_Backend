@@ -29,9 +29,17 @@ docker compose -f docker-compose.dev.yml up -d   # dev : Mongo 7.0 en replica se
 docker-compose up --build             # prod : mongo:7.0 replica set rs0 + auth (port NON publié), mongo-init, Spring Boot 8080
 ```
 
-**Replica set obligatoire depuis le lot 1 / 1a** (transactions, décision D1) : un `mongod` standalone fait échouer le premier commit, ce que Mongock affiche sous la forme trompeuse « Transaction is already completed ». En dev : `docker-compose.dev.yml`, ou passer le service MongoDB local en replica set (`replication.replSetName: rs0` + `rs.initiate()`, voir `docs/refonte/1a-socle-technique.md` §2.4). En prod : `mongo:7.0` `--replSet rs0 --keyFile`, authentification (`MONGO_ROOT_*`), service `mongo-init` idempotent (`ops/mongo/initialiser-replica-set.js` : `rs.initiate` + compte applicatif `MONGO_APP_*` en `readWrite` sur `pointage_cleanic`). Passage depuis l'ancien `mongo:6` : procédure serveur dans `docs/refonte/1a-socle-technique.md` §7.
+**Replica set obligatoire depuis le lot 1 / 1a** (transactions, décision D1) : un `mongod` standalone fait échouer le premier commit, ce que Mongock affiche sous la forme trompeuse « Transaction is already completed ». En dev : `docker-compose.dev.yml`, ou passer le service MongoDB local en replica set (`replication.replSetName: rs0` + `rs.initiate()`, voir `docs/refonte/1a-socle-technique.md` §2.4). En prod : `mongo:7.0` `--replSet rs0 --keyFile`, authentification (`MONGO_ROOT_*`), service `mongo-init` idempotent (`ops/mongo/initialiser-replica-set.js` : `rs.initiate` + compte applicatif `MONGO_APP_*` en `readWrite` sur `pointage_cleanic`). Passage depuis l'ancien `mongo:6` : procédure pour l'administrateur du serveur, à jouer au basculement final de la V3, dans `docs/exploitation/basculement-v3.md` (voir « Exploitation : pas d'accès au serveur »).
 
 `docker-compose.yml` lit ses secrets dans un fichier `.env` non suivi (`env_file`, modèle `.env.example`). Les anciennes valeurs, longtemps commitées, sont **compromises** : procédure de rotation et de purge de l'historique dans `docs/securite/rotation-secrets.md`.
+
+### Exploitation : pas d'accès au serveur
+
+**Contrainte permanente** (conception du lot 1, Q16, corrigée le 24/11/2026) : l'équipe de développement **n'a pas accès au VPS** de production.
+- Toute opération serveur (sauvegarde, détection des doublons, copie anonymisée, mise en service, fermeture du port Mongo) est livrée sous forme de **procédure écrite dans `docs/exploitation/`**, destinée à l'administrateur du serveur, avec la **liste des résultats attendus à renvoyer** (format : `docs/exploitation/README.md`).
+- **Aucun critère d'acceptation ni aucune étape de développement ne dépend d'un accès au serveur.** Les migrations se testent sur des **jeux de données construits dans les tests** (Testcontainers) ; une copie anonymisée de la production n'est qu'un complément facultatif.
+- Une sous-branche qui ajoute une migration, un index ou une opération serveur complète l'annexe de `docs/exploitation/basculement-v3.md` (procédure jouée une seule fois, au basculement final de la V3).
+- Ne jamais écrire « jouer sur le serveur » comme une étape à faire soi-même : écrire la procédure et ce qu'il faut renvoyer.
 
 ### Profiles & configuration
 
