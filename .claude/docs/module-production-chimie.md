@@ -23,7 +23,7 @@ Backend du module **Exploitation v2 / Production Chimie** mergé dans `main` (br
 | `production_chimie_compteurs_of` | `_id: AAAAMMJJ`, `compteur: long` — atomicité génération | clé `_id` |
 | `production_chimie_compteurs_lots` | idem pour les n° de lot | clé `_id` |
 
-Les indexes sont créés explicitement au démarrage via `configurations/ProductionChimieIndexesConfig` (l'auto-index-creation de Spring Data Mongo n'est pas activée globalement).
+Les indexes sont déclarés dans `migrations/index/IndexesAttendus` et créés par la ChangeUnit `0105-index-production-chimie` (lot 1 / 1a, D3). L'ancienne `ProductionChimieIndexesConfig` est supprimée ; ses 23 index sont repris à l'identique (noms, clés, sans filtre). L'auto-index-creation de Spring Data Mongo reste désactivée.
 
 ### Services
 
@@ -42,7 +42,7 @@ Les indexes sont créés explicitement au démarrage via `configurations/Product
 
 - **Génération atomique des numéros (OF et lot)** : c'est le pattern de référence pour toute séquence atomique dans ce repo (avant ce module aucun mécanisme n'existait). Document `{_id: "AAAAMMJJ", compteur: long}`, incrémenté via `findAndModify(... new Update().inc("compteur", 1L), options().upsert(true).returnNew(true))`. Format final padding `%03d`. Le test d'intégration `CompteurLotServiceIT` valide 100 appels concurrents sur 20 threads → 100 numéros distincts. **Réutiliser ce pattern** plutôt que d'inventer autre chose si un nouveau module a besoin d'une séquence.
 
-- **Compensation manuelle des opérations multi-document** : MongoDB est en standalone en prod (pas de transactions multi-doc). Le lancement d'un OF crée N SORTIE et décrémente N MP — si la 3ème échoue à mi-chemin, le service crée des ENTREE inverses pour les 2 premières puis renvoie `500 PRODUCTION_ERROR`. Annulation d'un OF EN_COURS : crée des ENTREE inverses pour chaque consommation persistée et réajuste `quantiteEnStock`. Même esprit que `BulkInsertPartialFailureException` du module RH.
+- **Compensation manuelle des opérations multi-document** (historique : MongoDB était en standalone ; replica set et transactions depuis le lot 1 / 1a, compensation à retirer dans la sous-branche du module, D1.6) : Le lancement d'un OF crée N SORTIE et décrémente N MP — si la 3ème échoue à mi-chemin, le service crée des ENTREE inverses pour les 2 premières puis renvoie `500 PRODUCTION_ERROR`. Annulation d'un OF EN_COURS : crée des ENTREE inverses pour chaque consommation persistée et réajuste `quantiteEnStock`. Même esprit que `BulkInsertPartialFailureException` du module RH.
 
 - **Vérification préalable de disponibilité MP** : `/lancer` charge toutes les MP, vérifie `quantiteEnStock ≥ quantiteTheorique` pour chacune **avant** la moindre écriture. Si une seule manque → `409 STOCK_CHIMIE_INSUFFISANT`, **aucune** sortie n'est créée. Évite d'avoir à compenser dans le cas commun.
 

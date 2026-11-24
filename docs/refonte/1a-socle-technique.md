@@ -2,7 +2,31 @@
 
 Branche `refonte/v3-1a-socle-technique` (backend et frontend), créée depuis `refonte/v3` le 24/11/2026. Objet : décisions **D1** (transactions), **D2** (migrations versionnées) et **D3** (index) de `docs/refonte/lot-1-conception.md`. Rien n'a été poussé.
 
-Ce document est complété à chaque étape ; il est livré complet avec le dernier commit de 1a.
+### Résumé
+
+| | |
+|---|---|
+| **Statut** | Développement terminé, **non fusionné, non poussé**. Mise en production **non faite** : elle suit la procédure du §7, par SSH. |
+| **Spike Mongock** | **Retenu** : Mongock 5.5.1, Apache 2.0 (§1). Seule limite : une « baseline » ne peut pas marquer d'autres ChangeUnits, d'où des gardes d'idempotence à la place (§3.4). |
+| **D1 Transactions** | Replica set `mongo:7.0` en dev et en prod, authentification et port non publié en prod, `MongoTransactionManager` et `ExecuteurTransactionnel` (rejeu des conflits), `@Version` sur bons, inventaires et produits, soldes atomiques avec débit gardé, bons de stock validés en transaction **sans compensation** (§2, §5, §6). |
+| **D2 Migrations** | 12 runners → 10 ChangeUnits, 2 seeds `demo` et un amorçage hors Mongock, plus `0011` (versions) ; 2 en `runAlways` pour ne rien changer (§3). |
+| **D3 Index** | 83 index, dont 22 uniques, dans une liste unique ; 63 annotations retirées ; contrôle des doublons qui refuse le démarrage (§4). |
+| **Tests** | **1 025 → 1 062**, 0 échec (§8). |
+| **Front** | Branche créée, **aucune modification** (§9). |
+
+Commits backend sur `refonte/v3-1a-socle-technique` :
+
+| Commit | Objet |
+|---|---|
+| `f92c638` | Spike Mongock |
+| `73fc90e` | Replica set et transactions |
+| `803bcce` | Migrations Mongock |
+| `0876ff9` | Index |
+| `3bbe8de` | Verrou optimiste |
+| `31677ad` | Soldes atomiques et bons transactionnels |
+| dernier commit | Documentation |
+
+Sur `refonte/v3`, avant la branche : `a691422`, réponses Q-D et Q16 dans la conception.
 
 ---
 
@@ -300,3 +324,189 @@ Résultat à reporter ici après le passage du script. Chaque doublon se tranche
 | `SoldeConcurrentIT` (critère 1a) | **50 sorties concurrentes sur un stock de 10.** Débit gardé hors transaction : **exactement 10 réussites**, 40 refus `STOCK_INSUFFISANT`, solde 0. Débit en transaction par l'exécuteur : solde jamais négatif, et **solde = 10 − réussites**. |
 | `ValidationEchecMiParcoursIT` (D1.6, « échec à mi-parcours ⇒ rien d'écrit ») | Panne simulée à l'enregistrement du **2ᵉ mouvement** d'un bon de deux lignes. **Entrée** : aucun mouvement, soldes à 0, coût CUMP inchangé, aucun point d'historique, **compteur de références inchangé** (pas de trou), bon toujours `SOUMIS` ; la même validation repasse ensuite normalement. **Sortie** : aucun produit débité, aucun mouvement de plus, bon `SOUMIS`. |
 | Tests existants du Stock (125) | Inchangés et verts, dont `BonWorkflowServiceIT` (422 sans effet, transitions 409), `ValorisationServiceIT` (CUMP), `InventaireWorkflowServiceIT`, `ProduitStockBulkServiceIT`. |
+
+---
+
+## 7. Procédure serveur (mise en production de 1a)
+
+**Prérequis**
+- accès SSH au VPS (Q16) ;
+- la version 1a fusionnée et récupérée sur le serveur (rien n'est poussé à ce jour) ;
+- un créneau sans utilisateurs, avec **environ 30 minutes d'indisponibilité**.
+
+Les commandes supposent le dossier de déploiement (celui qui contient `docker-compose.yml` et `.env`). Les noms réels des volumes portent le préfixe du projet Docker : `docker volume ls` (par exemple `<dossier>_mongo_data`).
+
+> ⚠ **Ne jamais lancer `docker compose down -v`** : `-v` supprime les volumes, donc les données.
+
+### 7.1 Avant la coupure (base en service, lecture seule)
+
+1. **Sauvegarde** de la base actuelle (`mongo:6`, conteneur `mongo`) :
+   ```bash
+   mkdir -p ~/sauvegardes
+   docker exec mongo mongodump --db pointage_cleanic --archive --gzip > ~/sauvegardes/pointage_cleanic-$(date +%Y%m%d-%H%M)-avant-1a.archive.gz
+   ls -lh ~/sauvegardes/
+   ```
+   Le fichier ne doit pas être vide. **Aucun stockage hors serveur n'est prévu (Q16)** : je recommande au minimum d'en rapatrier une copie sur un poste sûr (`scp`), sans quoi une panne du disque emporterait la base et sa sauvegarde ensemble.
+2. **Détection des doublons** :
+   ```bash
+   docker exec -i mongo mongosh pointage_cleanic --quiet < ops/mongo/detecter-doublons.js | tee ~/sauvegardes/doublons-avant-1a.txt
+   ```
+   - **Tout « BLOQUANT » se tranche avant d'aller plus loin** : fusion, correction ou suppression décidée par le métier, document par document. Sinon l'application refusera de démarrer en version 1a (§4).
+   - La seconde partie du rapport liste les index déjà présents : un index de mêmes clés sous un autre nom ferait aussi échouer la ChangeUnit.
+   - Reporter le résultat au §4.5.
+3. **Comptages de référence** :
+   ```bash
+   docker exec mongo mongosh pointage_cleanic --quiet --eval 'db.getCollectionNames().sort().forEach(c => print(c, db.getCollection(c).countDocuments()))' > ~/sauvegardes/comptages-avant-1a.txt
+   ```
+4. **Secrets** : ajouter au `.env` du serveur, sans les commiter, `MONGO_ROOT_USERNAME`, `MONGO_ROOT_PASSWORD`, `MONGO_APP_USERNAME` et `MONGO_APP_PASSWORD`. Les mots de passe se génèrent par `openssl rand -hex 32` : lettres et chiffres seulement, car ils sont insérés dans l'URI.
+
+### 7.2 Bascule
+
+5. **Arrêt de l'ancienne pile**, en gardant son volume :
+   ```bash
+   docker compose down
+   ```
+   Elle utilise encore l'ancien `docker-compose.yml`. Sans `-v`, le volume `mongo_data` reste intact.
+6. **Mise à jour du code** vers la version 1a (`git pull`, ou copie des fichiers), puis démarrage de **Mongo seul** :
+   ```bash
+   docker compose up -d mongo mongo-init
+   docker compose ps -a        # mongo « healthy », mongo-init « Exited (0) »
+   docker logs mongo-init      # « Replica set non initialisé : rs.initiate() » … « Initialisation terminée. »
+   ```
+7. **Restauration** dans le nouveau volume `mongo7_data` :
+   ```bash
+   docker exec -i mongo sh -c 'mongorestore -u "$MONGO_INITDB_ROOT_USERNAME" -p "$MONGO_INITDB_ROOT_PASSWORD" --authenticationDatabase admin --archive --gzip --nsInclude "pointage_cleanic.*"' < ~/sauvegardes/pointage_cleanic-<horodatage>-avant-1a.archive.gz
+   ```
+8. **Contrôle des comptages** :
+   ```bash
+   docker exec mongo sh -c 'mongosh -u "$MONGO_INITDB_ROOT_USERNAME" -p "$MONGO_INITDB_ROOT_PASSWORD" --authenticationDatabase admin pointage_cleanic --quiet --eval "db.getCollectionNames().sort().forEach(c => print(c, db.getCollection(c).countDocuments()))"' > ~/sauvegardes/comptages-apres-restauration.txt
+   diff ~/sauvegardes/comptages-avant-1a.txt ~/sauvegardes/comptages-apres-restauration.txt
+   ```
+   Le `diff` doit être vide.
+9. **Démarrage de l'application** :
+   ```bash
+   docker compose up -d --build springboot
+   docker logs -f springboot-backend
+   ```
+   - Au premier démarrage, Mongock joue les ChangeUnits `0001` à `0011`, puis les index `0101` à `0105`. Sur une base déjà migrée par les anciens runners, les migrations de données ne modifient rien (§3.4).
+   - **Si une ChangeUnit d'index échoue**, l'application s'arrête et `restart: always` la relance en boucle. Arrêter le service (`docker compose stop springboot`), puis lire le rapport :
+     ```bash
+     docker exec mongo sh -c 'mongosh -u "$MONGO_INITDB_ROOT_USERNAME" -p "$MONGO_INITDB_ROOT_PASSWORD" --authenticationDatabase admin pointage_cleanic --quiet --eval "db.migration_rapports.find().sort({executeLe:-1}).limit(1).forEach(printjson)"'
+     ```
+     Trancher les doublons, puis redémarrer : les ChangeUnits déjà appliquées ne repassent pas.
+10. **Vérifications** :
+    - `Started PointageCleanicApplication` dans les journaux ;
+    - connexion du super-administrateur ;
+    - consultation d'un bon et de l'état du stock ;
+    - `docker port mongo` ne publie **aucun** port ;
+    - `mongockChangeLog` contient les 16 ChangeUnits `EXECUTED`.
+
+### 7.3 Retour arrière
+
+Il est possible tant que l'ancien volume `mongo_data` existe : ne pas le supprimer avant plusieurs semaines de fonctionnement.
+
+```bash
+docker compose down                      # sans -v : mongo7_data est conservé
+git checkout <version précédente>        # ancien docker-compose.yml (mongo:6, volume mongo_data)
+docker compose up -d --build
+```
+
+Les écritures faites entre la bascule et le retour arrière sont perdues : elles ne sont que dans `mongo7_data`. En cas de besoin, on peut les exporter par `mongodump` depuis le nouveau conteneur avant de redescendre.
+
+### 7.4 Poste de développement
+
+Voir §2.4 : `docker-compose.dev.yml`, ou service MongoDB local passé en replica set.
+
+**Constaté pendant la vérification** : le `.env` local de ce poste ne définit pas `JWT_SECRET`, exigé depuis le lot 0. `bootRun` échoue donc sans lui, indépendamment de 1a. Pour la vérification, il a été passé en argument avec une valeur factice ; le `.env` n'a été ni lu ni modifié.
+
+---
+
+## 8. Bilan des tests
+
+Toujours `./gradlew test` complet, seul sur la machine, avant chaque commit :
+
+| Étape | Commit | Tests | Échecs | Durée |
+|---|---|---|---|---|
+| Référence `refonte/v3` (lot 0) | — | 1 025 | 0 | — |
+| 1. Spike Mongock | `f92c638` | 1 030 | 0 | 19 min (première mesure, machine chargée) |
+| 2. Replica set et transactions | `73fc90e` | 1 040 | 0 | 5 min 17 |
+| 3. Migrations | `803bcce` | 1 045 | 0 | 4 min 47 |
+| 4. Index | `0876ff9` | 1 054 | 0 | 5 min 38 |
+| 5. Verrou optimiste | `3bbe8de` | 1 055 | 0 | 7 min 37 |
+| 6. Soldes et bons transactionnels | `31677ad` | 1 062 | 0 | 8 min 48 |
+| 7. Documentation | dernier | 1 062 | 0 | 8 min 18 (réexécution forcée `--rerun`) |
+
+**37 tests ajoutés** :
+- `MongockSpikeIT` (5) ;
+- `TransactionIT` (6) ;
+- `GlobalExceptionHandlerConflitsTest` (3) ;
+- `MigrationsIT` (5) ;
+- `IndexesAttendusIT` (1), `CreateurIndexIT` (6), `DetecterDoublonsScriptTest` (2) ;
+- `VerrouOptimisteStockIT` (1) ;
+- `ValidationConcurrenteIT` (3), `SoldeConcurrentIT` (2), `ValidationEchecMiParcoursIT` (2) ;
+- et 1 dans `AucunSecretLitteralTest`.
+
+**Tests existants** : 5 classes renommées et adaptées (§3.5) et 3 adaptées aux nouvelles variables (§2.3). **Aucun test existant n'a dû être assoupli.**
+
+**Critères d'acceptation de 1a** (conception, §4) :
+
+| Critère | Statut | Où |
+|---|---|---|
+| `TransactionIT` | ✅ | §2.3 |
+| `ValidationConcurrenteIT` | ✅ | §6.2 |
+| `SoldeConcurrentIT` | ✅ | §6.2 |
+| `MigrationsIT` | ✅ | §3.5. La baseline est réalisée par les gardes d'idempotence (§3.4). |
+| `IndexesAttendusIT` et jeu piégé | ✅ | §4.4 |
+| `docker-compose up` démarre un replica set initialisé | ✅ | Vérifié en copie isolée, pile prod complète (§2.3) et dev. |
+| Compte rendu du spike | ✅ | §1 |
+
+**Vérifications hors Gradle** :
+- **pile prod complète** en copie isolée (§2.3) ;
+- **dev** : `bootRun` deux fois sur un replica set jetable. Les deux démarrages réussissent et répondent 401 sans jeton ; le registre contient les 16 ChangeUnits, une entrée chacune ; 43 collections portent leurs index ;
+- **script de doublons** : sur les bases locales et sur un jeu piégé (§4.3).
+
+---
+
+## 9. Frontend
+
+Branche `refonte/v3-1a-socle-technique` créée dans `pointage-agents` depuis `refonte/v3` (`8540054`). **Aucune modification, aucun commit** :
+- aucun contrat d'API ne change : chemins, champs, statuts HTTP ;
+- le seul code d'erreur modifié (`STOCK_OPERATION_ERROR` → `STOCK_INSUFFISANT`, toujours en 422) n'est lu nulle part dans le front ;
+- les nouveaux 409 (`CONFLIT_VERSION`, `CONFLIT_CONCURRENT`, `DOUBLON`) tombent dans la gestion des 409 déjà en place sur les bons (« Le statut de ce bon a changé entre-temps »), et ailleurs dans l'affichage générique des erreurs.
+
+`ng build` n'a pas été relancé, aucun fichier n'ayant changé.
+
+---
+
+## 10. Ce qui reste
+
+**Pour mettre 1a en production**
+1. Fusionner (`refonte/v3-1a-socle-technique` → `refonte/v3`), puis pousser : **à votre initiative**, rien n'est poussé.
+2. Jouer la procédure du §7, en commençant par `detecter-doublons.js`, et reporter les doublons au §4.5.
+3. **Risque à arbitrer** : aucune copie hors du serveur (Q16, écart avec le CDC §14). Au minimum, rapatrier la sauvegarde d'avant bascule sur un poste sûr.
+
+**Décisions métier relevées en 1a**
+4. **Congés** : les demandes dont `nombreJours` a été réécrasé sans les jours fériés par l'ancien runner gardent cette valeur (§3.3, constat 1). Une ChangeUnit corrective est possible mais modifie des soldes : à décider avec la RH.
+
+**Repris par les sous-branches suivantes**
+5. **1b** :
+   - `PieceBase` (avec `@Version`) sur les autres pièces ;
+   - outbox, qui remplacera `apresCommit` et l'e-mail synchrone de création de bon ;
+   - fin de `SuppressionDefinitiveService` ;
+   - un test ArchUnit des appels interdits.
+6. **1d** :
+   - compléments d'affectation calculés à l'écriture, puis `0008` rendue ponctuelle ;
+   - archivage de `employes_complet`, ce qui clôt la question de l'index `nomComplet` ;
+   - `@Version` sur les référentiels employé et site. Les référentiels article, client, fournisseur et contrat le reçoivent en 1e et 1f.
+7. **Compensations encore en place (D1.6)** :
+   - clôture d'inventaire et import en masse : sous-branche des articles ou lot 3 ;
+   - `OrdreFabricationService` : Production Chimie.
+
+   Pour chacune, le retrait s'accompagne d'un test « échec à mi-parcours ⇒ rien d'écrit » sur le modèle de `ValidationEchecMiParcoursIT`.
+8. **Lot 3 (magasins)** : soldes par site et inventaire par site, puis `0007` rendue ponctuelle ; décider si la clôture d'un inventaire global peut porter un solde en négatif. Aujourd'hui elle le peut, et `appliquerDelta` reste non gardé pour cette raison.
+9. **1l** : scripts de sauvegarde quotidienne et de test de restauration (D15). L'authentification Mongo et le port non publié sont faits en 1a.
+
+**Points techniques notés, non traités**
+10. `TerrainExceptionHandler`, prioritaire sur `controllers.terrain`, ne traduit pas encore `CONFLIT_VERSION`, `CONFLIT_CONCURRENT` ni `DOUBLON`. C'est sans effet aujourd'hui : aucune entité Terrain n'a de `@Version`. En revanche, un doublon sur `sites_clients.code`, désormais indexé, y sortirait en erreur générique : à reprendre en 1d.
+11. Versions de Testcontainers dépareillées (`junit-jupiter` 1.20.2, `mongodb` 1.19.2) : sans incidence constatée.
+12. Les tests du spike (`spikemongock`, 5 tests, environ 1 minute) sont gardés comme tests de non-régression du comportement de Mongock (verrou, transaction, registre). Ils peuvent être retirés si leur durée gêne.

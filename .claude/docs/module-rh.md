@@ -41,7 +41,7 @@ Voir la table « Controller URL map » de `CLAUDE.md`, sections RH 6.1 à 6.4.
 - **Récidive disciplinaire** : `SanctionService.estRecidiviste(employeId, type, dateRef)` via `countByEmployeIdAndTypeAndDateSanctionBetween` sur 12 mois glissants, seuil ≥ 2. `alertesRecidive()` élargit à tous types confondus.
 - **Workflow évaluation périodique** : `BROUILLON → AUTO_EVALUATION → EVALUATION_MANAGER → VALIDE`. La note globale est la moyenne pondérée `Σ(note×poids)/Σpoids` selon la `GrilleEvaluation` référencée ; mapping alphabétique A≥4.5, B≥3.5, C≥2.5, sinon D. À la validation, les `BesoinFormation` portés par la `ValidationEvaluationRequest` sont créés automatiquement (`source=EVALUATION`).
 - **Procédure disciplinaire sénégalaise** : `Sanction.dureeMiseAPied` plafonnée à 8 jours (Code du Travail), délai de respect calculé automatiquement entre `dateConvocation` et `dateEntretien`.
-- **Grille d'évaluation par défaut** : seedée au démarrage (`DataLoader`) avec 5 critères (Expertise technique 30, Autonomie 20, Communication 15, Travail en équipe 15, Atteinte des objectifs 20 — total 100).
+- **Grille d'évaluation par défaut** : données de **démonstration** depuis le lot 1 / 1a (profil `demo`, ChangeUnit `9001-demo-rh`, bean `migrations/RhDemoSeed`), plus créée en production ; 5 critères (Expertise technique 30, Autonomie 20, Communication 15, Travail en équipe 15, Atteinte des objectifs 20 — total 100).
 
 ### 6.1 Gestion du personnel — ✅ Terminé
 
@@ -80,7 +80,7 @@ Endpoints livrés :
   être référencé via `superieurHierarchiqueMatricule` (champ spécifique au DTO bulk) :
   résolu en deux passes — soit dans le payload lui-même (pass B d'`updateFirst`
   post-`saveAll()`), soit en base (pass A).
-  **Atomicité** : MongoDB en standalone ne supportant pas les transactions multi-
+  **Atomicité** (écrit quand MongoDB était en standalone ; transactions disponibles depuis le lot 1 / 1a, à reprendre dans la sous-branche RH) : MongoDB ne supportant pas alors les transactions multi-
   documents, l'atomicité `TOUT_OU_RIEN` est garantie par validation préalable
   complète du batch avant tout `saveAll()`. Si `saveAll()` échoue à mi-parcours
   (race condition sur l'index unique `matricule`, erreur I/O), une

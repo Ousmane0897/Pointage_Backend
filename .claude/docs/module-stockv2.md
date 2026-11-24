@@ -81,7 +81,9 @@ Workflow `BROUILLON → COMPTAGE → VALIDATION → CLOTURE` :
 ### 8. Tableau de bord — `/api/stock/tableau-bord` (`TableauBordStockController`)
 - `GET ?dateDebut&dateFin&siteId&categorieId&moisDormance` → `RapportTableauBordStockDto`. KPIs (`valeurTotale`, `nbProduits`, `nbRupture`, `nbAlerte` = sous seuil hors rupture, `tauxRotationMoyen` = moyenne(sortiesPériode / stockActuel), `nbDormants`), `valeurParCategorie`, `evolutionValeur` (valeur de stock à la fin de chaque mois, reconstruite depuis l'historique), `topConsommations` (top 10 SORTIES), `produitsDormants` (sans mouvement depuis `moisDormance` mois, défaut **3**).
 
-## Transactionnalité (MongoDB standalone, pas de transaction multi-doc)
+## Transactionnalité 7.3 (compensations encore en place)
+
+> Depuis le lot 1 / 1a, MongoDB tourne en replica set et les bons sont validés en transaction (voir « Transactionnalité 7.4 »). Le `/bulk` et la clôture d'inventaire gardent leur compensation manuelle jusqu'à leur sous-branche (D1.6) ; `appliquerDelta` y est désormais un `$inc` atomique (plus de mise à jour perdue), non gardé.
 
 - **`POST /bulk`** : (1) pré-validation complète de toutes les lignes — aucune écriture ; (2) si erreurs → réponse 422, 0 créé ; (3) sinon insertion (résout/crée catégories par `categorieLibelle`, crée produits, mouvement `ENTREE`/`AJUSTEMENT` initial si `stockInitial`) en traquant tout ce qui est créé ; (4) sur exception → **rollback total** (suppression produits/catégories/mouvements/soldes créés). Corps identique en 200/422 : `{ total, inserted, failed, insertedIds, errors:[{numeroLigne, lineNumber, code, field, message}] }`.
 - **Clôture d'inventaire** : applique les écarts ligne par ligne ; sur échec à mi-parcours, inverse les ajustements déjà appliqués et supprime les mouvements créés.
@@ -90,7 +92,11 @@ Workflow `BROUILLON → COMPTAGE → VALIDATION → CLOTURE` :
 
 | Situation | Exception | HTTP |
 | --- | --- | --- |
-| Stock insuffisant (SORTIE/TRANSFERT), écart d'inventaire non justifié, transition de workflow invalide | `StockOperationException` | **422** `STOCK_OPERATION_ERROR` |
+| Stock insuffisant | `StockInsuffisantException` (sous-classe de `StockOperationException`, lot 1 / 1a) | **422** `STOCK_INSUFFISANT` |
+| Écart d'inventaire non justifié, transition d'inventaire invalide | `StockOperationException` | **422** `STOCK_OPERATION_ERROR` |
+| Document modifié entre lecture et écriture (`@Version` sur bons, inventaires, produits) | `OptimisticLockingFailureException` | **409** `CONFLIT_VERSION` |
+| Conflit d'écriture concurrent rejoué 5 fois sans succès | `ConflitConcurrentException` | **409** `CONFLIT_CONCURRENT` |
+| Violation d'un index unique (index créés depuis 1a) | `DuplicateKeyException` | **409** `DOUBLON` |
 | Code produit déjà utilisé | `StockConflitException` | **409** `STOCK_CONFLICT` |
 | Catégorie non vide à la suppression | `EntiteReferenceeException` | **409** `ENTITE_REFERENCEE` |
 | Entité introuvable | `ResourceNotFoundException` | 404 `NOT_FOUND` |
@@ -230,16 +236,17 @@ Déclenchée **uniquement** par le `POST` des deux contrôleurs de bons (jamais 
 
 | Situation | Exception | HTTP |
 | --- | --- | --- |
-| Stock insuffisant à la validation d'un bon de sortie | `StockOperationException` | **422** `STOCK_OPERATION_ERROR` |
+| Stock insuffisant à la validation d'un bon de sortie | `StockInsuffisantException` | **422** `STOCK_INSUFFISANT` (avant 1a : `STOCK_OPERATION_ERROR` ; le front ne lit que le statut) |
+| Deux validations simultanées du même bon : la seconde | `StockConflitException` (ou `ConflitConcurrentException`) | **409** |
 | **Transition de workflow invalide** (PUT/DELETE/soumettre/valider/refuser hors état autorisé) | `StockConflitException` | **409** `STOCK_CONFLICT` ⚠️ |
 | Commentaire de refus manquant ; payload/destinataire/site/mois invalide | `IllegalArgumentException` | 400 `VALIDATION_ERROR` |
 | Bon / produit / catégorie / employé introuvable | `ResourceNotFoundException` (produit/bon) / `IllegalArgumentException` (site/employé) | 404 / 400 |
 
 > ⚠️ **Spécificité 7.4** : une transition de bon invalide renvoie **409** (contrat frontend figé), alors que 7.3 mappe les « transitions » d'inventaire en 422. Ne pas uniformiser.
 
-## Transactionnalité 7.4 (Mongo standalone)
+## Transactionnalité 7.4 (transaction MongoDB depuis le lot 1 / 1a)
 
-Génération des mouvements à EFFECTIF (`MouvementBonGenerator`) : pour une sortie, **pré-vérification de toutes les lignes** (cumulées par produit) avant toute écriture. Application ligne par ligne avec **compensation manuelle** — sur échec à mi-parcours, suppression des `MouvementStock` créés puis annulation des deltas de solde, et rethrow. Les mutations du bon (statut, historique) ne sont persistées qu'**après** succès de la génération.
+`soumettre` / `valider` / `refuser` / `reprendre` passent par `ExecuteurTransactionnel`. À la validation, `MouvementBonGenerator` (qui **exige** une transaction) génère mouvements, soldes, coût courant (CUMP / dernier prix), historique de coût et références dans la **même transaction** que le passage du bon en EFFECTIF : tout ou rien, y compris en cas d'arrêt du processus. Plus de compensation manuelle. Sortie : pré-vérification cumulée par produit (message), puis **débit gardé** `StockBalanceService.debiter` (`findAndModify` filtré par `quantite >= q`) : deux validations simultanées ne peuvent pas passer sous zéro. La perdante d'une course est rejouée, relit le bon déjà EFFECTIF et reçoit le 409 de transition. Les notifications WebSocket partent **après le commit**. Tests : `ValidationConcurrenteIT`, `SoldeConcurrentIT`, `ValidationEchecMiParcoursIT`.
 
 ## Tests 7.4
 
