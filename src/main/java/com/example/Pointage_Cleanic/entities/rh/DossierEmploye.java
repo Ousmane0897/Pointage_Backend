@@ -6,7 +6,6 @@ import com.example.Pointage_Cleanic.Enum.rh.StatutDossierEmploye;
 import com.fasterxml.jackson.annotation.JsonFormat;
 import lombok.*;
 import org.springframework.data.annotation.Id;
-import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 import org.springframework.data.mongodb.core.mapping.Field;
 
@@ -25,13 +24,11 @@ public class DossierEmploye {
     @Id
     private String id;
 
-    @Indexed(unique = true)
     private String matricule;
 
     // Code agent à 4 chiffres = clé du pointage (le codeSecret envoyé par le
     // mobile correspond à cet agentId). Unique globalement, sparse car des
     // dossiers historiques peuvent ne pas encore le porter.
-    @Indexed(unique = true, sparse = true)
     private String agentId;
 
     /**
@@ -105,7 +102,6 @@ public class DossierEmploye {
 
     // Indexé (non unique) : sert de jointure entre le compte de connexion
     // — l'email est le subject du JWT — et le dossier employé, cf. CongeIdentiteService.
-    @Indexed
     private String email;
     private String adresse;
 

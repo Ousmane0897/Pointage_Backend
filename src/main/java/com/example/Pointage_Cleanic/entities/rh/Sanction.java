@@ -5,9 +5,6 @@ import com.example.Pointage_Cleanic.Enum.rh.TypeSanction;
 import com.fasterxml.jackson.annotation.JsonFormat;
 import lombok.*;
 import org.springframework.data.annotation.Id;
-import org.springframework.data.mongodb.core.index.CompoundIndex;
-import org.springframework.data.mongodb.core.index.CompoundIndexes;
-import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.time.LocalDate;
@@ -20,16 +17,11 @@ import java.util.List;
 @AllArgsConstructor
 @Builder
 @Document(collection = "sanctions")
-@CompoundIndexes({
-        @CompoundIndex(name = "employe_type_dateSanction_idx",
-                def = "{'employeId': 1, 'type': 1, 'dateSanction': -1}")
-})
 public class Sanction {
 
     @Id
     private String id;
 
-    @Indexed
     private String employeId;
 
     private String matricule;

@@ -5,7 +5,6 @@ import com.example.Pointage_Cleanic.Enum.rh.TypeContratRh;
 import com.fasterxml.jackson.annotation.JsonFormat;
 import lombok.*;
 import org.springframework.data.annotation.Id;
-import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.time.LocalDate;
@@ -23,7 +22,6 @@ public class Contrat {
     @Id
     private String id;
 
-    @Indexed
     private String employeId;
 
     private String employeNom;

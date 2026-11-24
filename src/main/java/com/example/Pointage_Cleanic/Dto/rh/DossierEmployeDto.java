@@ -77,7 +77,7 @@ public class DossierEmployeDto {
     //
     // DÉPRÉCIÉ au profit de AffectationSiteDto.joursTravail, propre à chaque site :
     // le front ne l'envoie plus. Conservé en lecture/écriture le temps que les
-    // dossiers en base soient tous migrés (AffectationSiteBackfillRunner le recopie
+    // dossiers en base soient tous migrés (la migration 0008 (AffectationSiteBackfillMigration) le recopie
     // sur chaque affectation), et parce qu'il reste le second échelon de repli des
     // consommateurs quand une affectation ne porte pas encore le sien.
     private String joursTravail;

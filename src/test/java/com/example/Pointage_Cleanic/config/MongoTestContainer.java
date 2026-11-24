@@ -17,4 +17,12 @@ public abstract class MongoTestContainer {
         }
         registry.add("spring.data.mongodb.uri", mongo::getReplicaSetUrl);
     }
+
+    /** Conteneur partagé, démarré au besoin : pour les tests qui lancent eux-mêmes une application. */
+    public static MongoDBContainer conteneur() {
+        if (!mongo.isRunning()) {
+            mongo.start();
+        }
+        return mongo;
+    }
 }

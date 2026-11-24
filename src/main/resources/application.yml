@@ -6,7 +6,9 @@ spring:
 
   data:
     mongodb:
-      uri: mongodb://localhost:27017/cleanic
+      # Replica set à un nœud obligatoire depuis 1a (transactions) : docker-compose.dev.yml.
+      # directConnection : le poste parle au seul nœud, quel que soit le nom qu'il s'annonce.
+      uri: mongodb://localhost:27017/cleanic?directConnection=true
 
   mail:
     host: smtp.gmail.com
@@ -25,6 +27,12 @@ spring:
     multipart:
       max-file-size: 10MB
       max-request-size: 15MB
+
+# Migrations de données versionnées (lot 1 / 1a, D2) : voir configurations/MigrationsConfig.
+mongock:
+  migration-scan-package: com.example.Pointage_Cleanic.migrations.changeunits
+  runner-type: initializingbean
+  transactional: true
 
 jwt:
   # Aucune valeur par défaut : à fournir par l'environnement (voir .env.example).

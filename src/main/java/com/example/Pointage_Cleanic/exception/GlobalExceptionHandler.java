@@ -137,6 +137,40 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
     }
 
+    /**
+     * Verrou optimiste ({@code @Version}, lot 1 / 1a, D1) : le document a changé entre la lecture
+     * et l'écriture. Rien n'est écrit ; le client relit puis recommence.
+     */
+    @ExceptionHandler(org.springframework.dao.OptimisticLockingFailureException.class)
+    public ResponseEntity<Map<String, Object>> handleConflitVersion(
+            org.springframework.dao.OptimisticLockingFailureException ex) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("error", "CONFLIT_VERSION");
+        body.put("message", "Ces données ont été modifiées entre-temps par quelqu'un d'autre. Rechargez puis recommencez.");
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(body);
+    }
+
+    /** Conflit d'écriture rejoué sans succès par {@code ExecuteurTransactionnel}. */
+    @ExceptionHandler(ConflitConcurrentException.class)
+    public ResponseEntity<Map<String, Object>> handleConflitConcurrent(ConflitConcurrentException ex) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("error", "CONFLIT_CONCURRENT");
+        body.put("message", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(body);
+    }
+
+    /**
+     * Violation d'un index unique (index réellement créés depuis 1a, D3). Le message du pilote
+     * (nom d'index, valeur en double) n'est pas renvoyé au client.
+     */
+    @ExceptionHandler(org.springframework.dao.DuplicateKeyException.class)
+    public ResponseEntity<Map<String, Object>> handleDoublon(org.springframework.dao.DuplicateKeyException ex) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("error", "DOUBLON");
+        body.put("message", "Un enregistrement avec la même valeur unique existe déjà.");
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(body);
+    }
+
     @ExceptionHandler(RuntimeException.class)
     public ResponseEntity<Map<String, String>> handleRuntime(RuntimeException ex) {
         Map<String, String> body = new HashMap<>();
@@ -233,6 +267,15 @@ public class GlobalExceptionHandler {
         body.put("error", "STOCK_ACCES_REFUSE");
         body.put("message", ex.getMessage());
         return ResponseEntity.status(HttpStatus.FORBIDDEN).body(body);
+    }
+
+    /** Débit gardé refusé (lot 1 / 1a, D1.5) : même 422 qu'avant, code d'erreur précis. */
+    @ExceptionHandler(StockInsuffisantException.class)
+    public ResponseEntity<Map<String, Object>> handleStockInsuffisant(StockInsuffisantException ex) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("error", "STOCK_INSUFFISANT");
+        body.put("message", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY).body(body);
     }
 
     @ExceptionHandler(StockOperationException.class)

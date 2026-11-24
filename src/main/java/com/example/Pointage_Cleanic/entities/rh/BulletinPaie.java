@@ -4,9 +4,6 @@ import com.example.Pointage_Cleanic.Enum.rh.StatutBulletin;
 import com.fasterxml.jackson.annotation.JsonFormat;
 import lombok.*;
 import org.springframework.data.annotation.Id;
-import org.springframework.data.mongodb.core.index.CompoundIndex;
-import org.springframework.data.mongodb.core.index.CompoundIndexes;
-import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.time.LocalDate;
@@ -19,16 +16,11 @@ import java.util.List;
 @AllArgsConstructor
 @Builder
 @Document(collection = "bulletins_paie")
-@CompoundIndexes({
-        @CompoundIndex(name = "employe_periode_idx",
-                def = "{'employeId': 1, 'periode.annee': 1, 'periode.mois': 1}")
-})
 public class BulletinPaie {
 
     @Id
     private String id;
 
-    @Indexed
     private String employeId;
 
     private String matricule;

@@ -43,6 +43,30 @@ class AucunSecretLitteralTest {
         assertThat(analyser(Path.of("docker-compose.yml"))).as("docker-compose.yml").isEmpty();
     }
 
+    /** Identifiants écrits en clair dans une URI MongoDB : mongodb://utilisateur:motdepasse@… */
+    private static final Pattern URI_AVEC_IDENTIFIANTS = Pattern.compile("mongodb(\\+srv)?://([^\\s:@/]+):([^\\s@/]+)@");
+
+    @Test
+    void uri_mongo_sans_identifiants_litteraux() throws IOException {
+        List<String> fautes = new ArrayList<>();
+        List<Path> fichiers = new ArrayList<>(List.of(Path.of("docker-compose.yml"), Path.of("docker-compose.dev.yml")));
+        try (Stream<Path> yml = Files.list(Path.of("src/main/resources"))) {
+            yml.filter(p -> p.getFileName().toString().matches("application.*\\.ya?ml")).forEach(fichiers::add);
+        }
+        for (Path fichier : fichiers) {
+            List<String> lignes = Files.readAllLines(fichier);
+            for (int i = 0; i < lignes.size(); i++) {
+                Matcher m = URI_AVEC_IDENTIFIANTS.matcher(lignes.get(i));
+                while (m.find()) {
+                    if (!m.group(2).startsWith("${") || !m.group(3).startsWith("${")) {
+                        fautes.add(fichier + ":" + (i + 1));
+                    }
+                }
+            }
+        }
+        assertThat(fautes).as("identifiants MongoDB en clair dans une URI").isEmpty();
+    }
+
     private static List<String> analyser(Path fichier) {
         List<String> fautes = new ArrayList<>();
         List<String> lignes;

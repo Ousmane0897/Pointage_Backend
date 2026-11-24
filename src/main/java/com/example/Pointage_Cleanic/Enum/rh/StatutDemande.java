@@ -10,7 +10,7 @@ import java.util.List;
  *
  * <p>{@code EN_ATTENTE} est conservé pour les demandes créées avant le circuit :
  * il est traité comme {@code EN_ATTENTE_SUPERIEUR} partout (le
- * {@code CongeStatutMigrationRunner} les convertit au démarrage).
+ * la migration {@code 0003} ({@code CongeStatutMigration}) les convertit).
  */
 public enum StatutDemande {
 

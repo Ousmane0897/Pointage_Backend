@@ -3,7 +3,6 @@ package com.example.Pointage_Cleanic.entities.rh;
 import com.example.Pointage_Cleanic.Enum.rh.RegimeIpres;
 import lombok.*;
 import org.springframework.data.annotation.Id;
-import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.time.Instant;
@@ -21,7 +20,6 @@ public class CategorieProfessionnelle {
     @Id
     private String id;
 
-    @Indexed(unique = true)
     private String code;
 
     private String libelle;

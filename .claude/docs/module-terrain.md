@@ -8,7 +8,7 @@ Backend Spring Boot du module **Exploitation Terrain** : gestion des agents de p
 - **Dates** : ISO 8601. `LocalDate` → `yyyy-MM-dd`, `LocalDateTime` → `yyyy-MM-ddTHH:mm:ss` (sérialisation ISO par défaut via `JavaTimeModule`). Les query params `dateDebut`/`dateFin` de période sont des `yyyy-MM-dd`.
 - **Erreurs** : `TerrainExceptionHandler` (advice scopé `controllers.terrain`, priorité max) → corps `{ "message", "timestamp", "status" }`. 400 (validation / `IllegalArgumentException`), 404 (`ResourceNotFoundException`), 409 (`TerrainConflitException` : code dupliqué, conflit planning, transition d'état interdite).
 - **Sécurité** : `/api/terrain/**` est `.authenticated()` dans `SecurityConfig`. Depuis 2026-07-21, **toute requête non authentifiée → 401** (token absent comme token invalide/expiré), grâce à l'`authenticationEntryPoint` global ajouté dans `SecurityConfig` ; auparavant le token absent donnait 403. Vérifié par `PlanningSecuriteIT`. Le gating fin par module reste **frontend uniquement** (pas de `@PreAuthorize`, et les sous-flags `ModulesAutorises.terrain.*` n'existent toujours pas).
-- **Indexes** : `TerrainIndexesConfig` (pattern `ProductionChimieIndexesConfig`, car `auto-index-creation` est désactivé → les annotations `@Indexed`/`@CompoundIndex` sont inopérantes dans ce projet). `terrain_affectations` : `statut_debut_fin`, `employe_id`, `site_statut`.
+- **Indexes** : déclarés dans `migrations/index/IndexesAttendus`, créés par la ChangeUnit `0104-index-terrain` (lot 1 / 1a ; `TerrainIndexesConfig` supprimée, annotations retirées). `terrain_affectations` : `statut_debut_fin`, `employe_id`, `site_statut` (à l'identique) ; uniques `sites_clients.code`, `terrain_materiel.code`, `produits_phyto.numeroHomologation` (filtre partiel `$type: "string"`).
 - **Montants** : entiers FCFA (`long`). Coordonnées GPS, notes, doses : décimaux.
 - **Fichiers** : stockés **inline en `byte[]`** (`@JsonIgnore`) + métadonnées + endpoint de streaming (même convention que Production Chimie ; pas de GridFS). L'URL de streaming est calculée par le mapper.
 - **Unicité (index + 409)** : `sites_clients.code`, `terrain_materiel.code`, `produits_phyto.numeroHomologation`.
@@ -174,6 +174,6 @@ Endpoint `/ws` (SockJS), broker `/topic` + `/queue`, prefix `/app` (config exist
 - **Stockage fichiers** : `byte[]` inline (pas de GridFS), transparent pour le frontend (URLs de streaming).
 - **Date signature** : `signatureClient.date` conservée en `String` (valeur du client telle quelle).
 
-## Seed (`TerrainDataLoader`)
+## Seed de démonstration (`migrations/TerrainDemoSeed`, profil `demo` seulement depuis le lot 1 / 1a, ChangeUnit `9002-demo-terrain`)
 
 Idempotent : 2 sites (Dakar, Thiès), 1 grille générique (seuil 3.5), 1 produit phytosanitaire homologué, 1 `ParametresEscalade`.

@@ -86,7 +86,7 @@ public class ValorisationSupport {
     /**
      * Applique le recalcul du coût courant d'un produit à une entrée et historise le point de coût.
      * À appeler APRÈS lecture du stock avant entrée ({@code stockActuel}) et application du delta.
-     * Retourne les éléments nécessaires à la compensation manuelle en cas d'échec ultérieur.
+     * Écrit dans la transaction de validation du bon (lot 1 / 1a) : annulé avec elle en cas d'échec.
      */
     public RecalcResult appliquerEntree(ProduitStock produit, double stockActuel, double q,
                                         long prixAchat, String mvtReference, LocalDate date) {
@@ -112,21 +112,6 @@ public class ValorisationSupport {
                 .build());
 
         return new RecalcResult(produit.getId(), ancienCout, true, point.getId());
-    }
-
-    /** Compense un recalcul : restaure l'ancien coût du produit et supprime le point d'historique. */
-    public void compenserEntree(RecalcResult result) {
-        if (result == null || !result.produitModifie()) {
-            return;
-        }
-        produitRepository.findById(result.produitId()).ifPresent(p -> {
-            p.setPrixUnitaire(result.ancienCout());
-            p.setUpdatedAt(LocalDateTime.now());
-            produitRepository.save(p);
-        });
-        if (result.historiqueId() != null) {
-            historiqueRepository.deleteById(result.historiqueId());
-        }
     }
 
     /**

@@ -11,7 +11,6 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.springframework.data.annotation.Id;
-import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.time.LocalDate;
@@ -27,10 +26,8 @@ public class MouvementStock {
     @Id
     private String id;
 
-    @Indexed(unique = true)
     private String reference;
 
-    @Indexed
     private String produitId;
     private String produitCode;
     private String produitLibelle;
@@ -40,15 +37,12 @@ public class MouvementStock {
     private MotifMouvement motif;
     private double quantite;
 
-    @Indexed
     private String siteSourceId;
     private String siteSourceNom;
 
-    @Indexed
     private String siteDestinationId;
     private String siteDestinationNom;
 
-    @Indexed
     private LocalDate date;
 
     /** Utilisateur créateur, déduit du JWT (jamais envoyé par le client). */
@@ -64,7 +58,6 @@ public class MouvementStock {
      */
     private String origine;
     /** Id du bon source (si origine = BON). */
-    @Indexed
     private String bonId;
     /** Référence du bon source : BE-/BS-AAAAMMJJ-XXX (si origine = BON). */
     private String bonReference;
@@ -74,7 +67,6 @@ public class MouvementStock {
     private TypeSortie categorieSortie;
 
     /** Id de l'inventaire dont la clôture a généré l'ajustement (si origine = INVENTAIRE). */
-    @Indexed
     private String inventaireId;
     /** Référence de l'inventaire source : INV-AAAAMMJJ-XXX (si origine = INVENTAIRE). */
     private String inventaireReference;
@@ -85,7 +77,6 @@ public class MouvementStock {
     /** Bénéficiaire du don, recopié si le bon source est de type DON (sinon null). */
     private String beneficiaireDon;
     /** Chantier rattaché, recopié si le bon source est de type DISTRIBUTION_CHANTIER (sinon null). */
-    @Indexed
     private String chantierId;
     private String chantierReference;
 

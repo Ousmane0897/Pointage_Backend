@@ -1,11 +1,61 @@
 services:
+  # MongoDB 7.0 en replica set à un nœud (lot 1 / 1a, décision D1) : les transactions
+  # multi-documents l'exigent. Authentification activée et port NON publié (D15) : seule
+  # l'application, dans le réseau Docker, joint la base. Accès d'exploitation :
+  #   docker exec -it mongo mongosh -u "$MONGO_ROOT_USERNAME" -p --authenticationDatabase admin
+  # Procédure de passage depuis mongo:6 : docs/refonte/1a-socle-technique.md (procédure serveur).
   mongo:
-    image: mongo:6
+    image: mongo:7.0
     container_name: mongo
-    ports:
-      - "27018:27017"
+    # Le replica set avec authentification exige une clé partagée (keyFile), propriété de
+    # l'utilisateur mongodb (999) et lisible par lui seul. Elle est générée une fois, dans
+    # son propre volume, puis l'entrypoint officiel démarre mongod.
+    entrypoint:
+      - bash
+      - -c
+      - |
+        if [ ! -s /cle/keyfile ]; then
+          head -c 756 /dev/urandom | base64 > /cle/keyfile
+        fi
+        chmod 400 /cle/keyfile && chown 999:999 /cle/keyfile
+        exec docker-entrypoint.sh mongod --replSet rs0 --bind_ip_all --keyFile /cle/keyfile
+    # Seules les variables utiles sont transmises (pas tout le .env : JWT, SMTP… n'ont rien à
+    # faire dans le conteneur Mongo). docker compose les lit dans .env pour l'interpolation.
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD}
     volumes:
-      - mongo_data:/data/db
+      - mongo7_data:/data/db
+      - mongo_cle:/cle
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --quiet -u \"$$MONGO_INITDB_ROOT_USERNAME\" -p \"$$MONGO_INITDB_ROOT_PASSWORD\" --authenticationDatabase admin --eval 'db.adminCommand({ping: 1}).ok' | grep -q 1"]
+      interval: 5s
+      timeout: 10s
+      retries: 30
+      start_period: 10s
+    restart: always
+
+  # Initialisation idempotente : rs.initiate() si besoin, compte applicatif (readWrite sur la
+  # seule base de l'application). Rejouée à chaque « up », sans effet une fois faite.
+  mongo-init:
+    image: mongo:7.0
+    container_name: mongo-init
+    depends_on:
+      mongo:
+        condition: service_healthy
+    environment:
+      MONGO_ROOT_USERNAME: ${MONGO_ROOT_USERNAME}
+      MONGO_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD}
+      MONGO_APP_USERNAME: ${MONGO_APP_USERNAME}
+      MONGO_APP_PASSWORD: ${MONGO_APP_PASSWORD}
+      MONGO_APP_DATABASE: pointage_cleanic
+    volumes:
+      - ./ops/mongo/initialiser-replica-set.js:/scripts/initialiser-replica-set.js:ro
+    entrypoint:
+      - bash
+      - -c
+      - mongosh --quiet "mongodb://mongo:27017/admin?directConnection=true" -u "$$MONGO_ROOT_USERNAME" -p "$$MONGO_ROOT_PASSWORD" --authenticationDatabase admin --file /scripts/initialiser-replica-set.js
+    restart: "no"
 
   springboot:
     build: .
@@ -13,7 +63,8 @@ services:
     ports:
       - "8080:8080"
     depends_on:
-      - mongo
+      mongo-init:
+        condition: service_completed_successfully
     # Secrets lus dans .env (non suivi par git ; modèle : .env.example). Le profil prod
     # refuse de démarrer si une variable obligatoire manque (SecretsRequisVerificateur).
     env_file:
@@ -23,4 +74,7 @@ services:
     restart: always
 
 volumes:
-  mongo_data:
+  # Nouveau volume pour mongo:7.0 : l'ancien « mongo_data » (mongo:6, standalone) est conservé
+  # tel quel jusqu'à la fin de la bascule, pour un retour arrière (voir la procédure serveur).
+  mongo7_data:
+  mongo_cle:

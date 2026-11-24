@@ -22,6 +22,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "MAIL_USERNAME=factice@exemple.sn",
         "MAIL_PASSWORD=factice",
         "GOOGLE_MAPS_API_KEY=factice",
+        "MONGO_APP_USERNAME=factice",
+        "MONGO_APP_PASSWORD=factice",
         "spring.mail.host=localhost",
         "spring.mail.port=25"
 })
