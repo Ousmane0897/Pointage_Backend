@@ -46,7 +46,8 @@ class MigrationsIT {
             "0001-modules-autorises-nettoyage", "0002-rh-modules-booleen-vers-objet",
             "0003-conges-circuit-trois-niveaux", "0004-dossiers-agentid-renommage",
             "0005-dossiers-date-code-agent", "0006-contrats-alternance-vers-prestation",
-            "0009-periode-essai-suppression", "0010-parametres-paie-par-defaut");
+            "0009-periode-essai-suppression", "0010-parametres-paie-par-defaut",
+            "0011-version-initiale-stock");
     private static final List<String> TOUJOURS = List.of(
             "0007-stock-entrepot-unique", "0008-affectations-sites-complement");
 
@@ -192,6 +193,10 @@ class MigrationsIT {
         db.getCollection("stockv2_etats_stock").insertMany(List.of(
                 new Document("produitId", "p-1").append("siteId", null).append("quantite", 4.0),
                 new Document("produitId", "p-1").append("siteId", "site-A").append("quantite", 6.0)));
+        db.getCollection("stockv2_bons_sortie").insertOne(new Document("reference", "BS-20260101-001")
+                .append("statut", "SOUMIS"));
+        db.getCollection("stockv2_bons_sortie").insertOne(new Document("reference", "BS-20260101-002")
+                .append("statut", "SOUMIS").append("version", 4L));
         db.getCollection("conges").insertOne(new Document("statut", "EN_ATTENTE")
                 .append("dateDebut", LocalDate.of(2026, 11, 2)).append("dateFin", LocalDate.of(2026, 11, 8)));
 
@@ -210,6 +215,10 @@ class MigrationsIT {
         assertThat(soldes).hasSize(1);
         assertThat(soldes.get(0).get("siteId")).isNull();
         assertThat(soldes.get(0).getDouble("quantite")).isEqualTo(10.0);
+        assertThat(db.getCollection("stockv2_bons_sortie").find(new Document("reference", "BS-20260101-001"))
+                .first().getLong("version")).as("version initiale posée").isZero();
+        assertThat(db.getCollection("stockv2_bons_sortie").find(new Document("reference", "BS-20260101-002"))
+                .first().getLong("version")).as("version existante conservée").isEqualTo(4L);
         Document conge = db.getCollection("conges").find().first();
         assertThat(conge.getString("statut")).isEqualTo("EN_ATTENTE_RH");
         assertThat(conge.getInteger("nombreJours")).as("lundi → dimanche = 5 jours ouvrés").isEqualTo(5);

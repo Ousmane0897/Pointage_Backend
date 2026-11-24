@@ -258,3 +258,16 @@ Il est en **lecture seule**, à jouer en production **avant** de démarrer 1a (p
 - `stockv2_produits.code`.
 
 Résultat à reporter ici après le passage du script. Chaque doublon se tranche à la main (fusion, renommage ou suppression), puis on relance.
+
+---
+
+## 5. Verrou optimiste (D1.4)
+
+- **`@Version Long version`** sur `BonEntree`, `BonSortie`, `Inventaire` et `ProduitStock`, le périmètre retenu au plan. Les autres pièces le recevront avec `PieceBase` en 1b ; les référentiels en 1d, 1e et 1f.
+- **ChangeUnit `0011-version-initiale-stock`** (transactionnelle) : `version = 0` sur les documents existants de ces quatre collections, seulement là où le champ manque. Sans elle, Spring Data prendrait un document existant sans version pour un nouveau : son réenregistrement tenterait un insert, d'où un doublon d'`_id`.
+- **Aucun contrat d'API changé** : la version n'est ni exposée ni acceptée. `ProduitStockMapper` l'ignore explicitement dans `toEntity` et `updateEntityFromDto`, comme les autres champs serveur. Un conflit entre la lecture et l'écriture d'une même requête donne **409 `CONFLIT_VERSION`** (§2).
+- **Vérifié** : aucun code ne reconstruit l'une de ces entités avec un `id` existant (toutes les mises à jour relisent l'entité). Les seuls `builder()` sont des créations.
+
+**Tests** :
+- `VerrouOptimisteStockIT` : deux lectures du même produit ; la première écriture passe, la seconde lève `OptimisticLockingFailureException`, et la base garde la première valeur, en version 1.
+- `MigrationsIT`, scénario « formats anciens » : un bon sans version passe à 0, un bon déjà en version 4 est conservé.

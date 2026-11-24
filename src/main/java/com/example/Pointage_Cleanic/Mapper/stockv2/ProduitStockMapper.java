@@ -30,6 +30,8 @@ public interface ProduitStockMapper {
     // 7.6 : non éditables via le formulaire produit 7.3 ; seuls les PATCH dédiés les écrivent.
     @Mapping(target = "methodeValorisation", ignore = true)
     @Mapping(target = "prixVente", ignore = true)
+    // Verrou optimiste (1a) : géré par Spring Data, jamais fourni par le client.
+    @Mapping(target = "version", ignore = true)
     ProduitStock toEntity(ProduitDto dto);
 
     @BeanMapping(nullValuePropertyMappingStrategy = NullValuePropertyMappingStrategy.IGNORE)
@@ -46,6 +48,8 @@ public interface ProduitStockMapper {
     // 7.6 : non éditables via le formulaire produit 7.3 ; seuls les PATCH dédiés les écrivent.
     @Mapping(target = "methodeValorisation", ignore = true)
     @Mapping(target = "prixVente", ignore = true)
+    // Verrou optimiste (1a) : géré par Spring Data, jamais fourni par le client.
+    @Mapping(target = "version", ignore = true)
     void updateEntityFromDto(ProduitDto dto, @MappingTarget ProduitStock entity);
 
     @Named("photoUrl")

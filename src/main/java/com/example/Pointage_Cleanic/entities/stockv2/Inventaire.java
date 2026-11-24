@@ -7,6 +7,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.springframework.data.annotation.Id;
+import org.springframework.data.annotation.Version;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.time.LocalDate;
@@ -23,6 +24,14 @@ public class Inventaire {
 
     @Id
     private String id;
+
+    /**
+     * Verrou optimiste (lot 1 / 1a, décision D1.4) : un enregistrement fondé sur une lecture
+     * périmée échoue (409 CONFLIT_VERSION) au lieu d'écraser une modification concurrente.
+     * Jamais exposé ni accepté par l'API. Initialisé à 0 sur l'existant par la ChangeUnit 0011.
+     */
+    @Version
+    private Long version;
 
     private String reference;
 
