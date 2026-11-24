@@ -38,6 +38,13 @@ dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-websocket'
 
 	// =========================
+	// MIGRATIONS VERSIONNÉES (Mongock, lot 1 / 1a, D2)
+	// =========================
+	implementation platform('io.mongock:mongock-bom:5.5.1')
+	implementation 'io.mongock:mongock-springboot-v3'
+	implementation 'io.mongock:mongodb-springdata-v4-driver'
+
+	// =========================
 	// SWAGGER / OPENAPI
 	// =========================
 	implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.3.0'
