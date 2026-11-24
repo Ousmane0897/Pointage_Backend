@@ -1,0 +1,36 @@
+# MongoDB de DÉVELOPPEMENT en replica set à un nœud (lot 1 / 1a, décision D1).
+#
+# Les transactions MongoDB (et donc l'application depuis 1a) exigent un replica set : un mongod
+# « standalone » échoue au premier commit (« Transaction numbers are only allowed on a replica
+# set member or mongos », que Mongock affiche sous la forme « Transaction is already completed »).
+#
+#   docker compose -f docker-compose.dev.yml up -d
+#
+# Écoute sur 127.0.0.1:27017 (URI par défaut d'application.yml), sans authentification :
+# poste de développement uniquement. Si un service MongoDB local occupe déjà le port 27017,
+# l'arrêter, ou le passer lui-même en replica set (voir docs/refonte/1a-socle-technique.md §2).
+services:
+  mongo-dev:
+    image: mongo:7.0
+    container_name: mongo-dev
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
+    ports:
+      - "127.0.0.1:27017:27017"
+    volumes:
+      - mongo_dev_data:/data/db
+    healthcheck:
+      # Initialise le replica set au premier passage (idempotent), puis répond « prêt » une fois
+      # le nœud PRIMARY. Le membre est déclaré « localhost:27017 » : joignable depuis le poste.
+      test:
+        - CMD
+        - mongosh
+        - --quiet
+        - --eval
+        - "try { rs.status().ok } catch (e) { rs.initiate({_id: 'rs0', members: [{_id: 0, host: 'localhost:27017'}]}).ok }; db.hello().isWritablePrimary || quit(1)"
+      interval: 5s
+      timeout: 10s
+      retries: 30
+      start_period: 5s
+
+volumes:
+  mongo_dev_data:

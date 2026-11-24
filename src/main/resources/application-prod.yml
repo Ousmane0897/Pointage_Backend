@@ -1,7 +1,11 @@
 spring:
   data:
     mongodb:
-      uri: mongodb://mongo:27017/pointage_cleanic
+      # Replica set « rs0 » avec authentification (lot 1 / 1a, D1 et D15) : service « mongo »
+      # du docker-compose, compte applicatif créé par ops/mongo/initialiser-replica-set.js.
+      # Identifiants lus dans l'environnement (.env) ; le mot de passe est inséré tel quel dans
+      # l'URI, d'où la consigne de .env.example (caractères [A-Za-z0-9] seulement).
+      uri: mongodb://${MONGO_APP_USERNAME}:${MONGO_APP_PASSWORD}@mongo:27017/pointage_cleanic?replicaSet=rs0&authSource=admin
 
   mail:
     host: smtp.gmail.com

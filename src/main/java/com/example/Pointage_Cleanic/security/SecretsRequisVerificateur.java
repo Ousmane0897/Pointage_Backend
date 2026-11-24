@@ -25,7 +25,10 @@ public class SecretsRequisVerificateur implements EnvironmentPostProcessor, Orde
             "JWT_SECRET",
             "MAIL_USERNAME",
             "MAIL_PASSWORD",
-            "GOOGLE_MAPS_API_KEY"
+            "GOOGLE_MAPS_API_KEY",
+            // Compte applicatif MongoDB (replica set authentifié, lot 1 / 1a).
+            "MONGO_APP_USERNAME",
+            "MONGO_APP_PASSWORD"
     );
 
     @Override

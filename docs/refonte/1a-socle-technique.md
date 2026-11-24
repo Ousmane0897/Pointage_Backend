@@ -61,3 +61,69 @@ Conséquences pour la suite de 1a :
 - **ChangeUnits d'index** : `transactional = false`. MongoDB n'autorise pas la création d'index dans une transaction sur une collection existante.
 - **ChangeUnits de données** : transactionnelles. Un échec n'écrit rien et refuse le démarrage.
 - **Développement** : le poste doit tourner en replica set (constat 4).
+
+---
+
+## 2. Replica set et transactions (D1.1 à D1.3)
+
+### 2.1 Changements
+
+| Fichier | Changement |
+|---|---|
+| `docker-compose.yml` | **`mongo:7.0` en replica set `rs0`** avec `--keyFile` (clé générée une fois dans le volume `mongo_cle`, propriétaire 999, mode 400) et **authentification** (compte root créé par l'image depuis `MONGO_ROOT_*`). **Port non publié** (D15). Healthcheck `ping`. Nouveau volume `mongo7_data` : l'ancien `mongo_data` (mongo:6) n'est plus monté mais reste sur le disque pour le retour arrière. Le conteneur Mongo ne reçoit que ses deux variables, pas tout le `.env`. |
+| `docker-compose.yml`, service `mongo-init` | Joue `ops/mongo/initialiser-replica-set.js` à chaque `up` : `rs.initiate()` si besoin, attente du PRIMARY, compte applicatif `MONGO_APP_USERNAME` avec le seul rôle `readWrite` sur `pointage_cleanic` (créé ou réaligné). L'application démarre après sa fin réussie (`service_completed_successfully`). |
+| `docker-compose.dev.yml` (nouveau) | Mongo de développement en replica set, sans authentification, sur `127.0.0.1:27017`. Le healthcheck initialise le replica set au premier passage. |
+| `application.yml` | URI de dev `mongodb://localhost:27017/cleanic?directConnection=true`. |
+| `application-prod.yml` | URI `mongodb://${MONGO_APP_USERNAME}:${MONGO_APP_PASSWORD}@mongo:27017/pointage_cleanic?replicaSet=rs0&authSource=admin`. Les identifiants viennent du `.env`, le même que celui que lit `mongo-init` : une seule source. |
+| `SecretsRequisVerificateur`, `.env.example` | `MONGO_APP_USERNAME` et `MONGO_APP_PASSWORD` obligatoires en prod. `MONGO_ROOT_*` documentés. Les mots de passe sont en `[A-Za-z0-9]`, car insérés tels quels dans l'URI (`openssl rand -hex 32`). |
+| `AucunSecretLitteralTest` | Nouveau test : aucune URI `mongodb://utilisateur:motdepasse@` en clair dans `application*.yml` et les deux `docker-compose*.yml`. |
+| `MongoConfigurations` | Beans `MongoTransactionManager` (`readConcern` et `writeConcern` `majority`) et `TransactionTemplate`. |
+| `configurations/ExecuteurTransactionnel` (nouveau) | Voir §2.2. |
+| `GlobalExceptionHandler` | `OptimisticLockingFailureException` → **409 `CONFLIT_VERSION`** ; `ConflitConcurrentException` → **409 `CONFLIT_CONCURRENT`** ; `DuplicateKeyException` → **409 `DOUBLON`**, sans renvoyer le message du pilote, qui contient la valeur en double. Toutes trois tombaient jusqu'ici en 500. Le `TerrainExceptionHandler` (prioritaire sur `controllers.terrain`) n'est pas modifié : le module Terrain n'est pas touché par 1a. |
+| `spikemongock/SpikeConfiguration` | Ne déclare plus son propre gestionnaire de transactions : celui de l'application suffit à Mongock. |
+
+**Écart avec le plan : `MONGODB_URI`.** Le plan prévoyait une variable `MONGODB_URI` complète. J'ai préféré construire l'URI dans `application-prod.yml` à partir de `MONGO_APP_USERNAME` et `MONGO_APP_PASSWORD`. Ainsi, le mot de passe du compte applicatif n'existe qu'une fois dans le `.env`, pour `mongo-init` (qui crée le compte) comme pour l'application (qui s'y connecte) ; il ne peut plus y avoir deux valeurs divergentes.
+
+### 2.2 `ExecuteurTransactionnel` et conventions
+
+**Pourquoi un exécuteur.** Deux transactions qui écrivent le même document ne s'attendent pas : la seconde reçoit aussitôt un `WriteConflict` étiqueté `TransientTransactionError`, et `@Transactional` ne rejoue rien. L'exécuteur prend le relais :
+- il rejoue **le traitement entier**, jusqu'à 5 essais, avec une attente aléatoire de 5 à 25 ms multipliée par le numéro d'essai ;
+- au-delà, il renvoie `ConflitConcurrentException` (409), sans rien avoir écrit ;
+- rejoué, le traitement **relit** l'état : la seconde validation d'un même bon voit le bon déjà `EFFECTIF` et renvoie le 409 métier existant.
+
+**Règles** (reprises dans `CLAUDE.md` à la fin de 1a) :
+- **Rejeu** : l'exécuteur est le moyen recommandé ; `@Transactional` reste permis pour une méthode qui ne risque pas de conflit (D1.3), mais une méthode exposée à la concurrence passe par l'exécuteur.
+- **Aucun appel externe dans le traitement** : il peut être rejoué ou annulé. Les notifications passent par `ExecuteurTransactionnel.apresCommit(...)`, qui ne s'exécute qu'après validation, et jamais en cas d'annulation, en attendant l'outbox de 1b.
+- **Transaction déjà ouverte** : l'exécuteur s'y joint sans rejouer ; la transaction englobante décide.
+- **`UnknownTransactionCommitResult` n'est pas rejoué** : le commit a pu réussir, et rejouer le traitement l'appliquerait deux fois.
+- **Création de collection et d'index** : interdite dans une transaction sur une collection existante. Les index passent par des ChangeUnits non transactionnelles (§4).
+
+### 2.3 Tests
+
+| Test | Vérifie |
+|---|---|
+| `TransactionIT` (critère 1a) | Deux écritures puis exception ⇒ 0 document, par `TransactionTemplate` comme par l'exécuteur. Une erreur métier n'est pas rejouée (1 essai). `apresCommit` n'est appelé qu'après validation, jamais sur annulation. **Conflit d'écriture** : deux transactions lisent 0 puis écrivent « lu + 1 » ⇒ valeur finale 2, au moins un rejeu. **Conflit persistant** (document tenu par une transaction ouverte) ⇒ 5 essais, `ConflitConcurrentException`, document inchangé. |
+| `GlobalExceptionHandlerConflitsTest` | Les trois 409, et l'absence de la valeur en double dans le message de `DOUBLON`. |
+| `AucunSecretLitteralTest`, `SecretsRequisVerificateurTest`, `ProfilProdSecuriteIT` | Adaptés aux deux nouvelles variables. |
+
+**Vérifications dans Docker** (hors suite Gradle) :
+- **Pile prod** : copie jetable, projet isolé, `.env` factice.
+  - `mongo` passe *healthy*, `mongo-init` se termine en 0 ;
+  - un second `mongo-init` répond « déjà initialisé », compte réaligné ;
+  - transaction annulée ⇒ 0 document, validée ⇒ 1, avec le compte applicatif ;
+  - écriture dans une autre base ⇒ `Unauthorized` ;
+  - redémarrage du conteneur ⇒ *healthy* et PRIMARY ;
+  - port 27017 non publié ;
+  - **application construite et démarrée** (`docker compose up --build`, profil prod) : connexion au replica set authentifié par l'URI de `application-prod.yml`, démarrage en 27 s, `GET /api/stock/produits` sans jeton ⇒ 401, runners actuels joués avec le compte applicatif (16 collections créées). Conteneurs renommés dans la copie jetable : un conteneur `springboot-backend` d'un ancien déploiement local existe déjà sur le poste ; il n'a pas été touché.
+- **Mongo de dev** : même commande et même healthcheck dans un conteneur jetable sur le port 27019, le 27017 du poste étant pris par le service MongoDB local, qui n'a pas été touché. Replica set initialisé, transaction depuis le poste avec `directConnection=true`.
+
+### 2.4 Poste de développement
+
+Depuis 1a, l'application exige un replica set : un `mongod` standalone fait échouer le premier commit. Deux possibilités :
+1. **Docker** : `docker compose -f docker-compose.dev.yml up -d` (port 27017 du poste). Il faut d'abord arrêter le service MongoDB Windows s'il occupe ce port ; ses données ne sont pas reprises.
+2. **Garder le service MongoDB local** et le passer en replica set :
+   - ajouter `replication:` puis `  replSetName: rs0` dans `mongod.cfg` ;
+   - redémarrer le service ;
+   - une seule fois : `mongosh --eval "rs.initiate({_id:'rs0', members:[{_id:0, host:'localhost:27017'}]})"`.
+   
+   Les données existantes (base `cleanic`) sont conservées.
