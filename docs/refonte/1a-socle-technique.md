@@ -191,3 +191,70 @@ Comme le spike l'a montré (§1.3, point 9), une ChangeUnit ne peut pas marquer 
 |---|---|
 | `MigrationsIT` (critère 1a) | **Base vide** : les 10 ChangeUnits s'appliquent ; pas de site fictif ni de formation hors `demo` ; un redémarrage ne rejoue aucune ponctuelle et ne change rien. **Base existante** (registre supprimé, données au format courant : utilisateur, dossier avec affectation complète, congé, solde, contrat) : aucun document modifié, ChangeUnits inscrites. **Formats anciens** : `rh` booléen → objet, drapeau mort retiré, `AgentId` → `agentId` daté, `ALTERNANCE` → `PRESTATION`, `periodes_essai` supprimée, solde de site fusionné, congé `EN_ATTENTE` → `EN_ATTENTE_RH` avec 5 jours ouvrés. **`runAlways`** : un solde de site créé entre deux démarrages est refusionné. **Profil `demo`** : 2 sites, 3 formations. |
 | `*MigrationIT` (4 classes, ex-`*RunnerIT`) et `AmorcageSuperadminTest` | Renommés et adaptés (`executer()` au lieu de `run()`). Mêmes cas qu'avant. |
+
+---
+
+## 4. Index versionnés (D3)
+
+### 4.1 Changements
+
+- **`migrations/index/IndexesAttendus`** : **la seule liste** des index, soit **83 index, dont 22 uniques**.
+
+  | Module | Index | dont uniques |
+  |---|---|---|
+  | socle | 8 | 2 |
+  | rh | 24 | 5 |
+  | stock | 22 | 7 |
+  | terrain | 6 | 3 |
+  | production chimie | 23 | 5 |
+
+- **Annotations retirées** : les **63 annotations** `@Indexed` / `@CompoundIndex(es)` ont été retirées de **37 entités**. Elles ne servaient à rien, `auto-index-creation` étant désactivé, et laissaient croire à des index qui n'existaient pas.
+- **Classes supprimées** : `ProductionChimieIndexesConfig` et `TerrainIndexesConfig`. Leurs **26 index** sont repris **à l'identique** (noms, clés, aucun filtre), car ils existent déjà en production : leur recréation est sans effet.
+- **ChangeUnits `0101` à `0105`** (une par module, `transactional = false`) appellent `migrations/index/CreateurIndex` :
+  - index **présent sous le même nom et identique** : rien à faire, ce qui rend la ChangeUnit rejouable ;
+  - **même nom mais autre définition**, ou **mêmes clés sous un autre nom** : conflit (`DEFINITION_DIFFERENTE`, `MEMES_CLES_AUTRE_NOM`) ;
+  - **index unique** : recherche préalable des doublons (`$group` puis `count > 1`) dans le périmètre du filtre partiel ; un **champ absent et un champ `null` sont regroupés** (`$ifNull`), car un index unique les tient pour la même valeur ;
+  - en cas de doublon ou de conflit : rapport dans **`migration_rapports`** (motif, valeurs, 10 identifiants par valeur, 20 valeurs au plus), journal d'erreur limité aux **nombres**, puis **échec**. La ChangeUnit échoue et le démarrage est refusé ; **rien n'est dédoublonné ni supprimé** ;
+  - les index valides du même module sont créés avant l'échec. C'est sans risque : la création est idempotente, et une ChangeUnit en échec repasse au démarrage suivant.
+
+### 4.2 Choix de définition
+
+| Choix | Raison |
+|---|---|
+| Unique sur un champ facultatif : **filtre partiel `{champ: {$type: "string"}}`** (codes, références, matricule, `agentId`), à la place de `sparse` | Un index `sparse` indexe quand même un champ présent mais `null`, et un unique sans filtre traite tous les « sans valeur » comme des doublons. Une **chaîne vide** `""` reste, elle, soumise à l'unicité. |
+| **Sans filtre** : `stockv2_etats_stock (produitId, siteId)`, `rh_jours_feries.date`, `participations_formation (sessionId, employeId)`, les uniques de Production Chimie | Soldes : le couple (produit, entrepôt = `null`) doit lui aussi être unique. Production Chimie : identique à l'existant en production. |
+| **`employes_complet.nomComplet` unique : non créé** | Les homonymes sont légitimes, et la collection est legacy (archivée en 1d). Index consigné ici comme « non créé ». |
+| `produits.search_idx` (texte + `categorie`, `destination`) créé | Reprise fidèle de l'annotation. Collection legacy, sans écran ; aucune requête `$text` n'existe dans le code (un import `TextCriteria` inutilisé dans `PointageServices`). |
+| `pointages.site` (tableau) et `deviceId` créés | Repris des annotations. Les pointages relèvent du lot 2. |
+
+### 4.3 Script d'exploitation `ops/mongo/detecter-doublons.js`
+
+Il est en **lecture seule**, à jouer en production **avant** de démarrer 1a (procédure, §7). Pour chacun des 22 index uniques, il affiche les valeurs en double, avec un échantillon d'identifiants ; puis il liste les index déjà présents en base, pour repérer un conflit de nom ou de définition.
+
+`DetecterDoublonsScriptTest` vérifie que le script couvre **exactement** les index uniques d'`IndexesAttendus`, avec le même filtre partiel ou sans filtre.
+
+**Vérifications** :
+- sur les bases locales de développement (`cleanic`, `Cleanicpointage`, presque vides) : aucune erreur, aucun doublon ;
+- dans un conteneur jetable :
+  - un matricule en double ⇒ « BLOQUANT » avec les deux identifiants ;
+  - un ancien index `code` sous un autre nom ⇒ listé ;
+  - un solde `(p, siteId: null)` plus `(p, siteId absent)` ⇒ « BLOQUANT ». Ce cas a révélé le défaut `null` / absent, corrigé dans le script et dans `CreateurIndex`.
+
+### 4.4 Tests
+
+| Test | Vérifie |
+|---|---|
+| `IndexesAttendusIT` (critère 1a) | Base vide puis toutes les migrations ⇒ chaque index attendu existe avec sa définition (clés, unicité, filtre). **Aucun index non déclaré** dans aucune collection, hors `mongock*` et `migration_rapports`. Taille de la liste : 83. |
+| `CreateurIndexIT` (critère 1a, « jeu piégé ») | Doublons ⇒ échec, rapport `DOUBLONS` avec la valeur et le nombre, **index non créé, 3 documents conservés**. Absent / `null` ⇒ doublon rapporté. Filtre partiel : les documents sans valeur ne sont pas des doublons. Sans filtre : les absents comptent. Index déjà présent à l'identique ⇒ rien à faire, rejouable. Même nom, autre définition ⇒ conflit `DEFINITION_DIFFERENTE`. |
+| `DetecterDoublonsScriptTest` | Alignement du script sur `IndexesAttendus`. |
+
+**Aucun test existant ne violait les nouveaux index uniques** : la suite complète est passée sans modification de test.
+
+### 4.5 Index en échec éventuels en production
+
+**Inconnus à ce jour** : il faut jouer `detecter-doublons.js` sur la base de production. Je n'ai pas accès au serveur, et aucune copie n'a été faite. Les candidats probables sont les mêmes que ceux de la conception (D3) :
+- `dossiers_employes.matricule` et `agentId` (index jamais créés, saisie libre, import Excel) ;
+- `stockv2_etats_stock (produitId, siteId)` (`appliquerDelta` pouvait créer deux soldes en concurrence) ;
+- `stockv2_produits.code`.
+
+Résultat à reporter ici après le passage du script. Chaque doublon se tranche à la main (fusion, renommage ou suppression), puis on relance.

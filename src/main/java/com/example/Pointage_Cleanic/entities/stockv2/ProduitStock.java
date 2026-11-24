@@ -8,7 +8,6 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.springframework.data.annotation.Id;
-import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.time.LocalDateTime;
@@ -28,13 +27,11 @@ public class ProduitStock {
     @Id
     private String id;
 
-    @Indexed(unique = true)
     private String code;
 
     private String libelle;
     private TypeProduit typeProduit;
 
-    @Indexed
     private String categorieId;
     private String sousCategorie;
 
@@ -74,7 +71,6 @@ public class ProduitStock {
     private String ficheTechniqueNom;
     private String ficheTechniqueMimeType;
 
-    @Indexed
     private boolean actif;
     private String remarque;
 

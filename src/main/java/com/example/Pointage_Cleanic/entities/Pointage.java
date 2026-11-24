@@ -3,8 +3,6 @@ package com.example.Pointage_Cleanic.entities;
 import lombok.*;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.Id;
-import org.springframework.data.mongodb.core.index.CompoundIndex;
-import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.time.Instant;
@@ -16,18 +14,9 @@ import java.time.LocalDate;
 @Builder
 @Document(collection = "pointages")
 // Index composé pour filtrer par date et trier par timestamp
-@CompoundIndex(name = "date_timestamp_idx", def = "{'date': 1, 'timestamp': -1}")
 
 
-@CompoundIndex(
-        name = "search_idx",
-        def = "{'nom': 1, 'prenom': 1, 'codeSecret': 1}"
-)
 // Couvre le flux de pointage : recherche/clôture atomique du pointage ouvert du jour.
-@CompoundIndex(
-        name = "pointage_flux_idx",
-        def = "{'codeSecret': 1, 'date': 1, 'heureDepart': 1}"
-)
 
 public class Pointage {
 
@@ -38,7 +27,6 @@ public class Pointage {
     private String codeSecret;
     private String prenom;
     private String nom;
-    @Indexed
     private String[] site;
 
     private LocalDate date;
@@ -47,7 +35,6 @@ public class Pointage {
     private String heureDepart;
     private String duree;
     private String status;
-    @Indexed
     private String deviceId;
 
     @CreatedDate

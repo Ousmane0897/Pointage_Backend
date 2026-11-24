@@ -6,7 +6,6 @@ import com.example.Pointage_Cleanic.Enum.rh.TypeConge;
 import com.fasterxml.jackson.annotation.JsonFormat;
 import lombok.*;
 import org.springframework.data.annotation.Id;
-import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.time.LocalDate;
@@ -31,7 +30,6 @@ public class DemandeConge {
     @Id
     private String id;
 
-    @Indexed
     private String employeId;
 
     private String matricule;
@@ -59,7 +57,6 @@ public class DemandeConge {
     // ─── Circuit de validation à 3 niveaux ──────────────────────────────────
 
     /** Validateur de niveau 1, figé à la création. */
-    @Indexed
     private String superieurHierarchiqueId;
 
     private String superieurHierarchiqueNom;

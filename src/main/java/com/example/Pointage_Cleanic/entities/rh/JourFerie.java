@@ -2,7 +2,6 @@ package com.example.Pointage_Cleanic.entities.rh;
 
 import lombok.*;
 import org.springframework.data.annotation.Id;
-import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.time.LocalDate;
@@ -39,7 +38,6 @@ public class JourFerie {
      * sans quoi le même jour serait décompté deux fois par toute agrégation qui compterait
      * les documents plutôt que les dates distinctes.
      */
-    @Indexed(unique = true)
     private LocalDate date;
 
     /** Libellé affiché : « Fête de l'Indépendance », « Korité », … */

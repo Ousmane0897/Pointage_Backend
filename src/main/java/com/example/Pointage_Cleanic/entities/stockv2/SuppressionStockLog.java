@@ -5,7 +5,6 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.springframework.data.annotation.Id;
-import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.time.LocalDateTime;
@@ -50,7 +49,6 @@ public class SuppressionStockLog {
 
     private TypeDocument typeDocument;
 
-    @Indexed
     private String documentId;
     private String reference;
     /** Statut du document juste avant sa suppression (valeur de l'enum, en chaîne). */
