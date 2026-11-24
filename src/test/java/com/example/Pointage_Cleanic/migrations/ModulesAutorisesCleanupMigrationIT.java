@@ -1,4 +1,4 @@
-package com.example.Pointage_Cleanic.DataLoader;
+package com.example.Pointage_Cleanic.migrations;
 
 import com.example.Pointage_Cleanic.config.MongoTestContainer;
 import com.example.Pointage_Cleanic.entities.Utilisateur;
@@ -19,13 +19,13 @@ import static org.assertj.core.api.Assertions.assertThat;
         "spring.mail.port=25",
         "jwt.secret=test_secret_at_least_32_characters_long_xyz"
 })
-class ModulesAutorisesCleanupRunnerIT extends MongoTestContainer {
+class ModulesAutorisesCleanupMigrationIT extends MongoTestContainer {
 
     private static final String COLLECTION = "utilisateur";
     private static final String EMAIL_LEGACY = "legacy@test.com";
 
     @Autowired
-    private ModulesAutorisesCleanupRunner runner;
+    private ModulesAutorisesCleanupMigration migration;
 
     @Autowired
     private MongoTemplate mongoTemplate;
@@ -71,7 +71,7 @@ class ModulesAutorisesCleanupRunnerIT extends MongoTestContainer {
     void cleanup_retire_les_flags_morts_et_preserve_les_flags_valides() {
         insererDocumentLegacy();
 
-        runner.run();
+        migration.executer();
 
         Document modules = (Document) mongoTemplate.getCollection(COLLECTION)
                 .find(new Document("email", EMAIL_LEGACY)).first()
@@ -96,8 +96,8 @@ class ModulesAutorisesCleanupRunnerIT extends MongoTestContainer {
                         .append("rh", true));
         mongoTemplate.getCollection(COLLECTION).insertOne(propre);
 
-        runner.run();
-        runner.run();
+        migration.executer();
+        migration.executer();
 
         Document modules = (Document) mongoTemplate.getCollection(COLLECTION)
                 .find(new Document("email", "moderne@test.com")).first()

@@ -1,4 +1,4 @@
-package com.example.Pointage_Cleanic.DataLoader;
+package com.example.Pointage_Cleanic.migrations;
 
 import com.example.Pointage_Cleanic.entities.rh.AffectationSite;
 import com.example.Pointage_Cleanic.entities.rh.DossierEmploye;
@@ -7,8 +7,6 @@ import com.example.Pointage_Cleanic.util.AffectationSiteUtils;
 import com.example.Pointage_Cleanic.util.SiteAffecteUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.boot.CommandLineRunner;
-import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -28,14 +26,12 @@ import java.util.List;
  */
 @Slf4j
 @Component
-@Order(1200)
 @RequiredArgsConstructor
-public class AffectationSiteBackfillRunner implements CommandLineRunner {
+public class AffectationSiteBackfillMigration {
 
     private final DossierEmployeRepository dossierEmployeRepository;
 
-    @Override
-    public void run(String... args) {
+    public void executer() {
         List<DossierEmploye> tous = dossierEmployeRepository.findAll();
         if (tous.isEmpty()) return;
 

@@ -1,9 +1,7 @@
-package com.example.Pointage_Cleanic.DataLoader;
+package com.example.Pointage_Cleanic.migrations;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.boot.CommandLineRunner;
-import org.springframework.core.annotation.Order;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.stereotype.Component;
 
@@ -27,9 +25,8 @@ import java.util.List;
  */
 @Slf4j
 @Component
-@Order(1200)
 @RequiredArgsConstructor
-public class PeriodeEssaiDropRunner implements CommandLineRunner {
+public class PeriodeEssaiDropMigration {
 
     private static final List<String> COLLECTIONS_A_SUPPRIMER = List.of(
             "periodes_essai",
@@ -37,8 +34,7 @@ public class PeriodeEssaiDropRunner implements CommandLineRunner {
 
     private final MongoTemplate mongoTemplate;
 
-    @Override
-    public void run(String... args) {
+    public void executer() {
         COLLECTIONS_A_SUPPRIMER.forEach(collection -> {
             if (mongoTemplate.collectionExists(collection)) {
                 mongoTemplate.getCollection(collection).drop();

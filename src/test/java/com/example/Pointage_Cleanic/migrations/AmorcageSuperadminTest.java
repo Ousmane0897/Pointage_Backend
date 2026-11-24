@@ -1,9 +1,7 @@
-package com.example.Pointage_Cleanic.DataLoader;
+package com.example.Pointage_Cleanic.migrations;
 
 import com.example.Pointage_Cleanic.entities.User;
 import com.example.Pointage_Cleanic.repositories.LoginRepository;
-import com.example.Pointage_Cleanic.repositories.rh.FormationRepository;
-import com.example.Pointage_Cleanic.repositories.rh.GrilleEvaluationRepository;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -19,16 +17,15 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /** C3 — le mot de passe initial du super-admin vient de l'environnement, jamais du code. */
-class DataLoaderSuperadminTest {
+class AmorcageSuperadminTest {
 
     private final LoginRepository logins = mock(LoginRepository.class);
     private final PasswordEncoder encoder = mock(PasswordEncoder.class);
-    private final DataLoader loader = new DataLoader(logins, encoder,
-            mock(GrilleEvaluationRepository.class), mock(FormationRepository.class));
+    private final AmorcageSuperadmin loader = new AmorcageSuperadmin(logins, encoder);
 
     @Test
     void sans_variable_aucun_compte_cree() {
-        when(logins.findByEmail(DataLoader.SUPERADMIN_EMAIL)).thenReturn(Optional.empty());
+        when(logins.findByEmail(AmorcageSuperadmin.SUPERADMIN_EMAIL)).thenReturn(Optional.empty());
         ReflectionTestUtils.setField(loader, "superadminInitialPassword", "");
 
         loader.seedSuperadmin();
@@ -39,7 +36,7 @@ class DataLoaderSuperadminTest {
 
     @Test
     void avec_variable_compte_cree_avec_changement_obligatoire() {
-        when(logins.findByEmail(DataLoader.SUPERADMIN_EMAIL)).thenReturn(Optional.empty());
+        when(logins.findByEmail(AmorcageSuperadmin.SUPERADMIN_EMAIL)).thenReturn(Optional.empty());
         when(encoder.encode("valeur-factice")).thenReturn("HASH");
         ReflectionTestUtils.setField(loader, "superadminInitialPassword", "valeur-factice");
 
@@ -54,7 +51,7 @@ class DataLoaderSuperadminTest {
 
     @Test
     void compte_existant_inchange() {
-        when(logins.findByEmail(DataLoader.SUPERADMIN_EMAIL)).thenReturn(Optional.of(new User()));
+        when(logins.findByEmail(AmorcageSuperadmin.SUPERADMIN_EMAIL)).thenReturn(Optional.of(new User()));
         ReflectionTestUtils.setField(loader, "superadminInitialPassword", "valeur-factice");
 
         loader.seedSuperadmin();

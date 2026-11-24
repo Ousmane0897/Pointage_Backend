@@ -1,4 +1,4 @@
-package com.example.Pointage_Cleanic.DataLoader;
+package com.example.Pointage_Cleanic.migrations;
 
 import com.example.Pointage_Cleanic.Dto.rh.DossierEmployeDto;
 import com.example.Pointage_Cleanic.Mapper.rh.DossierEmployeMapper;
@@ -21,12 +21,12 @@ import static org.assertj.core.api.Assertions.assertThat;
         "spring.mail.port=25",
         "jwt.secret=test_secret_at_least_32_characters_long_xyz"
 })
-class DossierAgentIdMigrationRunnerIT extends MongoTestContainer {
+class DossierAgentIdMigrationIT extends MongoTestContainer {
 
     private static final String COLLECTION = "dossiers_employes";
 
     @Autowired
-    private DossierAgentIdMigrationRunner runner;
+    private DossierAgentIdMigration migration;
 
     @Autowired
     private MongoTemplate mongoTemplate;
@@ -59,7 +59,7 @@ class DossierAgentIdMigrationRunnerIT extends MongoTestContainer {
         // Avant migration : la clé legacy n'est plus lue par l'entité renommée
         assertThat(dossierEmployeRepository.findByAgentId("1234")).isEmpty();
 
-        runner.run();
+        migration.executer();
 
         Optional<DossierEmploye> migre = dossierEmployeRepository.findByAgentId("1234");
         assertThat(migre).isPresent();
@@ -76,11 +76,11 @@ class DossierAgentIdMigrationRunnerIT extends MongoTestContainer {
     void migration_idempotente() {
         insererDocumentLegacy();
 
-        runner.run();
+        migration.executer();
         Document apresPremierPassage = mongoTemplate.getCollection(COLLECTION)
                 .find(new Document("matricule", "MAT-LEG")).first();
 
-        runner.run();
+        migration.executer();
         Document apresSecondPassage = mongoTemplate.getCollection(COLLECTION)
                 .find(new Document("matricule", "MAT-LEG")).first();
 

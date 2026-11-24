@@ -127,3 +127,67 @@ Depuis 1a, l'application exige un replica set : un `mongod` standalone fait éch
    - une seule fois : `mongosh --eval "rs.initiate({_id:'rs0', members:[{_id:0, host:'localhost:27017'}]})"`.
    
    Les données existantes (base `cleanic`) sont conservées.
+
+---
+
+## 3. Migrations versionnées (D2)
+
+### 3.1 Organisation
+
+- **`DataLoader/` devient `migrations/`** (`git mv`, historique conservé). Plus aucun `CommandLineRunner` de migration, plus aucun `@Order`.
+- **La logique** reste dans un bean Spring par migration (`migrations/*Migration`, méthode `executer()`), testable directement comme avant.
+- **Une ChangeUnit** par migration (`migrations/changeunits/C<ordre>…`) : une enveloppe mince qui reçoit le bean par son constructeur et l'appelle. Mongock fixe l'ordre, tient le registre et prend le verrou.
+- **Activation** : `configurations/MigrationsConfig` (`@EnableMongock`), réglages `mongock.*` dans `application.yml` (paquet scanné, `runner-type: initializingbean`, `transactional: true`). Le spike n'active plus Mongock lui-même ; il change seulement le paquet scanné.
+
+### 3.2 Correspondance
+
+| ChangeUnit | Ancien runner | Mode | Pourquoi |
+|---|---|---|---|
+| `0001-modules-autorises-nettoyage` | `ModulesAutorisesCleanupRunner` (900) | ponctuelle | — |
+| `0002-rh-modules-booleen-vers-objet` | `RhModuleMigrationRunner` (901) | ponctuelle | — |
+| `0003-conges-circuit-trois-niveaux` | `CongeStatutMigrationRunner` (902) | ponctuelle | Voir §3.3, constat 1. Le `try/catch` qui avalait l'erreur est retiré : un échec annule et refuse le démarrage (D2). |
+| `0004-dossiers-agentid-renommage` | `DossierAgentIdMigrationRunner` (950) | ponctuelle | — |
+| `0005-dossiers-date-code-agent` | `AgentIdDateBackfillRunner` (960) | ponctuelle | `DossierEmployeService.horodaterCode` date déjà tout code posé à la création, à l'import ou au changement. |
+| `0006-contrats-alternance-vers-prestation` | `ContratAlternanceMigrationRunner` (1000) | ponctuelle | — |
+| `0007-stock-entrepot-unique` | `StockEntrepotUniqueMigrationRunner` (1010) | **`runAlways`** | Voir §3.3, constat 2. |
+| `0008-affectations-sites-complement` | `AffectationSiteBackfillRunner` (1200) | **`runAlways`** | Voir §3.3, constat 3. |
+| `0009-periode-essai-suppression` | `PeriodeEssaiDropRunner` (1200) | ponctuelle, **non transactionnelle** | La suppression de collection est interdite dans une transaction. |
+| `0010-parametres-paie-par-defaut` | `ParametresPaieDataLoader` | ponctuelle | Données de référence : `ParametresPaieService` répond 404 sans elles. |
+| `9001-demo-rh` | `DataLoader` (grille générique, 3 formations) | ponctuelle, **profil `demo`** | Démonstration (D2). |
+| `9002-demo-terrain` | `TerrainDataLoader` | ponctuelle, **profil `demo`** | Sites fictifs actifs en prod (audit §4.3). Les paramètres d'escalade se créent déjà à la demande (`AlerteService.getParametresEntity`). |
+| — | `DataLoader.seedSuperadmin` | **`AmorcageSuperadmin`**, `CommandLineRunner` hors Mongock | Écart validé au plan : il dépend d'une variable d'environnement. En ChangeUnit, il serait inscrit « appliqué » même sauté faute de mot de passe. Disparaît avec `comptes` (1g). |
+
+Les `System.out.println` des seeds sont remplacés par des journaux (règle du lot 0).
+
+### 3.3 Constats faits en convertissant
+
+1. **Bogue arrêté : `nombreJours` des congés.**
+   - **Ce que faisait le runner** : `CongeStatutMigrationRunner` recalculait à **chaque démarrage** le `nombreJours` de **toutes** les demandes, avec `CongeCalendrier.joursOuvres(debut, fin)`, c'est-à-dire **sans les jours fériés**.
+   - **Ce que font les services** : `DemandeCongeService` (l. 396) et `CongeWorkflowService` (l. 117) les déduisent.
+   - **Conséquence** : chaque redémarrage réécrasait la bonne valeur des demandes contenant un férié, et faussait les soldes.
+   - **Désormais** : la ChangeUnit `0003` est ponctuelle. Elle tourne encore une fois, avec le même calcul, puis plus jamais.
+   - **À trancher** : les demandes déjà réécrasées gardent leur valeur sans fériés. Une ChangeUnit corrective, qui recalculerait avec `JourFerieService`, est possible mais change des soldes. C'est à décider avec la RH ; ce n'est pas fait en 1a.
+2. **Soldes de site.** `InventaireService.cloturer` applique l'écart d'un inventaire **par site** au solde de ce site. L'ancien runner refusionnait ces soldes dans l'entrepôt à chaque démarrage. Pour ne rien changer, `0007` est `runAlways`. Ce comportement disparaîtra avec le référentiel des magasins (lot 3).
+3. **Compléments d'affectation.**
+   - **Ce que faisait le runner** : `AffectationSiteBackfillRunner` complétait à chaque démarrage le rythme (`joursTravail`) et la date d'entrée des affectations. Les dossiers créés ou modifiés depuis le dernier démarrage les recevaient ainsi ; le service ne les pose pas à l'écriture.
+   - **Désormais** : `0008` est `runAlways`, pour garder ce comportement.
+   - **À faire en 1d** : calculer ces compléments à l'écriture (`DossierEmployeService.appliquerAffectations` et l'import), puis rendre `0008` ponctuelle.
+4. **`runAlways` et registre.** Mongock met à jour l'entrée existante au lieu d'en ajouter une à chaque passage. Le test vérifie donc l'effet, et non le nombre d'entrées.
+
+### 3.4 « Baseline » : traitement retenu
+
+Comme le spike l'a montré (§1.3, point 9), une ChangeUnit ne peut pas marquer les autres comme appliquées.
+
+**Ce qui se passe sur la production** (runners déjà passés, registre absent) au premier démarrage :
+- chaque ChangeUnit s'exécute une fois ;
+- ses gardes d'idempotence, celles des anciens runners, ne trouvent rien à faire ;
+- elle s'inscrit au registre.
+
+`MigrationsIT.base_existante_deja_migree_aucune_ecriture` le prouve : toutes les collections sont photographiées avant et après le démarrage, et elles sont **identiques document pour document**.
+
+### 3.5 Tests
+
+| Test | Vérifie |
+|---|---|
+| `MigrationsIT` (critère 1a) | **Base vide** : les 10 ChangeUnits s'appliquent ; pas de site fictif ni de formation hors `demo` ; un redémarrage ne rejoue aucune ponctuelle et ne change rien. **Base existante** (registre supprimé, données au format courant : utilisateur, dossier avec affectation complète, congé, solde, contrat) : aucun document modifié, ChangeUnits inscrites. **Formats anciens** : `rh` booléen → objet, drapeau mort retiré, `AgentId` → `agentId` daté, `ALTERNANCE` → `PRESTATION`, `periodes_essai` supprimée, solde de site fusionné, congé `EN_ATTENTE` → `EN_ATTENTE_RH` avec 5 jours ouvrés. **`runAlways`** : un solde de site créé entre deux démarrages est refusionné. **Profil `demo`** : 2 sites, 3 formations. |
+| `*MigrationIT` (4 classes, ex-`*RunnerIT`) et `AmorcageSuperadminTest` | Renommés et adaptés (`executer()` au lieu de `run()`). Mêmes cas qu'avant. |

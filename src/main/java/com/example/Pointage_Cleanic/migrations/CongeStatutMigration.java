@@ -1,4 +1,4 @@
-package com.example.Pointage_Cleanic.DataLoader;
+package com.example.Pointage_Cleanic.migrations;
 
 import com.example.Pointage_Cleanic.Enum.rh.ActionValidationConge;
 import com.example.Pointage_Cleanic.Enum.rh.NiveauValidationConge;
@@ -11,8 +11,6 @@ import com.example.Pointage_Cleanic.repositories.rh.DossierEmployeRepository;
 import com.example.Pointage_Cleanic.services.rh.CongeCalendrier;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.boot.CommandLineRunner;
-import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
@@ -37,57 +35,52 @@ import java.util.Optional;
  */
 @Slf4j
 @Component
-@Order(902)
 @RequiredArgsConstructor
-public class CongeStatutMigrationRunner implements CommandLineRunner {
+public class CongeStatutMigration {
 
     private final DemandeCongeRepository demandeCongeRepository;
     private final DossierEmployeRepository dossierEmployeRepository;
 
-    @Override
-    public void run(String... args) {
-        try {
-            List<DemandeConge> demandes = demandeCongeRepository.findAll();
-            if (demandes.isEmpty()) {
-                return;
+    public void executer() {
+        // Plus de try/catch qui avale l'erreur : en ChangeUnit (lot 1 / 1a, D2), un échec annule
+        // la transaction et refuse le démarrage, au lieu d'être inscrit comme appliqué.
+        List<DemandeConge> demandes = demandeCongeRepository.findAll();
+        if (demandes.isEmpty()) {
+            return;
+        }
+
+        List<DemandeConge> aSauver = new ArrayList<>();
+        int statutsMigres = 0;
+        int joursRecalcules = 0;
+
+        for (DemandeConge demande : demandes) {
+            boolean modifiee = false;
+
+            if (demande.getStatut() == StatutDemande.EN_ATTENTE) {
+                migrerStatut(demande);
+                statutsMigres++;
+                modifiee = true;
             }
 
-            List<DemandeConge> aSauver = new ArrayList<>();
-            int statutsMigres = 0;
-            int joursRecalcules = 0;
-
-            for (DemandeConge demande : demandes) {
-                boolean modifiee = false;
-
-                if (demande.getStatut() == StatutDemande.EN_ATTENTE) {
-                    migrerStatut(demande);
-                    statutsMigres++;
-                    modifiee = true;
-                }
-
-                int attendu = CongeCalendrier.joursOuvres(demande.getDateDebut(), demande.getDateFin());
-                if (demande.getNombreJours() == null || demande.getNombreJours() != attendu) {
-                    demande.setNombreJours(attendu);
-                    joursRecalcules++;
-                    modifiee = true;
-                }
-
-                if (modifiee) {
-                    aSauver.add(demande);
-                }
+            int attendu = CongeCalendrier.joursOuvres(demande.getDateDebut(), demande.getDateFin());
+            if (demande.getNombreJours() == null || demande.getNombreJours() != attendu) {
+                demande.setNombreJours(attendu);
+                joursRecalcules++;
+                modifiee = true;
             }
 
-            if (!aSauver.isEmpty()) {
-                demandeCongeRepository.saveAll(aSauver);
+            if (modifiee) {
+                aSauver.add(demande);
             }
-            if (statutsMigres > 0 || joursRecalcules > 0) {
-                log.info("Migration congés : {} statut(s) EN_ATTENTE convertis vers le circuit "
-                        + "à 3 niveaux, {} nombreJours recalculés en jours ouvrés.",
-                        statutsMigres, joursRecalcules);
-            }
-        } catch (Exception e) {
-            // Une migration ratée ne doit pas empêcher l'application de démarrer.
-            log.warn("Migration des demandes de congé échouée : {}", e.getMessage());
+        }
+
+        if (!aSauver.isEmpty()) {
+            demandeCongeRepository.saveAll(aSauver);
+        }
+        if (statutsMigres > 0 || joursRecalcules > 0) {
+            log.info("Migration congés : {} statut(s) EN_ATTENTE convertis vers le circuit "
+                    + "à 3 niveaux, {} nombreJours recalculés en jours ouvrés.",
+                    statutsMigres, joursRecalcules);
         }
     }
 

@@ -1,9 +1,7 @@
-package com.example.Pointage_Cleanic.DataLoader;
+package com.example.Pointage_Cleanic.migrations;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.boot.CommandLineRunner;
-import org.springframework.core.annotation.Order;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.data.mongodb.core.query.Update;
@@ -23,9 +21,8 @@ import java.util.List;
  */
 @Slf4j
 @Component
-@Order(900)
 @RequiredArgsConstructor
-public class ModulesAutorisesCleanupRunner implements CommandLineRunner {
+public class ModulesAutorisesCleanupMigration {
 
     private static final String COLLECTION = "utilisateur";
 
@@ -39,8 +36,7 @@ public class ModulesAutorisesCleanupRunner implements CommandLineRunner {
 
     private final MongoTemplate mongoTemplate;
 
-    @Override
-    public void run(String... args) {
+    public void executer() {
         Update update = new Update();
         CHAMPS_MORTS.forEach(champ -> update.unset("modulesAutorises." + champ));
 

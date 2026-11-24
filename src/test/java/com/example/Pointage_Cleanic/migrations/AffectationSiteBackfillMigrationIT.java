@@ -1,4 +1,4 @@
-package com.example.Pointage_Cleanic.DataLoader;
+package com.example.Pointage_Cleanic.migrations;
 
 import com.example.Pointage_Cleanic.Dto.rh.AffectationSiteDto;
 import com.example.Pointage_Cleanic.Dto.rh.DossierEmployeDto;
@@ -28,12 +28,12 @@ import static org.assertj.core.api.Assertions.assertThat;
         "spring.mail.port=25",
         "jwt.secret=test_secret_at_least_32_characters_long_xyz"
 })
-class AffectationSiteBackfillRunnerIT extends MongoTestContainer {
+class AffectationSiteBackfillMigrationIT extends MongoTestContainer {
 
     private static final String COLLECTION = "dossiers_employes";
 
     @Autowired
-    private AffectationSiteBackfillRunner runner;
+    private AffectationSiteBackfillMigration migration;
 
     @Autowired
     private DossierEmployeService service;
@@ -113,7 +113,7 @@ class AffectationSiteBackfillRunnerIT extends MongoTestContainer {
                 .build();
         repository.save(legacy);
 
-        runner.run();
+        migration.executer();
 
         DossierEmploye migre = repository.findByMatricule("MAT-LEG").orElseThrow();
         assertThat(migre.getAffectations()).hasSize(2);
@@ -133,8 +133,8 @@ class AffectationSiteBackfillRunnerIT extends MongoTestContainer {
                 .build();
         repository.save(dejaPourvu);
 
-        runner.run();
-        runner.run();
+        migration.executer();
+        migration.executer();
 
         DossierEmploye inchange = repository.findByMatricule("MAT-OK").orElseThrow();
         // La liste d'origine (1 seul site, avec horaires) est conservée telle quelle : la
@@ -176,8 +176,8 @@ class AffectationSiteBackfillRunnerIT extends MongoTestContainer {
                 .build();
         repository.save(legacy);
 
-        runner.run();
-        runner.run();   // idempotent
+        migration.executer();
+        migration.executer();   // idempotent
 
         DossierEmploye migre = repository.findByMatricule("MAT-PROP").orElseThrow();
         assertThat(migre.getAffectations()).allSatisfy(a -> {
@@ -202,7 +202,7 @@ class AffectationSiteBackfillRunnerIT extends MongoTestContainer {
                 .build();
         repository.save(saisi);
 
-        runner.run();
+        migration.executer();
 
         AffectationSite affectation =
                 repository.findByMatricule("MAT-KEEP").orElseThrow().getAffectations().get(0);
@@ -214,7 +214,7 @@ class AffectationSiteBackfillRunnerIT extends MongoTestContainer {
     void backfill_ne_touche_pas_une_affectation_a_jours_explicites() {
         // ⚠ Une affectation dont la liste fait autorité n'a pas de rythme à recevoir : y
         // poser celui de l'employé écrirait une seconde vérité contradictoire. Et surtout,
-        // le runner ne DÉRIVE jamais `joursSemaine` — personne ne connaît les jours réels
+        // la migration ne DÉRIVE jamais `joursSemaine` — personne ne connaît les jours réels
         // d'un agent legacy, et les inventer recréerait les fausses absences.
         DossierEmploye explicite = DossierEmploye.builder()
                 .matricule("MAT-EXPL").agentId("1913").nom("Expl").prenom("Ite")
@@ -227,7 +227,7 @@ class AffectationSiteBackfillRunnerIT extends MongoTestContainer {
                 .build();
         repository.save(explicite);
 
-        runner.run();
+        migration.executer();
 
         AffectationSite affectation =
                 repository.findByMatricule("MAT-EXPL").orElseThrow().getAffectations().get(0);
@@ -247,7 +247,7 @@ class AffectationSiteBackfillRunnerIT extends MongoTestContainer {
                 .build();
         repository.save(legacy);
 
-        runner.run();
+        migration.executer();
 
         AffectationSite affectation =
                 repository.findByMatricule("MAT-LEG").orElseThrow().getAffectations().get(0);
@@ -273,7 +273,7 @@ class AffectationSiteBackfillRunnerIT extends MongoTestContainer {
                 .build();
         repository.save(sansIds);
 
-        runner.run();
+        migration.executer();
 
         assertThat(repository.findByMatricule("MAT-ID").orElseThrow().getAffectations())
                 .extracting(AffectationSite::getId)
@@ -291,11 +291,11 @@ class AffectationSiteBackfillRunnerIT extends MongoTestContainer {
                 .build();
         repository.save(dossier);
 
-        runner.run();
+        migration.executer();
         String pose = repository.findByMatricule("MAT-IDEM").orElseThrow()
                 .getAffectations().get(0).getId();
 
-        runner.run();
+        migration.executer();
 
         assertThat(repository.findByMatricule("MAT-IDEM").orElseThrow()
                 .getAffectations().get(0).getId()).isEqualTo(pose);
@@ -311,7 +311,7 @@ class AffectationSiteBackfillRunnerIT extends MongoTestContainer {
                 .build();
         repository.save(legacy);
 
-        runner.run();
+        migration.executer();
 
         assertThat(repository.findByMatricule("MAT-DERIVE").orElseThrow().getAffectations())
                 .hasSize(2)

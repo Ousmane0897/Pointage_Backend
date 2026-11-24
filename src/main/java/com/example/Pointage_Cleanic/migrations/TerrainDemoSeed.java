@@ -1,4 +1,4 @@
-package com.example.Pointage_Cleanic.DataLoader;
+package com.example.Pointage_Cleanic.migrations;
 
 import com.example.Pointage_Cleanic.Enum.terrain.CategoriePhyto;
 import com.example.Pointage_Cleanic.Enum.terrain.FrequencePassage;
@@ -14,7 +14,8 @@ import com.example.Pointage_Cleanic.repositories.terrain.ParametresEscaladeRepos
 import com.example.Pointage_Cleanic.repositories.terrain.ProduitPhytoRepository;
 import com.example.Pointage_Cleanic.repositories.terrain.SiteClientRepository;
 import lombok.RequiredArgsConstructor;
-import org.springframework.boot.CommandLineRunner;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
@@ -24,18 +25,23 @@ import java.util.List;
  * Seed minimal du module Exploitation Terrain : 2 sites, 1 grille générique,
  * 1 produit phytosanitaire homologué, 1 paramétrage d'escalade.
  * Idempotent ({@code count() > 0} → on n'écrase rien).
+ *
+ * <p>Données de DÉMONSTRATION (sites fictifs) : profil {@code demo} seulement depuis le lot 1 / 1a
+ * (décision D2 ; audit §4.3 « Seed de sites fictifs actif en production »). Les paramètres
+ * d'escalade, eux, se créent aussi à la demande ({@code AlerteService.getParametresEntity}).
  */
+@Slf4j
 @Component
+@Profile("demo")
 @RequiredArgsConstructor
-public class TerrainDataLoader implements CommandLineRunner {
+public class TerrainDemoSeed {
 
     private final SiteClientRepository siteRepository;
     private final GrilleEvaluationTerrainRepository grilleRepository;
     private final ProduitPhytoRepository produitPhytoRepository;
     private final ParametresEscaladeRepository parametresEscaladeRepository;
 
-    @Override
-    public void run(String... args) {
+    public void executer() {
         seedSites();
         seedGrilleGenerique();
         seedProduitPhyto();
@@ -84,7 +90,7 @@ public class TerrainDataLoader implements CommandLineRunner {
                         .build()
         );
         siteRepository.saveAll(sites);
-        System.out.println("Terrain : 2 sites clients créés");
+        log.info("Terrain : 2 sites clients créés");
     }
 
     private void seedGrilleGenerique() {
@@ -106,7 +112,7 @@ public class TerrainDataLoader implements CommandLineRunner {
                 .createdAt(now).updatedAt(now)
                 .build();
         grilleRepository.save(grille);
-        System.out.println("Terrain : grille d'évaluation générique créée");
+        log.info("Terrain : grille d'évaluation générique créée");
     }
 
     private CritereEvaluationTerrain critere(String libelle, String parametre, double poids) {
@@ -132,7 +138,7 @@ public class TerrainDataLoader implements CommandLineRunner {
                 .actif(true)
                 .createdAt(LocalDateTime.now())
                 .build());
-        System.out.println("Terrain : 1 produit phytosanitaire homologué créé");
+        log.info("Terrain : 1 produit phytosanitaire homologué créé");
     }
 
     private void seedParametresEscalade() {
@@ -146,6 +152,6 @@ public class TerrainDataLoader implements CommandLineRunner {
                 .delaiEscaladeNiveau2Minutes(120)
                 .updatedAt(LocalDateTime.now())
                 .build());
-        System.out.println("Terrain : paramètres d'escalade par défaut créés");
+        log.info("Terrain : paramètres d'escalade par défaut créés");
     }
 }

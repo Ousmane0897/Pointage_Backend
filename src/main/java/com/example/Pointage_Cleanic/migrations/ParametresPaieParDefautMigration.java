@@ -1,23 +1,23 @@
-package com.example.Pointage_Cleanic.DataLoader;
+package com.example.Pointage_Cleanic.migrations;
 
 import com.example.Pointage_Cleanic.entities.rh.ParametresPaie;
 import com.example.Pointage_Cleanic.entities.rh.TrancheIr;
 import com.example.Pointage_Cleanic.repositories.rh.ParametresPaieRepository;
 import lombok.RequiredArgsConstructor;
-import org.springframework.boot.CommandLineRunner;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
 import java.util.List;
 
+@Slf4j
 @Component
 @RequiredArgsConstructor
-public class ParametresPaieDataLoader implements CommandLineRunner {
+public class ParametresPaieParDefautMigration {
 
     private final ParametresPaieRepository parametresPaieRepository;
 
-    @Override
-    public void run(String... args) {
+    public void executer() {
         if (parametresPaieRepository.count() > 0) {
             return;
         }
@@ -46,6 +46,6 @@ public class ParametresPaieDataLoader implements CommandLineRunner {
                 .build();
 
         parametresPaieRepository.save(params);
-        System.out.println("Paramètres de paie par défaut créés (taux Sénégal)");
+        log.info("Paramètres de paie par défaut créés (taux Sénégal)");
     }
 }

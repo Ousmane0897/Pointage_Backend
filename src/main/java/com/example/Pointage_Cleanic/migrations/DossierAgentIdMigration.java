@@ -1,10 +1,8 @@
-package com.example.Pointage_Cleanic.DataLoader;
+package com.example.Pointage_Cleanic.migrations;
 
 import com.mongodb.client.result.UpdateResult;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.boot.CommandLineRunner;
-import org.springframework.core.annotation.Order;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
@@ -24,16 +22,14 @@ import org.springframework.stereotype.Component;
  */
 @Slf4j
 @Component
-@Order(950)
 @RequiredArgsConstructor
-public class DossierAgentIdMigrationRunner implements CommandLineRunner {
+public class DossierAgentIdMigration {
 
     private static final String COLLECTION = "dossiers_employes";
 
     private final MongoTemplate mongoTemplate;
 
-    @Override
-    public void run(String... args) {
+    public void executer() {
         Query query = Query.query(Criteria.where("AgentId").exists(true));
         Update update = new Update().rename("AgentId", "agentId");
         UpdateResult result = mongoTemplate.updateMulti(query, update, COLLECTION);

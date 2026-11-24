@@ -1,4 +1,4 @@
-package com.example.Pointage_Cleanic.DataLoader;
+package com.example.Pointage_Cleanic.migrations;
 
 import com.example.Pointage_Cleanic.config.MongoTestContainer;
 import com.example.Pointage_Cleanic.entities.stockv2.StockParSite;
@@ -22,13 +22,13 @@ import static org.assertj.core.api.Assertions.assertThat;
         "spring.mail.port=25",
         "jwt.secret=test_secret_at_least_32_characters_long_xyz"
 })
-class StockEntrepotUniqueMigrationRunnerIT extends MongoTestContainer {
+class StockEntrepotUniqueMigrationIT extends MongoTestContainer {
 
     private static final String PRODUIT = "produit-1";
     private static final String SITE_A = "siteA";
     private static final String SITE_B = "siteB";
 
-    @Autowired private StockEntrepotUniqueMigrationRunner runner;
+    @Autowired private StockEntrepotUniqueMigration migration;
     @Autowired private StockParSiteRepository repository;
     @Autowired private MongoTemplate mongoTemplate;
 
@@ -51,7 +51,7 @@ class StockEntrepotUniqueMigrationRunnerIT extends MongoTestContainer {
         solde(SITE_A, 12, recent);
         solde(SITE_B, 3, ancien);
 
-        runner.run();
+        migration.executer();
 
         List<StockParSite> soldes = repository.findByProduitId(PRODUIT);
         assertThat(soldes).hasSize(1);
@@ -64,7 +64,7 @@ class StockEntrepotUniqueMigrationRunnerIT extends MongoTestContainer {
     void cree_le_solde_entrepot_s_il_est_absent() {
         solde(SITE_A, 7, LocalDateTime.now());
 
-        runner.run();
+        migration.executer();
 
         assertThat(repository.findByProduitIdAndSiteId(PRODUIT, SITE_A)).isEmpty();
         assertThat(repository.findByProduitIdAndSiteId(PRODUIT, ENTREPOT))
@@ -76,8 +76,8 @@ class StockEntrepotUniqueMigrationRunnerIT extends MongoTestContainer {
         solde(ENTREPOT, 5, LocalDateTime.now());
         solde(SITE_A, 12, LocalDateTime.now());
 
-        runner.run();
-        runner.run();
+        migration.executer();
+        migration.executer();
 
         List<StockParSite> soldes = repository.findByProduitId(PRODUIT);
         assertThat(soldes).hasSize(1);

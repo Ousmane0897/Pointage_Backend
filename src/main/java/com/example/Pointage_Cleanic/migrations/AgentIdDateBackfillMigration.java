@@ -1,11 +1,9 @@
-package com.example.Pointage_Cleanic.DataLoader;
+package com.example.Pointage_Cleanic.migrations;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.bson.Document;
 import org.bson.types.ObjectId;
-import org.springframework.boot.CommandLineRunner;
-import org.springframework.core.annotation.Order;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
@@ -31,9 +29,8 @@ import java.util.List;
  */
 @Slf4j
 @Component
-@Order(960)
 @RequiredArgsConstructor
-public class AgentIdDateBackfillRunner implements CommandLineRunner {
+public class AgentIdDateBackfillMigration {
 
     private static final String COLLECTION = "dossiers_employes";
 
@@ -41,8 +38,7 @@ public class AgentIdDateBackfillRunner implements CommandLineRunner {
     /** Fuseau métier (Africa/Dakar) pour convertir l'instant de l'ObjectId. */
     private final Clock clock;
 
-    @Override
-    public void run(String... args) {
+    public void executer() {
         Query query = Query.query(new Criteria().andOperator(
                 Criteria.where("agentId").exists(true).ne(null),
                 Criteria.where("dateCreationAgentId").exists(false)));

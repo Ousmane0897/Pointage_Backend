@@ -1,75 +1,40 @@
-package com.example.Pointage_Cleanic.DataLoader;
+package com.example.Pointage_Cleanic.migrations;
 
 import com.example.Pointage_Cleanic.Enum.rh.CategorieCritere;
 import com.example.Pointage_Cleanic.Enum.rh.TypeFormateur;
 import com.example.Pointage_Cleanic.entities.rh.CritereEvaluation;
 import com.example.Pointage_Cleanic.entities.rh.Formation;
 import com.example.Pointage_Cleanic.entities.rh.GrilleEvaluation;
-import com.example.Pointage_Cleanic.entities.User;
 import com.example.Pointage_Cleanic.repositories.rh.FormationRepository;
 import com.example.Pointage_Cleanic.repositories.rh.GrilleEvaluationRepository;
-import com.example.Pointage_Cleanic.repositories.LoginRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.CommandLineRunner;
-import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
 import java.util.List;
 
-
+/**
+ * Données de DÉMONSTRATION du module RH : une grille d'évaluation générique et trois
+ * formations d'exemple. Profil {@code demo} seulement (lot 1 / 1a, décision D2) : jamais en
+ * production. Extrait de l'ancien {@code DataLoader}. Idempotent ({@code count() > 0} → rien).
+ */
 @Slf4j
 @Component
+@Profile("demo")
 @RequiredArgsConstructor
-public class DataLoader implements CommandLineRunner {
-
-    private final LoginRepository loginRepository;
-    private final PasswordEncoder passwordEncoder;
+public class RhDemoSeed {
 
     private final GrilleEvaluationRepository grilleEvaluationRepository;
     private final FormationRepository formationRepository;
 
-    static final String SUPERADMIN_EMAIL = "diarra.niang@cleanicsenegal.com";
-
-    @Value("${SUPERADMIN_INITIAL_PASSWORD:}")
-    private String superadminInitialPassword;
-
-
-    @Override
-    public void run(String... args) {
-        seedSuperadmin();
+    public void executer() {
         seedGrilleEvaluationParDefaut();
         seedFormationsExemples();
     }
 
-    /**
-     * Crée le super-administrateur initial s'il n'existe pas encore.
-     *
-     * <p>Le mot de passe initial vient de la variable d'environnement
-     * {@code SUPERADMIN_INITIAL_PASSWORD} — jamais du code. Absente ou vide : aucun compte n'est
-     * créé (le démarrage continue). Le compte doit changer son mot de passe à la première
-     * connexion ({@code mustChangePassword=true}).
-     */
-    void seedSuperadmin() {
-        if (loginRepository.findByEmail(SUPERADMIN_EMAIL).isPresent()) {
-            return;
-        }
-        if (superadminInitialPassword == null || superadminInitialPassword.isBlank()) {
-            log.warn("Super-administrateur initial non créé : SUPERADMIN_INITIAL_PASSWORD n'est pas défini.");
-            return;
-        }
-        User user = new User();
-        user.setEmail(SUPERADMIN_EMAIL);
-        user.setPassword(passwordEncoder.encode(superadminInitialPassword));
-        user.setRole("SUPERADMIN");
-        user.setMustChangePassword(true);
-        loginRepository.save(user);
-        log.info("Super-administrateur initial créé (changement de mot de passe exigé à la première connexion).");
-    }
-
-    private void seedGrilleEvaluationParDefaut() {
+    void seedGrilleEvaluationParDefaut() {
         if (grilleEvaluationRepository.count() > 0) {
             return;
         }
@@ -120,10 +85,10 @@ public class DataLoader implements CommandLineRunner {
                 .dateCreation(LocalDate.now())
                 .build();
         grilleEvaluationRepository.save(grille);
-        System.out.println("Grille d'évaluation par défaut créée");
+        log.info("Démo : grille d'évaluation générique créée");
     }
 
-    private void seedFormationsExemples() {
+    void seedFormationsExemples() {
         if (formationRepository.count() > 0) {
             return;
         }
@@ -163,6 +128,6 @@ public class DataLoader implements CommandLineRunner {
                         .build()
         );
         formationRepository.saveAll(exemples);
-        System.out.println("Formations d'exemple créées (" + exemples.size() + ")");
+        log.info("Démo : {} formations d'exemple créées", exemples.size());
     }
 }

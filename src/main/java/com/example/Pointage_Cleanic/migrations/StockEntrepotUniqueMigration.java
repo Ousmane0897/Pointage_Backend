@@ -1,10 +1,8 @@
-package com.example.Pointage_Cleanic.DataLoader;
+package com.example.Pointage_Cleanic.migrations;
 
 import com.example.Pointage_Cleanic.entities.stockv2.StockParSite;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.boot.CommandLineRunner;
-import org.springframework.core.annotation.Order;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
@@ -31,14 +29,12 @@ import java.util.stream.Collectors;
  */
 @Slf4j
 @Component
-@Order(1010)
 @RequiredArgsConstructor
-public class StockEntrepotUniqueMigrationRunner implements CommandLineRunner {
+public class StockEntrepotUniqueMigration {
 
     private final MongoTemplate mongoTemplate;
 
-    @Override
-    public void run(String... args) {
+    public void executer() {
         List<StockParSite> soldesSite = mongoTemplate.find(
                 Query.query(Criteria.where("siteId").ne(null)), StockParSite.class);
         if (soldesSite.isEmpty()) {

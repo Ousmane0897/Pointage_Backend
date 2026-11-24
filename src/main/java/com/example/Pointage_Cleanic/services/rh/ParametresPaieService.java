@@ -20,7 +20,7 @@ public class ParametresPaieService {
     public ParametresPaie loadEntity() {
         return parametresPaieRepository.findFirstByOrderByIdAsc()
                 .orElseThrow(() -> new ResourceNotFoundException(
-                        "Paramètres de paie non initialisés. Vérifiez le DataLoader."));
+                        "Paramètres de paie non initialisés. Vérifiez la migration 0010-parametres-paie-par-defaut."));
     }
 
     public ParametresPaieDto get() {

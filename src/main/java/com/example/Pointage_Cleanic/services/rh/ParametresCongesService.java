@@ -22,7 +22,7 @@ import java.util.Set;
  * Barème des droits à congés — document singleton, get-or-create paresseux.
  *
  * <p>Le patron est celui de {@code ParametresProductionChimieService} et <b>non</b> celui de
- * {@code ParametresPaieService} : ce dernier lève un 404 quand son DataLoader n'a pas tourné,
+ * {@code ParametresPaieService} : ce dernier lève un 404 quand sa migration de paramètres par défaut n'a pas tourné,
  * ce qui rendrait le <i>calcul du solde</i> impossible sur une base neuve. Ici, le barème
  * légal est semé à la première lecture.
  */
