@@ -269,6 +269,15 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.FORBIDDEN).body(body);
     }
 
+    /** Débit gardé refusé (lot 1 / 1a, D1.5) : même 422 qu'avant, code d'erreur précis. */
+    @ExceptionHandler(StockInsuffisantException.class)
+    public ResponseEntity<Map<String, Object>> handleStockInsuffisant(StockInsuffisantException ex) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("error", "STOCK_INSUFFISANT");
+        body.put("message", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY).body(body);
+    }
+
     @ExceptionHandler(StockOperationException.class)
     public ResponseEntity<Map<String, Object>> handleStockOperation(StockOperationException ex) {
         Map<String, Object> body = new HashMap<>();

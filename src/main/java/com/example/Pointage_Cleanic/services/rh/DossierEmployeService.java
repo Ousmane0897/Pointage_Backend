@@ -355,7 +355,7 @@ public class DossierEmployeService {
      * <p>
      * ⚠ {@code PERSONNALISE} est refusé <b>à ce niveau</b> : le marqueur désigne la liste
      * {@code joursSemaine} d'une <i>affectation</i>, et au niveau du dossier il ne désigne
-     * rien. {@code AffectationSiteBackfillRunner} le recopierait alors sur des affectations
+     * rien. la migration {@code 0008} ({@code AffectationSiteBackfillMigration}) le recopierait alors sur des affectations
      * dépourvues de liste, qui basculeraient toutes en échelon permissif — silencieusement.
      */
     private void validerJoursTravail(String joursTravail) {

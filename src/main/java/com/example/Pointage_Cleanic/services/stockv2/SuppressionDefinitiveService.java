@@ -54,12 +54,12 @@ import static com.example.Pointage_Cleanic.services.stockv2.StockBalanceService.
  * un site tout en laissant l'entrepôt faux. Sur des données historiques dont le débit avait pu
  * entamer un solde de site, le recrédit atterrit sur l'entrepôt : le total consolidé du produit
  * reste exact, et c'est le sens de la consolidation opérée par
- * {@code StockEntrepotUniqueMigrationRunner}.
+ * la migration {@code 0007-stock-entrepot-unique} ({@code StockEntrepotUniqueMigration}).
  *
  * <p><b>Limite assumée</b> : le coût courant d'un produit (CUMP) n'est pas restauré lors de la
- * suppression d'un bon d'entrée — {@link ValorisationSupport#compenserEntree} exige le
- * {@code RecalcResult} de la transaction d'origine. Seuls les points d'historique de coût sont
- * nettoyés.
+ * suppression d'un bon d'entrée : il faudrait le coût d'avant l'entrée, que seule la transaction
+ * d'origine connaissait. Seuls les points d'historique de coût sont nettoyés. (Service remplacé par
+ * l'annulation tracée en 1b, décision D4.)
  */
 @Service
 @RequiredArgsConstructor

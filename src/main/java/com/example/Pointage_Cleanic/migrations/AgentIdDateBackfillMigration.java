@@ -25,7 +25,7 @@ import java.util.List;
  * ne peut pas faire mieux, aucune trace du changement n'existe.
  *
  * <p>Idempotent : seuls les dossiers portant un code et pas encore de date sont visités.
- * Placé après {@link DossierAgentIdMigrationRunner} (950), qui renomme la clé du code.
+ * Placé après {@link DossierAgentIdMigration} (ChangeUnit 0004), qui renomme la clé du code.
  */
 @Slf4j
 @Component

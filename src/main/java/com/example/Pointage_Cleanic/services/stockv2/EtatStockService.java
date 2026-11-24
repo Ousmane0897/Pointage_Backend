@@ -12,9 +12,11 @@ import com.example.Pointage_Cleanic.repositories.stockv2.ProduitStockRepository;
 import com.example.Pointage_Cleanic.repositories.stockv2.StockParSiteRepository;
 import com.example.Pointage_Cleanic.util.PageResponse;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.mongodb.core.FindAndModifyOptions;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
+import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -120,16 +122,15 @@ public class EtatStockService {
         Map<String, String> categories = libellesCategories(List.of(produit));
 
         if (payload.getSiteId() != null && !payload.getSiteId().isBlank()) {
-            StockParSite solde = stockParSiteRepository
-                    .findByProduitIdAndSiteId(produit.getId(), payload.getSiteId())
-                    .orElseGet(() -> StockParSite.builder()
-                            .produitId(produit.getId())
-                            .siteId(payload.getSiteId())
-                            .quantite(0.0)
-                            .dateMaj(LocalDateTime.now())
-                            .build());
-            solde.setSeuilAlerteOverride(payload.getSeuilAlerte());
-            solde = stockParSiteRepository.save(solde);
+            // $set ciblé en upsert (lot 1 / 1a, D1.5) : l'ancien enregistrement du document entier
+            // pouvait écraser une quantité modifiée au même moment par une sortie.
+            StockParSite solde = mongoTemplate.findAndModify(
+                    Query.query(Criteria.where("produitId").is(produit.getId()).and("siteId").is(payload.getSiteId())),
+                    new Update().set("seuilAlerteOverride", payload.getSeuilAlerte())
+                            .setOnInsert("quantite", 0.0)
+                            .setOnInsert("dateMaj", LocalDateTime.now()),
+                    FindAndModifyOptions.options().upsert(true).returnNew(true),
+                    StockParSite.class);
             return ligne(produit, categories, solde.getSiteId(), solde.getQuantite(),
                     payload.getSeuilAlerte(), solde.getDateMaj());
         }

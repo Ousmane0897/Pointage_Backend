@@ -27,7 +27,7 @@ import java.util.List;
  *
  * <p>Idempotent : après réécriture {@code rh} est un sous-document, les critères
  * {@code is(true)/is(false)} ne matchent plus → les exécutions suivantes sont des no-op.
- * Placé après {@link ModulesAutorisesCleanupRunner} ({@code @Order(900)}).
+ * Placé après {@link ModulesAutorisesCleanupMigration} (ChangeUnit 0001).
  */
 @Slf4j
 @Component

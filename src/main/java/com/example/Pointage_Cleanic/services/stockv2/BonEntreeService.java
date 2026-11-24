@@ -15,6 +15,7 @@ import com.example.Pointage_Cleanic.exception.StockConflitException;
 import com.example.Pointage_Cleanic.repositories.stockv2.BonEntreeRepository;
 import com.example.Pointage_Cleanic.services.stockv2.BonSupportService.DemandeurRef;
 import com.example.Pointage_Cleanic.util.PageResponse;
+import com.example.Pointage_Cleanic.configurations.ExecuteurTransactionnel;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -39,6 +40,7 @@ public class BonEntreeService {
     private final ReferentielSiteService referentielSite;
     private final MouvementBonGenerator mouvementGenerator;
     private final StockNotificationService notificationService;
+    private final ExecuteurTransactionnel executeur;
     private final BonMailNotificationService mailNotificationService;
     private final CompteurStockService compteurService;
     private final HabilitationStock habilitation;
@@ -145,7 +147,12 @@ public class BonEntreeService {
         repository.deleteById(id);
     }
 
+    /** Transition transactionnelle (lot 1 / 1a, D1) : voir {@link #soumettreDansTransaction}. */
     public BonEntreeDto soumettre(String id) {
+        return executeur.executer(() -> soumettreDansTransaction(id));
+    }
+
+    private BonEntreeDto soumettreDansTransaction(String id) {
         BonEntree bon = loadOrThrow(id);
         if (bon.getStatut() != StatutBon.BROUILLON) {
             throw new StockConflitException("Seul un bon en BROUILLON peut être soumis (statut actuel : " + bon.getStatut() + ")");
@@ -155,12 +162,17 @@ public class BonEntreeService {
         bon.setUpdatedAt(LocalDateTime.now());
         bon.getHistorique().add(support.historique(ActionWorkflow.SOUMISSION, null));
         BonEntree saved = repository.save(bon);
-        notificationService.diffuserEtCiblerResponsableAchats(
+        diffuserEtCiblerApresCommit(
                 notification("BON_SOUMIS", saved, "Bon d'entrée soumis", "Le bon " + saved.getReference() + " attend validation."));
         return mapper.toDto(saved);
     }
 
+    /** Transition transactionnelle (lot 1 / 1a, D1) : voir {@link #validerDansTransaction}. */
     public BonEntreeDto valider(String id, DecisionPayload decision) {
+        return executeur.executer(() -> validerDansTransaction(id, decision));
+    }
+
+    private BonEntreeDto validerDansTransaction(String id, DecisionPayload decision) {
         BonEntree bon = loadOrThrow(id);
         if (bon.getStatut() != StatutBon.SOUMIS) {
             throw new StockConflitException("Seul un bon SOUMIS peut être validé (statut actuel : " + bon.getStatut() + ")");
@@ -169,7 +181,7 @@ public class BonEntreeService {
         habilitation.exigerSuperAdmin("Validation");
         String commentaire = decision == null ? null : decision.getCommentaire();
 
-        // Génère les mouvements AVANT toute mutation persistée (pas de transaction Mongo).
+        // Mouvements, soldes et coût dans la même transaction que le passage en EFFECTIF.
         mouvementGenerator.genererPourEntree(bon);
 
         bon.setValidateurId(support.currentUserId());
@@ -180,14 +192,19 @@ public class BonEntreeService {
         bon.getHistorique().add(support.historique(ActionWorkflow.EFFECTIF, null));
         BonEntree saved = repository.save(bon);
 
-        notificationService.diffuser(notification("BON_VALIDE", saved, "Bon d'entrée validé",
+        diffuserApresCommit(notification("BON_VALIDE", saved, "Bon d'entrée validé",
                 "Le bon " + saved.getReference() + " a été validé."));
-        notificationService.diffuser(notification("BON_EFFECTIF", saved, "Stock mis à jour",
+        diffuserApresCommit(notification("BON_EFFECTIF", saved, "Stock mis à jour",
                 "Le bon " + saved.getReference() + " est effectif : stock mouvementé."));
         return mapper.toDto(saved);
     }
 
+    /** Transition transactionnelle (lot 1 / 1a, D1) : voir {@link #refuserDansTransaction}. */
     public BonEntreeDto refuser(String id, DecisionPayload decision) {
+        return executeur.executer(() -> refuserDansTransaction(id, decision));
+    }
+
+    private BonEntreeDto refuserDansTransaction(String id, DecisionPayload decision) {
         BonEntree bon = loadOrThrow(id);
         if (bon.getStatut() != StatutBon.SOUMIS) {
             throw new StockConflitException("Seul un bon SOUMIS peut être refusé (statut actuel : " + bon.getStatut() + ")");
@@ -204,7 +221,7 @@ public class BonEntreeService {
         bon.setUpdatedAt(LocalDateTime.now());
         bon.getHistorique().add(support.historique(ActionWorkflow.REFUS, motif));
         BonEntree saved = repository.save(bon);
-        notificationService.diffuser(notification("BON_REFUSE", saved, "Bon d'entrée refusé",
+        diffuserApresCommit(notification("BON_REFUSE", saved, "Bon d'entrée refusé",
                 "Le bon " + saved.getReference() + " a été refusé : " + motif));
         return mapper.toDto(saved);
     }
@@ -240,5 +257,14 @@ public class BonEntreeService {
                 .message(message)
                 .dateEmission(LocalDateTime.now().toString())
                 .build();
+    }
+
+    /** Notification WebSocket envoyée seulement si la transaction est validée (jamais sur annulation). */
+    private void diffuserApresCommit(NotificationStockDto notification) {
+        ExecuteurTransactionnel.apresCommit(() -> notificationService.diffuser(notification));
+    }
+
+    private void diffuserEtCiblerApresCommit(NotificationStockDto notification) {
+        ExecuteurTransactionnel.apresCommit(() -> notificationService.diffuserEtCiblerResponsableAchats(notification));
     }
 }

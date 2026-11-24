@@ -271,3 +271,32 @@ Résultat à reporter ici après le passage du script. Chaque doublon se tranche
 **Tests** :
 - `VerrouOptimisteStockIT` : deux lectures du même produit ; la première écriture passe, la seconde lève `OptimisticLockingFailureException`, et la base garde la première valeur, en version 1.
 - `MigrationsIT`, scénario « formats anciens » : un bon sans version passe à 0, un bon déjà en version 4 est conservé.
+
+---
+
+## 6. Soldes atomiques et bons transactionnels (D1.5, D1.6)
+
+### 6.1 Changements
+
+| Fichier | Changement |
+|---|---|
+| `StockBalanceService` | **Plus aucune lecture-addition-`save`.** `appliquerDelta` fait un `$inc` atomique en upsert : plus de mise à jour perdue ; une collision de premier upsert est réessayée hors transaction, ou fait rejouer la transaction dedans. **Nouveau `debiter`** : `findAndModify` gardé par `quantite >= q`, puis `$inc: -q`. Sans document correspondant, **422 `STOCK_INSUFFISANT`**, et rien n'est écrit. `debiterAvecRepli` (site, puis entrepôt) fait deux débits gardés et **exige une transaction**. `recrediterRepli`, devenu inutile, est supprimé. |
+| `MouvementBonGenerator` | **Compensations retirées** (`genererPourEntree`, `genererPourSortie`). Les deux méthodes **exigent une transaction** (`IllegalStateException` sinon). Mouvements, soldes, coût courant, historique de coût et **compteur de références** sont validés ensemble ou pas du tout. La pré-vérification cumulée par produit reste : elle donne le message clair ; le débit gardé, lui, donne la garantie. |
+| `ValorisationSupport` | `compenserEntree` supprimée : le recalcul CUMP / dernier prix s'écrit dans la transaction du bon. |
+| `BonEntreeService`, `BonSortieService` | `soumettre`, `valider`, `refuser` et `reprendre` passent par **`ExecuteurTransactionnel`** : en concurrence, la perdante est rejouée, relit le bon déjà `EFFECTIF` et reçoit le 409 existant. Les **notifications WebSocket partent après le commit** (`apresCommit`), jamais sur une annulation. `modifier` (un seul document) est protégé par `@Version` (§5). `creer` est inchangé : son e-mail part après l'enregistrement, et l'outbox arrive en 1b. |
+| `EtatStockService.majSeuil` | Surcharge de seuil par site par un **`$set` ciblé en upsert**. Avant, l'enregistrement du document entier pouvait écraser une quantité modifiée au même moment. |
+| `StockInsuffisantException` (nouvelle) + `GlobalExceptionHandler` | Sous-classe de `StockOperationException` : **même 422**, code `STOCK_INSUFFISANT` au lieu de `STOCK_OPERATION_ERROR`. Le front ne lit pas ce code : vérifié par recherche dans `pointage-agents`, où il ne réagit qu'au statut HTTP. |
+
+**Compensations conservées**, chacune dans sa sous-branche (D1.6) :
+- **`InventaireService.cloturer`** et l'**import en masse** de `ProduitStockService` : ils utilisent toujours `appliquerDelta`, désormais atomique mais **non gardé**. La clôture d'un inventaire global peut aujourd'hui porter l'entrepôt en négatif (migration `0007`), et la garder changerait ce comportement.
+- **`SuppressionDefinitiveService`** : remplacé par l'annulation tracée en 1b.
+- **`OrdreFabricationService`** : Production Chimie.
+
+### 6.2 Tests
+
+| Test | Vérifie |
+|---|---|
+| `ValidationConcurrenteIT` (critère 1a) | **Deux validations simultanées** d'un même bon SOUMIS, en entrée comme en sortie : 1 réussite, 1 refus en 409 (`StockConflitException`, ou `ConflitConcurrentException` si les rejeux s'épuisent) ; **mouvements générés une fois**, solde crédité ou débité une fois, bon `EFFECTIF`. **Deux bons de 8** validés en même temps sur un stock de 10 : un seul passe, l'autre reçoit 422 `STOCK_INSUFFISANT` ; solde 2, jamais négatif ; un seul mouvement. |
+| `SoldeConcurrentIT` (critère 1a) | **50 sorties concurrentes sur un stock de 10.** Débit gardé hors transaction : **exactement 10 réussites**, 40 refus `STOCK_INSUFFISANT`, solde 0. Débit en transaction par l'exécuteur : solde jamais négatif, et **solde = 10 − réussites**. |
+| `ValidationEchecMiParcoursIT` (D1.6, « échec à mi-parcours ⇒ rien d'écrit ») | Panne simulée à l'enregistrement du **2ᵉ mouvement** d'un bon de deux lignes. **Entrée** : aucun mouvement, soldes à 0, coût CUMP inchangé, aucun point d'historique, **compteur de références inchangé** (pas de trou), bon toujours `SOUMIS` ; la même validation repasse ensuite normalement. **Sortie** : aucun produit débité, aucun mouvement de plus, bon `SOUMIS`. |
+| Tests existants du Stock (125) | Inchangés et verts, dont `BonWorkflowServiceIT` (422 sans effet, transitions 409), `ValorisationServiceIT` (CUMP), `InventaireWorkflowServiceIT`, `ProduitStockBulkServiceIT`. |
