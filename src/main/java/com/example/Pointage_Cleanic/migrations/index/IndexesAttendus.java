@@ -1,6 +1,7 @@
 package com.example.Pointage_Cleanic.migrations.index;
 
 import com.example.Pointage_Cleanic.entities.EmployeComplet;
+import com.example.Pointage_Cleanic.entities.audit.EntreeAudit;
 import com.example.Pointage_Cleanic.entities.evenements.EvenementConsomme;
 import com.example.Pointage_Cleanic.entities.evenements.EvenementDomaine;
 import com.example.Pointage_Cleanic.entities.Pointage;
@@ -78,6 +79,7 @@ public final class IndexesAttendus {
     public static final String TERRAIN = "terrain";
     public static final String PRODUCTION_CHIMIE = "production-chimie";
     public static final String OUTBOX = "outbox";
+    public static final String AUDIT = "audit";
 
     private static final List<IndexAttendu> TOUS = construire();
 
@@ -200,6 +202,11 @@ public final class IndexesAttendus {
         l.add(simple(OUTBOX, EvenementDomaine.class, "agregat", cles("agregatType", 1, "agregatId", 1)));
         l.add(unique(OUTBOX, EvenementConsomme.class, "consommateur_evenement_unique",
                 cles("consommateur", 1, "evenementId", 1), null));
+
+        // ---- Journal d'audit (lot 1 / 1b, D6) : ChangeUnit 0108 --------------------------------
+        l.add(simple(AUDIT, EntreeAudit.class, "objet_le", cles("objetType", 1, "objetId", 1, "le", -1)));
+        l.add(simple(AUDIT, EntreeAudit.class, "compte_le", cles("compteId", 1, "le", -1)));
+        l.add(simple(AUDIT, EntreeAudit.class, "le", cles("le", -1)));
 
         return List.copyOf(l);
     }
