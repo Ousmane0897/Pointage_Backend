@@ -122,7 +122,36 @@ Branche `refonte/v3-1b-pieces` (depuis `refonte/v3`), backend. Conception : `doc
 
 Critères d'acceptation de 1b : `NumerotationIT` (6), `RoutesSuppressionIT`, `SuppressionsInterditesArchTest` (2), `AnnulationBonIT` (6), `OutboxIT` (9), `JournalAuditIT` (4) et les transitions de pièces dans `BonWorkflowServiceIT` ; plus `RegistrePiecesIT`, `AnnulationInventaireIT`, `PiecesBonsExistantsMigrationIT`, `MigrationsIT`, `IndexesAttendusIT` (93 index), `ValidationEchecMiParcoursIT` (3).
 
-Non fait dans cette session : `bootRun` sur le replica set de dev (parcours manuel créer → soumettre → valider → annuler).
+Parcours réel par l'API : voir §10 bis.
+
+## 10 bis. Parcours réel (`bootRun`, 25/11)
+
+Replica set de dev du poste (service MongoDB local `rs0`, base `cleanic`, **vide au départ**), `bootRun` sur le commit `eab36e7`, port 8081 (le 8080 était occupé par un conteneur `springboot-backend` étranger au parcours). Super-admin créé par l'amorçage habituel (`SUPERADMIN_INITIAL_PASSWORD` passé au seul processus `bootRun`). Données de test préfixées `PARCOURS-1B`, conservées.
+
+- **Démarrage** : 41 s ; Mongock joue toutes les ChangeUnits sur la base vide (24 entrées `mongockChangeLog`, aucun échec ; `migration_rapports` vide : rien à porter).
+- **20 contrôles par l'API, 0 échec** :
+
+| Étape | Résultat |
+| --- | --- |
+| BE créé | `reference` absente (champ nul non sérialisé), `libelleNumero` `BROUILLON-e2fe1b` |
+| BE soumis, validé | **`BE-2026-0001`**, stock 0 → 20 |
+| BS créé, soumis, validé | brouillon sans numéro, puis **`BS-2026-0001`**, stock 20 → 12 |
+| BS annulé | motif de 5 caractères → 400 ; motif valable → `ANNULE`, bloc `annulation` ; stock **12 → 20 immédiatement** ; seconde annulation → 409 |
+| BE consommé (BS-2026-0002 de 15 validé) | annulation → **422 `STOCK_INSUFFISANT`**, BE resté `EFFECTIF`, aucune ligne d'audit ni événement d'annulation |
+| BE-2026-0002 (10) validé puis annulé | stock 15 → 5 dans la même requête |
+| Brouillon de BE abandonné | `ABANDONNE`, bloc `abandon`, aucun numéro consommé ; `DELETE /{id}` → 405 |
+| Inventaire (sélection, 1 produit) | brouillon sans numéro → comptage → validation → clôture **`INV-2026-0001`**, ajustement −2 (stock 5 → 3) |
+
+- **En base** (lecture seule, `mongosh`) :
+  - `compteurs_pieces` : `BE-2026` = 2, `BS-2026` = 2, `INV-2026` = 1 — aucun trou (le refus 422 et l'abandon n'ont rien consommé) ;
+  - `stockv2_mouvements` : chaque mouvement d'origine `BON` d'une pièce annulée porte `contrePasse: true` et a son inverse `origine: "ANNULATION"` avec `mouvementAnnuleId` ; ajustement d'inventaire `origine: "INVENTAIRE"` rattaché par `inventaireReference` ; solde final 3 (entrepôt) ;
+  - `journal_audit` : une ligne par transition (CREATION, SOUMISSION, VALIDATION, ANNULATION, ABANDON ; inventaire : CREATION, SOUMISSION au comptage, MODIFICATION ×2 pour la saisie et le passage en validation, VALIDATION à la clôture) ; la ligne de validation porte déjà le numéro ; différentiel par champs pointés (`piece.numero`, `piece.valideePar.nom`…) ;
+  - `registre_pieces` : 6 lignes, statuts communs `VALIDEE` / `ANNULEE` / `ABANDONNEE`, numéros et montants justes ;
+  - `evenements_domaine` : 22 événements, **tous `TRAITE`** quelques secondes après (aucun `A_TRAITER` ni `EN_ERREUR`) ; `GET /api/exploitation/evenements` en renvoie 22.
+- **Observations** (sans correctif en 1b) :
+  - le nom d'auteur instantané du super-admin d'amorçage est son e-mail : le compte n'existe que dans `login`, sans fiche `utilisateur` (nom, prénom). À reprendre avec les comptes (1g) ;
+  - un `X-Correlation-Id` qui n'est pas un UUID est remplacé par un UUID neuf : voulu (`CorrelationId.depuisEnTete`, pas de texte libre dans les journaux) ;
+  - au passage en `VALIDATION`, l'inventaire trace une `MODIFICATION` (le statut commun reste `SOUMISE`) : cohérent avec la correspondance des statuts.
 
 ## 11. Exploitation
 
@@ -131,7 +160,7 @@ Aucune opération serveur propre à 1b : les ChangeUnits `0012`, `0013`, `0106`�
 ## 12. Ce qui reste
 
 1. **Front F1/F2** (`pointage-agents`) : modèles, services, permissions, libellés, `libelleNumero`, boutons « Abandonner » / « Annuler le bon », dialogue d'annulation, bandeau du motif, colonnes du Kanban, inventaires.
-2. `bootRun` et parcours manuel sur le replica set de dev.
+2. ~~`bootRun` et parcours réel~~ : fait le 25/11 (§10 bis), 20 contrôles sur 20.
 3. ~~Écart 5~~ : résolu en B11.
 4. Routes et classes en sursis : à retirer dans leurs sous-branches ; les 19 routes des modules métier sont rattachées à leur lot (RH lot 6, Terrain lot 2, Stock lot 3, Chimie lot 8 ; `lot-1-conception.md` §4, sous 1b).
 5. Écran de supervision de l'outbox.
