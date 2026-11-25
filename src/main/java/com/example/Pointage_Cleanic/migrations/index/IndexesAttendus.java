@@ -4,6 +4,7 @@ import com.example.Pointage_Cleanic.entities.EmployeComplet;
 import com.example.Pointage_Cleanic.entities.audit.EntreeAudit;
 import com.example.Pointage_Cleanic.entities.evenements.EvenementConsomme;
 import com.example.Pointage_Cleanic.entities.evenements.EvenementDomaine;
+import com.example.Pointage_Cleanic.entities.pieces.LignePieceRegistre;
 import com.example.Pointage_Cleanic.entities.Pointage;
 import com.example.Pointage_Cleanic.entities.productionchimie.ControleQualite;
 import com.example.Pointage_Cleanic.entities.productionchimie.FicheFormulation;
@@ -80,6 +81,7 @@ public final class IndexesAttendus {
     public static final String PRODUCTION_CHIMIE = "production-chimie";
     public static final String OUTBOX = "outbox";
     public static final String AUDIT = "audit";
+    public static final String REGISTRE = "registre";
 
     private static final List<IndexAttendu> TOUS = construire();
 
@@ -207,6 +209,12 @@ public final class IndexesAttendus {
         l.add(simple(AUDIT, EntreeAudit.class, "objet_le", cles("objetType", 1, "objetId", 1, "le", -1)));
         l.add(simple(AUDIT, EntreeAudit.class, "compte_le", cles("compteId", 1, "le", -1)));
         l.add(simple(AUDIT, EntreeAudit.class, "le", cles("le", -1)));
+
+        // ---- Registre des pièces (lot 1 / 1b, D4) : ChangeUnit 0109 ----------------------------
+        l.add(unique(REGISTRE, LignePieceRegistre.class, "type_piece_unique", cles("type", 1, "pieceId", 1), null));
+        l.add(unique(REGISTRE, LignePieceRegistre.class, "type_numero_unique", cles("type", 1, "numero", 1),
+                new Document("numero", new Document("$type", "string"))));
+        l.add(simple(REGISTRE, LignePieceRegistre.class, "site_statut", cles("siteId", 1, "statut", 1)));
 
         return List.copyOf(l);
     }
