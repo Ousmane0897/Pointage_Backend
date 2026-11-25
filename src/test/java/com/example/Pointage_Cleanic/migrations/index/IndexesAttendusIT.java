@@ -88,6 +88,7 @@ class IndexesAttendusIT {
         }
 
         assertThat(ecarts).isEmpty();
-        assertThat(IndexesAttendus.tous()).hasSize(83);
+        // 83 en 1a, + 4 de l'outbox en 1b (ChangeUnit 0107).
+        assertThat(IndexesAttendus.tous()).hasSize(87);
     }
 }

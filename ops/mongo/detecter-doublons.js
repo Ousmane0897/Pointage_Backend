@@ -36,6 +36,7 @@ const UNIQUES = [
   ['production_chimie_ordres_fabrication', 'numero_unique', { numero: 1 }, null],
   ['production_chimie_lots', 'numero_unique', { numero: 1 }, null],
   ['production_chimie_formats_conditionnement', 'code_unique', { code: 1 }, null],
+  ['evenements_consommes', 'consommateur_evenement_unique', { consommateur: 1, evenementId: 1 }, null],
 ];
 
 let bloquants = 0;

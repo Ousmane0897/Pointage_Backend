@@ -86,6 +86,13 @@ pointage:
     codes-inconnus-avant-blocage: 5
     duree-blocage-minutes: 15
 
+outbox:
+  # Dispatcher des événements de domaine (lot 1 / 1b, D5) : délai entre deux passages.
+  # Désactivé dans les tests (src/test/resources/config/application.yml), qui l'appellent eux-mêmes.
+  dispatcher:
+    actif: true
+    delai-ms: 2000
+
 
 logging:
   level:

@@ -8,3 +8,9 @@ google:
   maps:
     api:
       key: cle-factice-de-test
+
+# Outbox (lot 1 / 1b) : pas de dispatcher planifié dans les tests ; ils appellent
+# DispatcherEvenements.traiterLot() pour rester déterministes.
+outbox:
+  dispatcher:
+    actif: false
