@@ -47,7 +47,8 @@ class MigrationsIT {
             "0003-conges-circuit-trois-niveaux", "0004-dossiers-agentid-renommage",
             "0005-dossiers-date-code-agent", "0006-contrats-alternance-vers-prestation",
             "0009-periode-essai-suppression", "0010-parametres-paie-par-defaut",
-            "0011-version-initiale-stock");
+            "0011-version-initiale-stock",
+            "0106-compteurs-pieces");
     private static final List<String> TOUJOURS = List.of(
             "0007-stock-entrepot-unique", "0008-affectations-sites-complement");
 
