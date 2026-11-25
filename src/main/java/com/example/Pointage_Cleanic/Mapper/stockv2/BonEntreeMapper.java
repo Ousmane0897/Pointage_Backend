@@ -3,6 +3,7 @@ package com.example.Pointage_Cleanic.Mapper.stockv2;
 import com.example.Pointage_Cleanic.Dto.stockv2.BonEntreeDto;
 import com.example.Pointage_Cleanic.entities.stockv2.BonEntree;
 import org.mapstruct.Mapper;
+import org.mapstruct.Mapping;
 
 /**
  * Mapping 1:1 : les dénormalisations (noms de site/employé, prix/montant des lignes) sont
@@ -10,5 +11,8 @@ import org.mapstruct.Mapper;
  */
 @Mapper
 public interface BonEntreeMapper {
+    @Mapping(target = "libelleNumero", expression = "java(entity.libelleNumero())")
+    @Mapping(target = "annulation", expression = "java(entity.getPiece() == null ? null : entity.getPiece().getAnnulation())")
+    @Mapping(target = "abandon", expression = "java(entity.getPiece() == null ? null : entity.getPiece().getAbandon())")
     BonEntreeDto toDto(BonEntree entity);
 }

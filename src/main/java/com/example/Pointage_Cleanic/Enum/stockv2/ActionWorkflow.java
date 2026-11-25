@@ -14,5 +14,9 @@ public enum ActionWorkflow {
      * refusé doit rester lisible après la reprise.
      */
     REPRISE,
-    EFFECTIF
+    EFFECTIF,
+    /** Annulation d'un bon EFFECTIF (lot 1 / 1b) : motif obligatoire, mouvements inverses. */
+    ANNULATION,
+    /** Abandon d'un brouillon (lot 1 / 1b) : il est conservé, jamais supprimé. */
+    ABANDON
 }

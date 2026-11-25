@@ -43,6 +43,9 @@ class DroitsModulesSecuriteIT extends SecuriteITBase {
                 a("GET", "/api/stock/tableau-bord", "{\"stock\":{\"tableauBord\":true}}", "{\"stock\":{\"synthese\":true}}"),
                 a("GET", "/api/stock/bons-entree", "{\"stock\":{\"bonsEntree\":true}}", "{\"stock\":{\"bonsSortie\":true}}"),
                 a("GET", "/api/stock/bons-sortie", "{\"stock\":{\"bonsSortie\":true}}", "{\"stock\":{\"bonsEntree\":true}}"),
+                // Lot 1 / 1b : abandon d'un brouillon (remplace le DELETE).
+                a("POST", "/api/stock/bons-entree/inexistant/abandonner", "{\"stock\":{\"bonsEntree\":true}}", "{\"stock\":{\"bonsSortie\":true}}"),
+                a("POST", "/api/stock/bons-sortie/inexistant/abandonner", "{\"stock\":{\"bonsSortie\":true}}", "{\"stock\":{\"bonsEntree\":true}}"),
                 a("GET", "/api/stock/workflow/bons", "{\"stock\":{\"workflowValidation\":true}}", "{\"stock\":{\"bonsEntree\":true}}"),
                 a("GET", "/api/stock/categorisation/stats?sens=ENTREE", "{\"stock\":{\"categorisation\":true}}", "{\"stock\":{\"dotation\":true}}"),
                 a("GET", "/api/stock/plafonds", "{\"stock\":{\"plafonds\":true}}", "{\"stock\":{\"dons\":true}}"),

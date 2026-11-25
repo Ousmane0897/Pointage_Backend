@@ -4,6 +4,7 @@ import com.example.Pointage_Cleanic.Dto.stockv2.BonEntreePayload;
 import com.example.Pointage_Cleanic.Dto.stockv2.BonSortiePayload;
 import com.example.Pointage_Cleanic.Dto.stockv2.DestinatairePayload;
 import com.example.Pointage_Cleanic.Dto.stockv2.LignePayload;
+import com.example.Pointage_Cleanic.Enum.pieces.TypePiece;
 import com.example.Pointage_Cleanic.Enum.stockv2.MethodeValorisation;
 import com.example.Pointage_Cleanic.Enum.stockv2.StatutBon;
 import com.example.Pointage_Cleanic.Enum.stockv2.TypeDestinataire;
@@ -13,6 +14,8 @@ import com.example.Pointage_Cleanic.Enum.stockv2.TypeSortie;
 import com.example.Pointage_Cleanic.Enum.stockv2.UniteStock;
 import com.example.Pointage_Cleanic.config.AuthentificationTest;
 import com.example.Pointage_Cleanic.config.MongoTestContainer;
+import com.example.Pointage_Cleanic.entities.evenements.EvenementDomaine;
+import com.example.Pointage_Cleanic.entities.pieces.CompteurPiece;
 import com.example.Pointage_Cleanic.entities.stockv2.BonEntree;
 import com.example.Pointage_Cleanic.entities.stockv2.BonSortie;
 import com.example.Pointage_Cleanic.entities.stockv2.CompteurStock;
@@ -22,6 +25,7 @@ import com.example.Pointage_Cleanic.entities.stockv2.ProduitStock;
 import com.example.Pointage_Cleanic.entities.stockv2.StockParSite;
 import com.example.Pointage_Cleanic.entities.terrain.SiteClient;
 import com.example.Pointage_Cleanic.repositories.stockv2.BonEntreeRepository;
+import com.example.Pointage_Cleanic.services.pieces.NumerotationService;
 import com.example.Pointage_Cleanic.repositories.stockv2.BonSortieRepository;
 import com.example.Pointage_Cleanic.repositories.stockv2.MouvementStockRepository;
 import com.example.Pointage_Cleanic.repositories.stockv2.ProduitStockRepository;
@@ -82,6 +86,8 @@ class ValidationEchecMiParcoursIT extends MongoTestContainer {
         mongoTemplate.remove(new Query(), ProduitStock.class);
         mongoTemplate.remove(new Query(), HistoriquePointCout.class);
         mongoTemplate.remove(new Query(), SiteClient.class);
+        mongoTemplate.remove(new Query(), CompteurPiece.class);
+        mongoTemplate.remove(new Query(), EvenementDomaine.class);
         mongoTemplate.save(SiteClient.builder().id(SITE_A).code("A").nom("Dakar Plateau").ville("Dakar").actif(true).build());
         produit1 = produit("EM1");
         produit2 = produit("EM2");
@@ -142,6 +148,11 @@ class ValidationEchecMiParcoursIT extends MongoTestContainer {
         assertThat(mongoTemplate.count(new Query(), HistoriquePointCout.class)).as("historique de coût").isZero();
         assertThat(compteurs()).as("compteur MVT inchangé : pas de trou de référence").isEqualTo(compteursAvant);
         assertThat(bonEntreeRepository.findById(id).orElseThrow().getStatut()).isEqualTo(StatutBon.SOUMIS);
+        // Lot 1 / 1b : ni numéro de pièce consommé, ni événement PIECE_VALIDEE publié.
+        assertThat(bonEntreeRepository.findById(id).orElseThrow().getReference()).isNull();
+        assertThat(mongoTemplate.count(new Query(), CompteurPiece.class)).as("compteur BE").isZero();
+        assertThat(mongoTemplate.count(Query.query(org.springframework.data.mongodb.core.query.Criteria
+                .where("type").is("PIECE_VALIDEE")), EvenementDomaine.class)).isZero();
 
         // Sans panne, la même validation passe ensuite normalement.
         reset(mouvementRepository);
@@ -170,5 +181,8 @@ class ValidationEchecMiParcoursIT extends MongoTestContainer {
         assertThat(balanceService.quantite(produit1, ENTREPOT)).as("produit 1 non débité").isEqualTo(10.0);
         assertThat(balanceService.quantite(produit2, ENTREPOT)).as("produit 2 non débité").isEqualTo(10.0);
         assertThat(bonSortieRepository.findById(sortie).orElseThrow().getStatut()).isEqualTo(StatutBon.SOUMIS);
+        assertThat(bonSortieRepository.findById(sortie).orElseThrow().getReference()).isNull();
+        assertThat(mongoTemplate.findById(NumerotationService.cle(TypePiece.BS,
+                NumerotationService.exerciceAu(java.time.Instant.now())), CompteurPiece.class)).as("compteur BS").isNull();
     }
 }

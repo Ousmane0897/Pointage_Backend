@@ -93,24 +93,7 @@ class TransactionIT extends MongoTestContainer {
         assertThat(nombre()).isEqualTo(2);
     }
 
-    @Test
-    void apres_commit_n_est_appele_qu_apres_validation_et_jamais_sur_annulation() {
-        AtomicBoolean appeleSurValidation = new AtomicBoolean();
-        AtomicBoolean pendantLaTransaction = new AtomicBoolean(true);
-        executeur.executer(() -> {
-            ExecuteurTransactionnel.apresCommit(() -> appeleSurValidation.set(true));
-            pendantLaTransaction.set(appeleSurValidation.get());
-        });
-        assertThat(pendantLaTransaction).isFalse();
-        assertThat(appeleSurValidation).isTrue();
-
-        AtomicBoolean appeleSurAnnulation = new AtomicBoolean();
-        assertThatThrownBy(() -> executeur.executer(() -> {
-            ExecuteurTransactionnel.apresCommit(() -> appeleSurAnnulation.set(true));
-            throw new IllegalStateException("annulée");
-        }));
-        assertThat(appeleSurAnnulation).isFalse();
-    }
+    // apresCommit a été retiré en 1b : les effets externes partent de l'outbox (OutboxIT).
 
     /**
      * Deux transactions lisent le même compteur (0), puis écrivent toutes deux « lu + 1 ».

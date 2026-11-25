@@ -47,7 +47,7 @@ class MigrationsIT {
             "0003-conges-circuit-trois-niveaux", "0004-dossiers-agentid-renommage",
             "0005-dossiers-date-code-agent", "0006-contrats-alternance-vers-prestation",
             "0009-periode-essai-suppression", "0010-parametres-paie-par-defaut",
-            "0011-version-initiale-stock",
+            "0011-version-initiale-stock", "0012-pieces-bons-existants",
             "0106-compteurs-pieces");
     private static final List<String> TOUJOURS = List.of(
             "0007-stock-entrepot-unique", "0008-affectations-sites-complement");
@@ -220,6 +220,16 @@ class MigrationsIT {
                 .first().getLong("version")).as("version initiale posée").isZero();
         assertThat(db.getCollection("stockv2_bons_sortie").find(new Document("reference", "BS-20260101-002"))
                 .first().getLong("version")).as("version existante conservée").isEqualTo(4L);
+        // 1b (D4) : bloc pièce posé, référence historique conservée comme numéro, registre rempli.
+        Document piece = db.getCollection("stockv2_bons_sortie").find(new Document("reference", "BS-20260101-001"))
+                .first().get("piece", Document.class);
+        assertThat(piece.getString("type")).isEqualTo("BS");
+        assertThat(piece.getString("numero")).isEqualTo("BS-20260101-001");
+        assertThat(piece.get("exercice")).isNull();
+        assertThat(db.getCollection("registre_pieces").countDocuments(new Document("type", "BS")
+                .append("statut", "SOUMISE"))).isEqualTo(2);
+        assertThat(db.getCollection("migration_rapports").countDocuments(
+                new Document("migrationId", "0012-pieces-bons-existants"))).isEqualTo(1);
         Document conge = db.getCollection("conges").find().first();
         assertThat(conge.getString("statut")).isEqualTo("EN_ATTENTE_RH");
         assertThat(conge.getInteger("nombreJours")).as("lundi → dimanche = 5 jours ouvrés").isEqualTo(5);
