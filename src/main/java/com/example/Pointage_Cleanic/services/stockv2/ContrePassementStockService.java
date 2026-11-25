@@ -19,7 +19,7 @@ import java.util.Map;
 import static com.example.Pointage_Cleanic.services.stockv2.StockBalanceService.ENTREPOT;
 
 /**
- * Contre-passement des mouvements d'un bon annulé (lot 1 / 1b, D4) : pour chaque mouvement du
+ * Contre-passement des mouvements d'une pièce de stock annulée, bon ou inventaire (lot 1 / 1b, D4) : pour chaque mouvement du
  * bon, un mouvement <b>inverse</b> ({@code origine = "ANNULATION"}, {@code mouvementAnnuleId})
  * et le solde rétabli ; le mouvement d'origine est marqué {@code contrePasse = true}. Rien n'est
  * supprimé : l'historique garde l'aller et le retour.
@@ -28,7 +28,9 @@ import static com.example.Pointage_Cleanic.services.stockv2.StockBalanceService.
  *   <li>bon d'entrée annulé : débit <b>gardé</b> de l'entrepôt (seul crédité à la réception) ;</li>
  *   <li>bon de sortie annulé : recrédit selon la répartition du débit (site, puis entrepôt),
  *       ou l'entrepôt pour un mouvement antérieur à 1b (comme l'ancienne suppression
- *       définitive).</li>
+ *       définitive) ;</li>
+ *   <li>inventaire annulé : ajustements opposés sur le site de l'inventaire, non gardés,
+ *       comme la clôture.</li>
  * </ul>
  * Le coût courant (CUMP) n'est pas restauré, comme avant 1b ; le mouvement inverse reprend le
  * coût du mouvement annulé.
@@ -84,6 +86,39 @@ public class ContrePassementStockService {
         return mouvements.size();
     }
 
+    /**
+     * Contre-passe les ajustements d'un inventaire clôturé (dans la transaction du consommateur).
+     * Les ajustements antérieurs au rattachement par {@code inventaireId} sont retrouvés par leur
+     * commentaire, comme le faisait l'ancienne suppression définitive. Idempotent.
+     */
+    public int contrePasserInventaire(String inventaireId, String reference, String motif, String auteur) {
+        if (!TransactionSynchronizationManager.isActualTransactionActive()) {
+            throw new IllegalStateException("Contre-passement hors transaction");
+        }
+        List<MouvementStock> ajustements = mouvementRepository.findByInventaireId(inventaireId);
+        if (ajustements.isEmpty() && reference != null) {
+            ajustements = mouvementRepository.findByCommentaire("Ajustement inventaire " + reference).stream()
+                    .filter(m -> m.getMotif() == MotifMouvement.AJUSTEMENT)
+                    .toList();
+        }
+        List<MouvementStock> aTraiter = ajustements.stream()
+                .filter(m -> !MouvementsEffectifs.ORIGINE_ANNULATION.equals(m.getOrigine()))
+                .filter(m -> !Boolean.TRUE.equals(m.getContrePasse()))
+                .toList();
+        for (MouvementStock m : aTraiter) {
+            boolean entree = m.getType() == TypeMouvement.ENTREE;
+            String site = entree ? m.getSiteDestinationId() : m.getSiteSourceId();
+            balanceService.appliquerDelta(m.getProduitId(), site, entree ? -m.getQuantite() : m.getQuantite());
+            MouvementStock inverse = inverse(m, motif, auteur);
+            inverse.setInventaireId(inventaireId);
+            inverse.setInventaireReference(m.getInventaireReference() != null ? m.getInventaireReference() : reference);
+            mouvementRepository.save(inverse);
+            m.setContrePasse(true);
+            mouvementRepository.save(m);
+        }
+        return aTraiter.size();
+    }
+
     private List<MouvementStock> aContrePasser(String bonId) {
         return mouvementRepository.findByBonId(bonId).stream()
                 .filter(m -> "BON".equals(m.getOrigine()))
@@ -124,7 +159,8 @@ public class ContrePassementStockService {
                 .siteDestinationNom(m.getSiteSourceNom())
                 .date(LocalDate.now(clock))
                 .utilisateur(auteur)
-                .commentaire("Annulation de " + m.getBonReference() + (motif == null ? "" : " : " + motif))
+                .commentaire("Annulation de " + (m.getBonReference() != null ? m.getBonReference()
+                        : m.getInventaireReference()) + (motif == null ? "" : " : " + motif))
                 .origine(MouvementsEffectifs.ORIGINE_ANNULATION)
                 .bonId(m.getBonId())
                 .bonReference(m.getBonReference())

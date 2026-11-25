@@ -1,7 +1,10 @@
 package com.example.Pointage_Cleanic.entities.stockv2;
 
 import com.example.Pointage_Cleanic.Enum.stockv2.PerimetreInventaire;
+import com.example.Pointage_Cleanic.Enum.pieces.StatutPiece;
 import com.example.Pointage_Cleanic.Enum.stockv2.StatutInventaire;
+import com.example.Pointage_Cleanic.entities.pieces.Piece;
+import com.example.Pointage_Cleanic.entities.pieces.PieceBase;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -20,7 +23,7 @@ import java.util.List;
 @NoArgsConstructor
 @AllArgsConstructor
 @Document(collection = "stockv2_inventaires")
-public class Inventaire {
+public class Inventaire implements Piece {
 
     @Id
     private String id;
@@ -33,7 +36,14 @@ public class Inventaire {
     @Version
     private Long version;
 
+    /**
+     * Numéro de l'inventaire. Lot 1 / 1b (D4) : nul en brouillon, attribué à la clôture
+     * ({@code INV-2026-0001}) ; les inventaires antérieurs gardent leur référence d'origine.
+     */
     private String reference;
+
+    /** Bloc commun des pièces (lot 1 / 1b, D4) : numérotation, auteurs, annulation, abandon. */
+    private PieceBase piece;
 
     private String libelle;
     private LocalDate datePlanifiee;
@@ -57,4 +67,25 @@ public class Inventaire {
 
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
+
+    @Override
+    public StatutPiece statutPiece() {
+        return statut == null ? StatutPiece.BROUILLON : statut.statutPiece();
+    }
+
+    @Override
+    public String siteIdPiece() {
+        return siteId;
+    }
+
+    @Override
+    public long montantPiece() {
+        return 0L;
+    }
+
+    /** Référence si elle existe (numéro attribué ou référence historique), sinon {@code BROUILLON-…}. */
+    @Override
+    public String libelleNumero() {
+        return reference != null ? reference : Piece.super.libelleNumero();
+    }
 }

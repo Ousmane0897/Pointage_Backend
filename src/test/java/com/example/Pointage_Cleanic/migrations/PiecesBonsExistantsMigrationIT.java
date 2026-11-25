@@ -30,6 +30,7 @@ class PiecesBonsExistantsMigrationIT extends MongoTestContainer {
     private static final String SORTIES = "stockv2_bons_sortie";
 
     @Autowired private PiecesBonsExistantsMigration migration;
+    @Autowired private PiecesInventairesExistantsMigration inventaireMigration;
     @Autowired private MongoTemplate mongoTemplate;
 
     @BeforeEach
@@ -96,5 +97,35 @@ class PiecesBonsExistantsMigrationIT extends MongoTestContainer {
         assertThat(mongoTemplate.findAll(Document.class, SORTIES)).isEqualTo(avant);
         assertThat(mongoTemplate.count(new Query(), PiecesBonsExistantsMigration.RAPPORTS)).isEqualTo(1);
         assertThat(mongoTemplate.count(new Query(), PiecesBonsExistantsMigration.REGISTRE)).isEqualTo(3);
+    }
+
+    /** Migration 0013 : mêmes règles pour les inventaires. */
+    @Test
+    void inventaires_existants_portes_vers_le_modele_piece() {
+        String inventaires = PiecesInventairesExistantsMigration.COLLECTION;
+        mongoTemplate.remove(new Query(), inventaires);
+        Date cree = new Date(1_750_000_000_000L);
+        mongoTemplate.insert(new Document("_id", "inv-clos").append("reference", "INV-20260601-002")
+                .append("statut", "CLOTURE").append("siteId", "site-1").append("responsable", "Awa Diop")
+                .append("createdAt", cree).append("updatedAt", cree), inventaires);
+        mongoTemplate.insert(new Document("_id", "inv-comptage").append("reference", "INV-20260602-001")
+                .append("statut", "COMPTAGE"), inventaires);
+
+        inventaireMigration.executer();
+
+        Document piece = mongoTemplate.findById("inv-clos", Document.class, inventaires).get("piece", Document.class);
+        assertThat(piece.getString("type")).isEqualTo("INV");
+        assertThat(piece.getString("numero")).isEqualTo("INV-20260601-002");
+        assertThat(piece.get("creePar", Document.class).getString("nom")).isEqualTo("Awa Diop");
+        assertThat(mongoTemplate.find(Query.query(org.springframework.data.mongodb.core.query.Criteria
+                .where("type").is("INV")), Document.class, PiecesBonsExistantsMigration.REGISTRE))
+                .extracting(d -> d.getString("statut")).containsExactlyInAnyOrder("VALIDEE", "SOUMISE");
+
+        List<Document> avant = mongoTemplate.findAll(Document.class, inventaires);
+        inventaireMigration.executer();
+        assertThat(mongoTemplate.findAll(Document.class, inventaires)).isEqualTo(avant);
+        assertThat(mongoTemplate.count(Query.query(org.springframework.data.mongodb.core.query.Criteria
+                .where("migrationId").is(PiecesInventairesExistantsMigration.ID)),
+                PiecesBonsExistantsMigration.RAPPORTS)).isEqualTo(1);
     }
 }

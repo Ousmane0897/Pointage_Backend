@@ -38,6 +38,8 @@ class DroitsModulesSecuriteIT extends SecuriteITBase {
                 a("GET", "/api/stock/mouvements", "{\"stock\":{\"mouvements\":true}}", "{\"terrain\":{\"planning\":true}}"),
                 a("POST", "/api/stock/chantiers", "{\"stock\":{\"chantiers\":true}}", "{\"stock\":{\"dons\":true}}"),
                 a("GET", "/api/stock/inventaires", "{\"stock\":{\"inventaires\":true}}", "{\"stock\":{\"synthese\":true}}"),
+                a("POST", "/api/stock/inventaires/inexistant/abandonner", "{\"stock\":{\"inventaires\":true}}", "{\"stock\":{\"synthese\":true}}"),
+                a("POST", "/api/stock/inventaires/inexistant/annuler", "{\"stock\":{\"inventaires\":true}}", "{\"stock\":{\"synthese\":true}}"),
                 a("GET", "/api/stock/synthese-mensuelle?mois=2026-01", "{\"stock\":{\"synthese\":true}}", "{\"stock\":{\"inventaires\":true}}"),
                 a("GET", "/api/stock/approvisionnement/suggestions", "{\"stock\":{\"approvisionnement\":true}}", "{\"stock\":{\"synthese\":true}}"),
                 a("GET", "/api/stock/tableau-bord", "{\"stock\":{\"tableauBord\":true}}", "{\"stock\":{\"synthese\":true}}"),

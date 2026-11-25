@@ -1,11 +1,15 @@
 package com.example.Pointage_Cleanic.services.stockv2;
 
 import com.example.Pointage_Cleanic.Dto.stockv2.BonEntreePayload;
+import com.example.Pointage_Cleanic.Dto.stockv2.ComptagePayload;
+import com.example.Pointage_Cleanic.Dto.stockv2.InventairePlanifPayload;
 import com.example.Pointage_Cleanic.Dto.stockv2.BonSortiePayload;
 import com.example.Pointage_Cleanic.Dto.stockv2.DestinatairePayload;
 import com.example.Pointage_Cleanic.Dto.stockv2.LignePayload;
 import com.example.Pointage_Cleanic.Enum.pieces.TypePiece;
 import com.example.Pointage_Cleanic.Enum.stockv2.MethodeValorisation;
+import com.example.Pointage_Cleanic.Enum.stockv2.PerimetreInventaire;
+import com.example.Pointage_Cleanic.Enum.stockv2.StatutInventaire;
 import com.example.Pointage_Cleanic.Enum.stockv2.StatutBon;
 import com.example.Pointage_Cleanic.Enum.stockv2.TypeDestinataire;
 import com.example.Pointage_Cleanic.Enum.stockv2.TypeEntree;
@@ -20,6 +24,7 @@ import com.example.Pointage_Cleanic.entities.stockv2.BonEntree;
 import com.example.Pointage_Cleanic.entities.stockv2.BonSortie;
 import com.example.Pointage_Cleanic.entities.stockv2.CompteurStock;
 import com.example.Pointage_Cleanic.entities.stockv2.HistoriquePointCout;
+import com.example.Pointage_Cleanic.entities.stockv2.Inventaire;
 import com.example.Pointage_Cleanic.entities.stockv2.MouvementStock;
 import com.example.Pointage_Cleanic.entities.stockv2.ProduitStock;
 import com.example.Pointage_Cleanic.entities.stockv2.StockParSite;
@@ -67,6 +72,7 @@ class ValidationEchecMiParcoursIT extends MongoTestContainer {
     @SpyBean private MouvementStockRepository mouvementRepository;
     @Autowired private BonEntreeService bonEntreeService;
     @Autowired private BonSortieService bonSortieService;
+    @Autowired private InventaireService inventaireService;
     @Autowired private BonEntreeRepository bonEntreeRepository;
     @Autowired private BonSortieRepository bonSortieRepository;
     @Autowired private StockBalanceService balanceService;
@@ -81,6 +87,7 @@ class ValidationEchecMiParcoursIT extends MongoTestContainer {
         reset(mouvementRepository);
         mongoTemplate.remove(new Query(), BonEntree.class);
         mongoTemplate.remove(new Query(), BonSortie.class);
+        mongoTemplate.remove(new Query(), Inventaire.class);
         mongoTemplate.remove(new Query(), MouvementStock.class);
         mongoTemplate.remove(new Query(), StockParSite.class);
         mongoTemplate.remove(new Query(), ProduitStock.class);
@@ -184,5 +191,40 @@ class ValidationEchecMiParcoursIT extends MongoTestContainer {
         assertThat(bonSortieRepository.findById(sortie).orElseThrow().getReference()).isNull();
         assertThat(mongoTemplate.findById(NumerotationService.cle(TypePiece.BS,
                 NumerotationService.exerciceAu(java.time.Instant.now())), CompteurPiece.class)).as("compteur BS").isNull();
+    }
+
+    /**
+     * Lot 1 / 1b (D1.6) : la compensation manuelle de la clôture d'inventaire est retirée ; la
+     * clôture passe en transaction. L'écriture du 2ᵉ ajustement échoue : ni solde modifié, ni
+     * ajustement, ni numéro INV consommé, statut inchangé.
+     */
+    @Test
+    void cloture_d_inventaire_echec_au_deuxieme_ajustement_rien_n_est_ecrit() {
+        balanceService.appliquerDelta(produit1, SITE_A, 20);
+        balanceService.appliquerDelta(produit2, SITE_A, 20);
+        String id = inventaireService.create(InventairePlanifPayload.builder()
+                .libelle("Inventaire").datePlanifiee(java.time.LocalDate.now()).siteId(SITE_A)
+                .perimetre(PerimetreInventaire.SELECTION).produitIds(List.of(produit1, produit2))
+                .seuilEcartJustification(100).build()).getId();
+        inventaireService.demarrerComptage(id);
+        inventaireService.enregistrerComptage(id, ComptagePayload.builder().lignes(List.of(
+                ComptagePayload.LigneComptage.builder().produitId(produit1).qtePhysique(15.0).build(),
+                ComptagePayload.LigneComptage.builder().produitId(produit2).qtePhysique(18.0).build())).build());
+        inventaireService.valider(id);
+        echouerAuDeuxiemeMouvement();
+
+        assertThatThrownBy(() -> inventaireService.cloturer(id)).hasMessageContaining("panne simulée");
+
+        assertThat(balanceService.quantite(produit1, SITE_A)).as("produit 1 non ajusté").isEqualTo(20.0);
+        assertThat(balanceService.quantite(produit2, SITE_A)).as("produit 2 non ajusté").isEqualTo(20.0);
+        assertThat(mongoTemplate.count(new Query(), MouvementStock.class)).as("ajustements").isZero();
+        Inventaire inv = mongoTemplate.findById(id, Inventaire.class);
+        assertThat(inv.getStatut()).isEqualTo(StatutInventaire.VALIDATION);
+        assertThat(inv.getReference()).isNull();
+        assertThat(mongoTemplate.count(new Query(), CompteurPiece.class)).as("compteur INV").isZero();
+
+        reset(mouvementRepository);
+        assertThat(inventaireService.cloturer(id).getStatut()).isEqualTo(StatutInventaire.CLOTURE);
+        assertThat(balanceService.quantite(produit1, SITE_A)).isEqualTo(15.0);
     }
 }

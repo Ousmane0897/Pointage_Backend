@@ -36,9 +36,12 @@ public class ContrePassementStockConsommateur implements ConsommateurEvenement {
     @Override
     public void traiter(EvenementDomaine evt) {
         String type = evt.getAgregatType();
+        String motif = (String) evt.getPayload().get(TraceurPieces.MOTIF);
         if (TypePiece.BE.name().equals(type) || TypePiece.BS.name().equals(type)) {
-            contrePassement.contrePasserBon(evt.getAgregatId(),
-                    (String) evt.getPayload().get(TraceurPieces.MOTIF), evt.getAuteurNom());
+            contrePassement.contrePasserBon(evt.getAgregatId(), motif, evt.getAuteurNom());
+        } else if (TypePiece.INV.name().equals(type)) {
+            contrePassement.contrePasserInventaire(evt.getAgregatId(),
+                    (String) evt.getPayload().get(TraceurPieces.NUMERO), motif, evt.getAuteurNom());
         }
     }
 }

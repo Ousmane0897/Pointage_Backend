@@ -6,6 +6,7 @@ import com.example.Pointage_Cleanic.entities.pieces.AuteurInstantane;
 import com.example.Pointage_Cleanic.entities.pieces.PieceBase;
 import com.example.Pointage_Cleanic.entities.stockv2.BonEntree;
 import com.example.Pointage_Cleanic.entities.stockv2.BonSortie;
+import com.example.Pointage_Cleanic.entities.stockv2.Inventaire;
 import com.example.Pointage_Cleanic.services.terrain.CurrentUserProvider;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -16,7 +17,7 @@ import java.time.LocalDateTime;
 import java.util.Map;
 
 /**
- * Les bons de stock comme pièces (lot 1 / 1b, D4) : bloc
+ * Les pièces de stock (bons, inventaires ; lot 1 / 1b, D4) : bloc
  * {@link PieceBase} (créé à la volée pour un bon antérieur à 1b), auteur courant, instantané de
  * l'état avant une transition (pour le différentiel d'audit).
  */
@@ -75,6 +76,15 @@ public class PiecesBon {
                     bon.getCreatedAt()));
         }
         return bon.getPiece();
+    }
+
+    /** Inventaire : la référence existante devient le numéro, l'auteur est le responsable. */
+    public PieceBase assurer(Inventaire inv) {
+        if (inv.getPiece() == null) {
+            inv.setPiece(historique(TypePiece.INV, inv.getReference(), null, inv.getResponsable(),
+                    inv.getCreatedAt()));
+        }
+        return inv.getPiece();
     }
 
     static PieceBase historique(TypePiece type, String reference, String creeParId, String creeParNom,
