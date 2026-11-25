@@ -167,27 +167,30 @@ Format : **Contexte** (avec preuves), **Décision**, **Écarté**, **Conséquenc
 **Décision.**
 - **Classe de base `PieceBase`** (incorporée dans chaque document de pièce) :
   - `type` (`TypePiece`). Codes imposés par le CDC §3 : `DEV`, `FAC`, `BS`, `BE`, `OF`, `LOT`, `DD`, `BC`, `BCA`, `CHQ`. Codes proposés pour les pièces que le CDC ne code pas : `CNG` (congé), `INV`, `MVT`, `BUL` (bulletin), `DSO` (déclaration sociale), `SAN` (sanction), `IMP` (import) ;
-  - `numero` (nul tant que la pièce n'est pas validée), `exercice` ;
-  - `statut` (`BROUILLON → SOUMISE → VALIDEE`, branches `REFUSEE`, `ANNULEE`, `ABANDONNEE`) ;
+  - `numero` (nul tant que la pièce n'est pas validée), `exercice`, `compteur` (tri) ;
   - `creePar` / `creeLe`, `soumisePar` / `soumiseLe`, `valideePar` / `valideeLe` (identifiants de compte + **instantané** du nom) ;
-  - bloc `annulation {par, le, motif, pieceCorrectiveId}` et `version`.
+  - blocs `annulation {par, le, motif, pieceCorrectiveId}` et `abandon {par, le}`.
+  - **Statut et version restent à la racine du document** (écart accepté le 25/11, réalisé en 1b) : `@Version` n'est reconnu par Spring Data qu'à la racine, et chaque pièce garde son statut métier (contrat du front, index existants : `StatutBon`, `StatutInventaire`…). Le **statut commun** (`BROUILLON → SOUMISE → VALIDEE`, branches `REFUSEE`, `ANNULEE`, `ABANDONNEE`) est calculé par l'interface `Piece.statutPiece()` à partir du statut métier, et c'est lui qu'alimentent le registre et l'audit. Le bloc `PieceBase` est incorporé sous le champ `piece`.
 - **Numérotation** :
   - un service unique `NumerotationService`, une collection unique `compteurs_pieces`, `_id = "<TYPE>-<EXERCICE>"` ;
   - `findAndModify($inc)` **dans la transaction de validation** : si la validation échoue, l'incrément est annulé avec elle, donc ni trou ni doublon ;
   - format `<TYPE>-<EXERCICE>-<NNNN>` (CDC §3 : `DEV-2026-0001`), compteur sur **4 chiffres minimum**, qui s'allonge sans troncature au-delà de 9999 (`BS-2027-12345`). Le tri des numéros se fait donc sur `(exercice, compteur)`, jamais sur la chaîne ;
   - exercice = **année civile** (Q7), calculée en `Africa/Dakar` à la date de validation, via l'horloge injectée (`back:configurations/TimeConfig.java`). L'heure du serveur fait foi (CDC §14 « Intégrité comptable ») ;
-  - un brouillon s'affiche sous `BROUILLON-<6 derniers caractères de l'id>`.
+  - un brouillon s'affiche sous `BROUILLON-<6 derniers caractères de l'id>` (`Piece.libelleNumero()`, renvoyé par les DTO) ; la recherche des listes porte sur le numéro, un brouillon ne se retrouve donc pas par ce libellé ;
+  - ChangeUnits réalisées en 1b : `0106` crée `compteurs_pieces` ; index `0107` (outbox), `0108` (audit), `0109` (registre) ; portage des pièces existantes `0012` (bons) et `0013` (inventaires), qui gardent leur référence comme numéro.
 - **Fin des suppressions** :
   - plus aucun `@DeleteMapping` métier : `POST /{id}/annuler {motif}` (au moins 10 caractères, comme `MOTIF_MIN` de `SuppressionDefinitiveService`) pour une pièce validée, `POST /{id}/abandonner` pour un brouillon (conservé, statut `ABANDONNEE`) ;
   - les référentiels se **désactivent** (`actif=false`, motif), sans suppression ;
   - un test ArchUnit interdit `deleteById`, `delete(`, `deleteAll`, `remove(` hors d'une liste blanche nommée (jetons de réinitialisation, éphémères `sms_envoyes` en dev, `PurgeService` de D16, nettoyage de l'outbox traitée) ;
   - `RoutesSuppressionIT` vérifie qu'aucune route `DELETE` n'existe hors liste blanche (même principe que `RoutesPubliquesIT` du lot 0).
 - **Annulation d'une pièce validée** :
-  - elle ne touche pas aux effets directement : elle émet `PieceAnnulee` (D5), et les consommateurs produisent les **contre-effets** (mouvements inverses, contre-écritures futures) ;
+  - les contre-effets **de stock** (mouvements inverses, soldes rétablis) sont produits **dans la transaction d'annulation**, comme les effets de la validation (exception de D5, tranchée le 25/11 : les soldes font partie de la pièce). Une annulation de bon d'entrée dont la marchandise a été consommée est refusée (422 `STOCK_INSUFFISANT`) et rien n'est écrit : pas de course avec une sortie, pas d'événement en erreur ;
+  - elle émet `PieceAnnulee` (D5) pour les **autres** effets : notifications, registre, contre-écritures comptables futures ;
+  - le coût moyen (CUMP) n'est **pas** restauré à l'annulation d'un bon d'entrée (comme l'ancienne suppression définitive) : le mouvement inverse reprend le coût du mouvement annulé ; les mouvements annulés et leurs inverses sont exclus des consommations et des coûts (`MouvementsEffectifs`) ;
   - `SuppressionDefinitiveService` et `stockv2_suppressions` sont remplacés ; la collection est conservée en lecture pour l'historique.
 - **Registre des pièces** (`registre_pieces`, une ligne par pièce : type, numéro, statut, site, montant, liens `amont[]` / `aval[]`) :
-  - alimenté par les événements (D5) ;
-  - base de F009 au lot 2, et de la recherche transverse.
+  - alimenté par les événements (D5) ; un événement plus ancien que l'état enregistré est ignoré ; deux événements de la même pièce dans la même milliseconde sont départagés par l'ordre de traitement (écart accepté) ;
+  - aucune route en 1b ; base de F009 au lot 2, et de la recherche transverse.
 
 **Écarté.** Numéro au brouillon : trous inévitables ; séquence sans transaction avec numéro « réservé puis libéré » : complexe et sujet aux trous ; suppression logique par `deleted=true` : ne trace ni qui ni pourquoi, et contredit la règle 5.
 
@@ -205,7 +208,7 @@ Format : **Contexte** (avec preuves), **Décision**, **Écarté**, **Conséquenc
   - il réclame un lot par `findAndModify` (`A_TRAITER` et `prochainEssai <= now` → `EN_COURS`, bail de 5 min) ;
   - il appelle les consommateurs enregistrés pour le type ;
   - ensuite `TRAITE`, ou un nouvel essai à délai exponentiel (1 min → 1 h, 10 tentatives) puis `EN_ERREUR` ;
-  - une alerte apparaît sur l'écran d'exploitation.
+  - une alerte apparaît sur l'écran d'exploitation. En 1b, seules les routes de supervision existent (`/api/exploitation/evenements`, super-admin, relance d'un événement) ; l'écran est reporté (écart accepté).
   - Sûr en multi-instance grâce au bail, sans ShedLock.
 - **Consommateurs idempotents** : chaque consommateur insère `{consommateur, evenementId}` dans `evenements_consommes` (index unique), dans **sa propre** transaction avec ses écritures. Un doublon est ignoré.
 - **Règle 3** :
@@ -216,7 +219,7 @@ Format : **Contexte** (avec preuves), **Décision**, **Écarté**, **Conséquenc
 
 **Écarté.** Change Streams : demandent la gestion des jetons de reprise, et il n'y a pas d'événement si l'écriture n'a pas eu lieu ; registre d'événements Spring Modulith : il suppose des packages par module (ici par couche : `controllers/rh`, `services/rh`…) et ne conserve pas un journal métier interrogeable ; courtier externe (Kafka, RabbitMQ) : nouvelle infrastructure sans besoin de volume.
 
-**Conséquences.** Les effets deviennent asynchrones (délai d'environ 2 s). Exemple : la validation d'un bon de sortie rend la main avant que les soldes soient débités. **Exception voulue** : les soldes de stock restent débités **dans la transaction de validation**. Le contrôle « stock insuffisant ⇒ refus » doit être synchrone, et le stock fait partie de la pièce, pas d'un autre module. Ce point est à revoir au lot 3.
+**Conséquences.** Les effets deviennent asynchrones (délai d'environ 2 s). Exemple : la validation d'un bon de sortie rend la main avant que les soldes soient débités. **Exception voulue** : les soldes de stock restent mouvementés **dans la transaction de la pièce**, à la validation **comme à l'annulation** (tranché le 25/11). Le contrôle « stock insuffisant ⇒ refus » doit être synchrone, et le stock fait partie de la pièce, pas d'un autre module. Ce point est à revoir au lot 3.
 
 ### D6 — Journal d'audit et journal des accès
 
@@ -224,10 +227,10 @@ Format : **Contexte** (avec preuves), **Décision**, **Écarté**, **Conséquenc
 
 **Décision.**
 - **`journal_audit`**, écrit dans la transaction métier :
-  - contenu : `{le, compteId, nomInstantane, action (CREATION, MODIFICATION, SOUMISSION, VALIDATION, REFUS, ANNULATION, DESACTIVATION, IMPORT, EXPORT, PARAMETRE), objetType, objetId, numero, changements: [{champ, avant, apres}], motif, ip, correlationId}` ;
+  - contenu : `{le, compteId, nomInstantane, action (CREATION, MODIFICATION, SOUMISSION, VALIDATION, REFUS, REPRISE, ANNULATION, ABANDON, DESACTIVATION, IMPORT, EXPORT, PARAMETRE), objetType, objetId, numero, changements: [{champ, avant, apres}], motif, ip, correlationId}` ;
   - les champs `@Sensible` (D9) sont journalisés **masqués** (`"***"`) ;
   - le service `JournalAudit` calcule le différentiel à partir de l'état relu en début de transaction.
-- `AuditorAware<String>` (compte courant via `back:services/terrain/CurrentUserProvider.java`) pour `@CreatedBy` / `@LastModifiedBy` sur les référentiels.
+- `AuditorAware<String>` (compte courant via `back:services/terrain/CurrentUserProvider.java`) pour `@CreatedBy` / `@LastModifiedBy` sur les référentiels. **Mis en place en 1d/1e** avec les premiers référentiels portés (écart accepté : en 1b, aucun référentiel ne l'aurait utilisé). `REPRISE` (retour en brouillon d'une pièce refusée) et `ABANDON` ajoutés à la liste des actions en 1b.
 - **`journal_acces`** :
   - connexions réussies et échouées (écouteurs `AuthenticationSuccessEvent` / `AbstractAuthenticationFailureEvent`, plus la connexion agent de D11), refus 403, exports (D13), consultation de données sensibles (fiche de paie, salaire, RIB) ;
   - champs : `{le, identifiantSaisi (masqué partiellement), compteId?, resultat, motif, ip, userAgent}`.
@@ -780,11 +783,20 @@ Chaque sous-branche est créée depuis `refonte/v3` et fusionnée dans `refonte/
   - `NumerotationIT` : 100 validations concurrentes donnent 100 numéros consécutifs sans trou ; validation en échec, numéro non consommé ; changement d'exercice au 1er janvier (heure de Dakar), repart à `0001` ; passage de `9999` à `10000` sans erreur ni troncature ;
   - `RoutesSuppressionIT` : 0 route DELETE hors liste blanche ;
   - test ArchUnit des appels `delete*` ;
-  - bons de stock (premier type porté) : annulation d'un bon EFFECTIF qui génère les mouvements inverses par événement, sans suppression ;
+  - bons de stock (premier type porté) : annulation d'un bon EFFECTIF qui génère les mouvements inverses dans sa transaction, sans suppression ; annulation concurrente d'une sortie qui consomme le même stock : une seule des deux passe, jamais de solde négatif ni d'événement en erreur (`AnnulationConcurrenteIT`) ;
   - `OutboxIT` : événement écrit seulement si la transaction est validée ; consommateur rejoué 2 fois, effet une seule fois ; échec répété, `EN_ERREUR` après 10 tentatives ;
   - `JournalAuditIT` : chaque transition de pièce a sa ligne, champs sensibles masqués.
 - **Taille** : L.
 - **Bloquée par** : aucune (Q7 tranchée par le CDC §3).
+- **Réalisé** : compte rendu `docs/refonte/1b-pieces.md` (écarts du §8 acceptés le 25/11 et reportés dans D4, D5, D6).
+- **Routes et suppressions en sursis.** Les garde-fous de 1b (`RoutesSuppressionIT`, `SuppressionsInterditesArchTest`) tolèrent une liste nommée de routes `DELETE` et de classes qui suppriment encore, chacune avec son échéance ; la liste ne peut que diminuer. Celles des sous-branches du lot 1 sont décrites dans chaque sous-branche (1c, 1d, 1e, 1f, 1g, 1i). Les pièces et paramètres des modules métier sont portés sur le modèle pièce dans le lot de leur module :
+
+  | Module | Lot | Routes `DELETE` (classes de service) |
+  | --- | --- | --- |
+  | RH | **lot 6** | `/api/developpement-rh/evaluations/{id}`, `/formations/{id}`, `/formations/sessions/{sessionId}`, `/formations/besoins/{id}`, `/sanctions/{id}` ; `/api/gestion-personnel/contrats/{id}`, `/documents/{id}` ; `/api/paie/bulletins/{id}`, `/declarations-sociales/{id}` ; `/api/temps-presences/absences/{id}`, `/conges/demandes/{id}`, `/heures-supplementaires/{id}` (12) |
+  | Exploitation terrain | **lot 2** | `/api/terrain/controles-terrain/grilles/{id}`, `/interventions/{id}`, `/phytosanitaire/applications/{id}` (3) |
+  | Stock | **lot 3** | `/api/stock/chantiers/{id}`, `/plafonds/{id}` (2) |
+  | Production chimie (Industrie) | **lot 8** | `/api/production-chimie/controle-qualite/grilles/{id}`, `/formulations/{id}` (2) |
 
 ### 1c — Paramètres datés et listes de choix
 

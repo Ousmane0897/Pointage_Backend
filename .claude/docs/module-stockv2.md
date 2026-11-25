@@ -66,7 +66,7 @@ Solde consolidé d'un produit = somme des `StockParSite` sur tous les sites (buc
 Workflow `BROUILLON → COMPTAGE → VALIDATION → CLOTURE` :
 - `GET ?page&size&q&statut&siteId&dateDebut&dateFin`, `GET /{id}`.
 - `POST` (planif) → `BROUILLON`. Construit `lignes` selon `perimetre` (TOUS = tous produits ; CATEGORIE = `categorieId` ; SELECTION = `produitIds`). `qteTheorique` = 0 à ce stade.
-- `PUT /{id}` : **uniquement si BROUILLON** sinon **409**. `DELETE /{id}` supprimé en 1b : `POST /{id}/abandonner` (BROUILLON → ABANDONNE, conservé) ; `POST /{id}/annuler {motif}` (CLOTURE → ANNULE, super-admin, ajustements contre-passés par événement).
+- `PUT /{id}` : **uniquement si BROUILLON** sinon **409**. `DELETE /{id}` supprimé en 1b : `POST /{id}/abandonner` (BROUILLON → ABANDONNE, conservé) ; `POST /{id}/annuler {motif}` (CLOTURE → ANNULE, super-admin, ajustements contre-passés dans la transaction).
 - `POST /{id}/comptage` : `BROUILLON→COMPTAGE`, **fige** `qteTheorique` = stock système courant (par site si `siteId`, sinon consolidé).
 - `PUT /{id}/comptage` (payload `{lignes:[{produitId, qtePhysique, justification?}]}`) : enregistre, recalcule `ecart = qtePhysique − qteTheorique` ; reste COMPTAGE.
 - `POST /{id}/validation` : `COMPTAGE→VALIDATION`, **422** si une ligne `|ecart| > seuilEcartJustification` sans justification.
@@ -164,7 +164,7 @@ Le `MouvementStock` 7.3 reste l'**effet instantané** en stock. Un `Bon` (entré
 - `GET /{id}`.
 - `POST` (`BonEntreePayload`) → **201**, statut `BROUILLON`, `reference` attribuée, `historique[CREATION]`, **mail de notification** (voir « Notification e-mail à la création » ci-dessous).
 - `PUT /{id}` → **409** si statut ≠ BROUILLON ; sinon re-dénormalise + `historique[MODIFICATION]`.
-- ~~`DELETE /{id}`~~ supprimé en 1b → `POST /{id}/abandonner` (BROUILLON seulement, sinon **409**), bon conservé en `ABANDONNE`. `POST /{id}/annuler {motif ≥ 10}` : EFFECTIF seulement (409 sinon), super-admin ; mouvements inverses par événement ; bon d'entrée consommé → **422** `STOCK_INSUFFISANT`. `reference` nulle en brouillon (numéro à la validation), `libelleNumero`, `annulation`, `abandon` dans le DTO.
+- ~~`DELETE /{id}`~~ supprimé en 1b → `POST /{id}/abandonner` (BROUILLON seulement, sinon **409**), bon conservé en `ABANDONNE`. `POST /{id}/annuler {motif ≥ 10}` : EFFECTIF seulement (409 sinon), super-admin ; mouvements inverses et soldes dans la transaction d'annulation ; bon d'entrée consommé → **422** `STOCK_INSUFFISANT`, rien n'est écrit. `reference` nulle en brouillon (numéro à la validation), `libelleNumero`, `annulation`, `abandon` dans le DTO.
 - `POST /{id}/soumettre` → `BROUILLON→SOUMIS` (sinon **409**), `historique[SOUMISSION]`, WS `BON_SOUMIS`.
 - `POST /{id}/valider` (body `{}` ou `{commentaire?}`) → `SOUMIS→VALIDE→EFFECTIF` (sinon **409**) : **génère les mouvements ENTREE** créditant le site destination, `historique[VALIDATION]`+`[EFFECTIF]`, WS `BON_VALIDE` puis `BON_EFFECTIF`.
 - `POST /{id}/refuser` (body `{commentaire}` **requis** sinon **400**) → `SOUMIS→REFUSE`, `motifRefus`, `historique[REFUS]`, WS `BON_REFUSE`.

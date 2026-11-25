@@ -66,24 +66,25 @@ class SuppressionsInterditesArchTest {
             entry(RACINE + ".controllers.UtilisateurController", "1g"),
             // 1c — paramètres datés
             entry(RACINE + ".services.rh.JourFerieService", "1c"),
-            // À affecter — pièces et paramètres des modules RH, Terrain, Chimie, Stock
-            entry(RACINE + ".services.rh.BesoinFormationService", "à affecter"),
-            entry(RACINE + ".services.rh.BulletinPaieService", "à affecter"),
-            entry(RACINE + ".services.rh.ContratService", "à affecter"),
-            entry(RACINE + ".services.rh.DeclarationSocialeService", "à affecter"),
-            entry(RACINE + ".services.rh.DocumentEmployeService", "à affecter"),
-            entry(RACINE + ".services.rh.EvaluationPeriodiqueService", "à affecter"),
-            entry(RACINE + ".services.rh.FormationService", "à affecter"),
-            entry(RACINE + ".services.rh.HeureSupplementaireService", "à affecter"),
-            entry(RACINE + ".services.rh.RhAbsenceService", "à affecter"),
-            entry(RACINE + ".services.rh.SanctionService", "à affecter"),
-            entry(RACINE + ".services.productionchimie.FormulationService", "à affecter"),
-            entry(RACINE + ".services.productionchimie.GrilleControleService", "à affecter"),
-            entry(RACINE + ".services.stockv2.ChantierService", "à affecter"),
-            entry(RACINE + ".services.stockv2.PlafondService", "à affecter"),
-            entry(RACINE + ".services.terrain.ControleQualiteService", "à affecter"),
-            entry(RACINE + ".services.terrain.InterventionService", "à affecter"),
-            entry(RACINE + ".services.terrain.PhytosanitaireService", "à affecter")
+            // Modules métier, dans le lot de leur module (lot-1-conception.md §4, sous 1b) :
+            // RH lot 6, Terrain lot 2, Stock lot 3, Production chimie lot 8
+            entry(RACINE + ".services.rh.BesoinFormationService", "lot 6"),
+            entry(RACINE + ".services.rh.BulletinPaieService", "lot 6"),
+            entry(RACINE + ".services.rh.ContratService", "lot 6"),
+            entry(RACINE + ".services.rh.DeclarationSocialeService", "lot 6"),
+            entry(RACINE + ".services.rh.DocumentEmployeService", "lot 6"),
+            entry(RACINE + ".services.rh.EvaluationPeriodiqueService", "lot 6"),
+            entry(RACINE + ".services.rh.FormationService", "lot 6"),
+            entry(RACINE + ".services.rh.HeureSupplementaireService", "lot 6"),
+            entry(RACINE + ".services.rh.RhAbsenceService", "lot 6"),
+            entry(RACINE + ".services.rh.SanctionService", "lot 6"),
+            entry(RACINE + ".services.productionchimie.FormulationService", "lot 8"),
+            entry(RACINE + ".services.productionchimie.GrilleControleService", "lot 8"),
+            entry(RACINE + ".services.stockv2.ChantierService", "lot 3"),
+            entry(RACINE + ".services.stockv2.PlafondService", "lot 3"),
+            entry(RACINE + ".services.terrain.ControleQualiteService", "lot 2"),
+            entry(RACINE + ".services.terrain.InterventionService", "lot 2"),
+            entry(RACINE + ".services.terrain.PhytosanitaireService", "lot 2")
     );
 
     /** Services d'écriture par module (règle 3) : non appelables depuis un autre module. */

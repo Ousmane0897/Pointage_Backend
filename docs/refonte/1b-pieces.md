@@ -31,7 +31,7 @@ Branche `refonte/v3-1b-pieces` (depuis `refonte/v3`), backend. Conception : `doc
 - `PlanificationDispatcher` (`outbox.dispatcher.actif`, `delai-ms: 2000`) ; **désactivé dans les tests** (`src/test/resources/config/application.yml`), qui appellent `traiterLot()`.
 - `CorrelationIdFilter` : en-tête `X-Correlation-Id` repris s'il est un UUID, sinon généré, renvoyé dans la réponse ; repris par l'audit et les événements, et posé pendant le traitement d'un événement.
 - Supervision : `GET /api/exploitation/evenements?statut&page&size`, `POST /api/exploitation/evenements/{id}/relancer` (`@droits.estSuperAdmin()` ; 409 `TRANSITION_INTERDITE` si l'événement n'est pas `EN_ERREUR`).
-- Consommateurs livrés : `registre-pieces`, `notifications-bons-stock` (WebSocket, mêmes types qu'avant + `BON_ANNULE`), `mail-creation-bon-stock` (e-mail de création, qui ne dépend plus du SMTP pendant la requête), `contre-passement-stock`.
+- Consommateurs livrés : `registre-pieces`, `notifications-bons-stock` (WebSocket, mêmes types qu'avant + `BON_ANNULE`), `mail-creation-bon-stock` (e-mail de création, qui ne dépend plus du SMTP pendant la requête). Le consommateur `contre-passement-stock` a été retiré en B11 : le stock d'une pièce annulée est rétabli dans la transaction d'annulation (§5).
 - ChangeUnit `0107` : 4 index, dont `consommateur_evenement_unique`.
 
 ## 3. Journal d'audit (D6)
@@ -54,8 +54,8 @@ Branche `refonte/v3-1b-pieces` (depuis `refonte/v3`), backend. Conception : `doc
 - **`reference` est nulle en brouillon** ; elle reçoit le numéro à la validation (avant la génération des mouvements, qui la recopient). DTO et Kanban : `libelleNumero`, `annulation`, `abandon`.
 - `POST /{id}/abandonner` remplace `DELETE /{id}` (BROUILLON ; créateur, contrôleur ou super-admin, comme avant).
 - `POST /{id}/annuler {motif}` remplace `POST /{id}/suppression-definitive` : bon EFFECTIF, super-admin, motif ≥ 10 caractères (400), sinon 409 ; rejouer = 409.
-  - L'annulation pose statut + bloc `annulation`, puis publie `PIECE_ANNULEE`. `ContrePassementStockService` (consommateur) crée un mouvement **inverse** par mouvement (`origine = "ANNULATION"`, `mouvementAnnuleId`, coût repris) et marque l'original `contrePasse = true`. Rien n'est supprimé.
-  - Bon d'entrée : débit **gardé** de l'entrepôt. **Garde synchrone** dans la transaction d'annulation : si la marchandise reçue est consommée, 422 `STOCK_INSUFFISANT` et rien n'est écrit.
+  - L'annulation pose statut + bloc `annulation` et, **dans la même transaction** (B11, écart 5 tranché le 25/11), `ContrePassementStockService` crée un mouvement **inverse** par mouvement (`origine = "ANNULATION"`, `mouvementAnnuleId`, coût repris), rétablit les soldes et marque l'original `contrePasse = true`. Puis `PIECE_ANNULEE` est publié pour les effets secondaires (notification `BON_ANNULE`, registre). Rien n'est supprimé.
+  - Bon d'entrée : débit **gardé** de l'entrepôt (`StockBalanceService.debiter`), précédé d'une pré-vérification cumulée par produit pour le message ; marchandise consommée ⇒ 422 `STOCK_INSUFFISANT`, rien n'est écrit (ni statut, ni audit, ni événement, ni mouvement). Une sortie concurrente sur le même stock : une seule des deux passe (`AnnulationConcurrenteIT`).
   - Bon de sortie : recrédit selon la répartition du débit, désormais enregistrée (`quantiteSurSite`, `quantiteSurConsolide`) ; mouvements antérieurs → entrepôt.
 - `MouvementsEffectifs` : mouvements annulés **exclus des consommations et des coûts** (`AnalyseSupport`, catégorisation, consommation, dotation, plafonds, chantiers et valorisation des chantiers, approvisionnement, consommations du tableau de bord du stock). Les rejeux de quantités et de valeur gardent tout : l'aller et le retour s'annulent.
 - Notifications WebSocket et e-mail de création : consommateurs d'événements ; `ExecuteurTransactionnel.apresCommit` supprimé.
@@ -65,24 +65,24 @@ Branche `refonte/v3-1b-pieces` (depuis `refonte/v3`), backend. Conception : `doc
 
 - `StatutInventaire` + `ANNULE`, `ABANDONNE`. Correspondance : BROUILLON → BROUILLON, COMPTAGE/VALIDATION → SOUMISE, CLOTURE → VALIDEE.
 - Numéro `INV-2026-0001` attribué **à la clôture** (référence nulle avant). La clôture passe en transaction : **compensation manuelle retirée** ; échec à mi-parcours ⇒ rien d'écrit, numéro non consommé.
-- `POST /{id}/abandonner` remplace `DELETE /{id}` ; `POST /{id}/annuler {motif}` (CLOTURE, super-admin) remplace la suppression définitive ; contre-ajustements par événement (non gardés, comme la clôture) ; ajustements anciens retrouvés par leur commentaire.
+- `POST /{id}/abandonner` remplace `DELETE /{id}` ; `POST /{id}/annuler {motif}` (CLOTURE, super-admin) remplace la suppression définitive ; contre-ajustements **dans la transaction d'annulation** (non gardés, comme la clôture ; même règle que les bons depuis B11) ; ajustements anciens retrouvés par leur commentaire.
 - `SuppressionDefinitiveService` et son test supprimés ; `stockv2_suppressions` (entité `SuppressionStockLog`) conservée en lecture, plus écrite.
 - ChangeUnit `0013` : comme `0012`, pour les inventaires.
 
 ## 7. Garde-fous
 
-- `security/RoutesSuppressionIT` : aucune route DELETE hors liste blanche. **34 routes en sursis**, chacune avec sa sous-branche : 1d (3), 1e (6), 1f (1), 1g (1), 1c (1), 1i (3), « à affecter » (19 : pièces et paramètres des modules RH, Terrain, Chimie, Stock). La liste ne peut que diminuer (une route retirée doit en sortir). Les 6 routes retirées en 1b sont vérifiées absentes.
+- `security/RoutesSuppressionIT` : aucune route DELETE hors liste blanche. **34 routes en sursis**, chacune avec sa sous-branche : 1d (3), 1e (6), 1f (1), 1g (1), 1c (1), 1i (3), et 19 routes des modules métier rattachées à leur lot (RH lot 6 : 12, Terrain lot 2 : 3, Stock lot 3 : 2, Chimie lot 8 : 2). La liste ne peut que diminuer (une route retirée doit en sortir). Les 6 routes retirées en 1b sont vérifiées absentes.
 - `architecture/SuppressionsInterditesArchTest` (ArchUnit 1.3.0, dépendance de test ajoutée) :
   - aucun `delete*`, `remove*`, `findAndRemove`, `findAllAndRemove`, `dropCollection` sur un repository ou `MongoTemplate` hors liste blanche ; permanentes : `ResetPasswordService`, paquet `migrations` ; **28 classes en sursis** avec leur sous-branche (même découpage) ;
   - règle 3 : aucune classe de `services.<module>` ne dépend d'un service d'écriture d'un autre module (liste explicite par module : stock, RH, terrain, production chimie). **Aucune violation aujourd'hui.**
 
-## 8. Écarts avec la conception (à valider)
+## 8. Écarts avec la conception (acceptés le 25/11, reportés dans `lot-1-conception.md`)
 
 1. **Statut et version à la racine du document**, pas dans `PieceBase` : `@Version` n'est reconnu qu'à la racine, et chaque pièce garde son statut métier (contrat front, index). Le statut commun est donné par `statutPiece()`.
 2. **Actions d'audit** `ABANDON` et `REPRISE` ajoutées à la liste de D6.
 3. **Numéros de ChangeUnits** : `0106` crée `compteurs_pieces` ; les index sont `0107` (outbox), `0108` (audit), `0109` (registre) au lieu de `0106`–`0108`.
 4. **Écran de supervision de l'outbox** : seules les routes existent ; l'écran front est reporté.
-5. **Annulation asynchrone** : entre l'annulation d'un bon d'entrée et son traitement (≈ 2 s), une sortie peut consommer le stock à retirer ; le débit gardé du consommateur échoue alors à chaque essai et l'événement finit `EN_ERREUR` (visible en supervision). Le cas est étroit ; le rendre impossible demanderait de débiter dans la transaction d'annulation (exception D5, comme la validation). À trancher.
+5. ~~**Annulation asynchrone**~~ — **résolu en B11** (décision du 25/11) : le stock est rétabli dans la transaction d'annulation, comme à la validation (exception D5 étendue). Appliqué aussi aux inventaires, pour une seule règle sur toutes les pièces de stock. Plus de course possible avec une sortie, plus d'`EN_ERREUR`.
 6. **CUMP non restauré** à l'annulation d'un bon d'entrée (déjà le cas de l'ancienne suppression définitive).
 7. **Registre** : deux événements de la même pièce dans la même milliseconde sont départagés par l'ordre de traitement.
 8. **`AuditorAware` / `@CreatedBy`** (D6, pour les référentiels) non mis en place : sans référentiel porté en 1b, rien ne l'utiliserait ; à faire en 1d/1e.
@@ -94,7 +94,7 @@ Branche `refonte/v3-1b-pieces` (depuis `refonte/v3`), backend. Conception : `doc
 | --- | --- |
 | `reference` toujours renseignée | **nulle en brouillon** ; afficher `libelleNumero` |
 | `DELETE /api/stock/bons-entree/{id}`, `/bons-sortie/{id}`, `/inventaires/{id}` | `POST /{id}/abandonner` → DTO (statut `ABANDONNE`) |
-| `POST /{id}/suppression-definitive {motif}` → 204 | `POST /{id}/annuler {motif}` → DTO (statut `ANNULE`, `annulation`) ; mouvements inverses quelques secondes plus tard |
+| `POST /{id}/suppression-definitive {motif}` → 204 | `POST /{id}/annuler {motif}` → DTO (statut `ANNULE`, `annulation`) ; mouvements inverses et soldes **immédiats** ; 422 `STOCK_INSUFFISANT` si la marchandise d'un bon d'entrée a été consommée |
 | `StatutBon` : 5 valeurs | + `ANNULE`, `ABANDONNE` (le Kanban unifié les renvoie : colonnes à filtrer côté front) |
 | `StatutInventaire` : 4 valeurs | + `ANNULE`, `ABANDONNE` |
 | `ActionWorkflow` | + `ANNULATION`, `ABANDON` |
@@ -116,7 +116,9 @@ Branche `refonte/v3-1b-pieces` (depuis `refonte/v3`), backend. Conception : `doc
 | B7 annulation des bons | `c750529` | 1 098 | 0 |
 | B8 inventaires | `36121c2` | 1 103 | 0 |
 | B9 garde-fous | `7b7675d` | 1 106 | 0 |
-| B10 docs + tableau de bord du stock | (ce commit) | 1 106 | 0 |
+| B10 docs + tableau de bord du stock | `d9c0dc9` | 1 106 | 0 |
+| B11 annulation dans la transaction | `33c7626` | 1 107 | 0 |
+| B12 conception, routes rattachées | (ce commit) | 1 107 | 0 |
 
 Critères d'acceptation de 1b : `NumerotationIT` (6), `RoutesSuppressionIT`, `SuppressionsInterditesArchTest` (2), `AnnulationBonIT` (6), `OutboxIT` (9), `JournalAuditIT` (4) et les transitions de pièces dans `BonWorkflowServiceIT` ; plus `RegistrePiecesIT`, `AnnulationInventaireIT`, `PiecesBonsExistantsMigrationIT`, `MigrationsIT`, `IndexesAttendusIT` (93 index), `ValidationEchecMiParcoursIT` (3).
 
@@ -130,6 +132,6 @@ Aucune opération serveur propre à 1b : les ChangeUnits `0012`, `0013`, `0106`�
 
 1. **Front F1/F2** (`pointage-agents`) : modèles, services, permissions, libellés, `libelleNumero`, boutons « Abandonner » / « Annuler le bon », dialogue d'annulation, bandeau du motif, colonnes du Kanban, inventaires.
 2. `bootRun` et parcours manuel sur le replica set de dev.
-3. Écart 5 (annulation d'une entrée asynchrone) à trancher.
-4. Routes et classes en sursis : à retirer dans leurs sous-branches ; les 19 routes « à affecter » attendent une décision de découpage.
+3. ~~Écart 5~~ : résolu en B11.
+4. Routes et classes en sursis : à retirer dans leurs sous-branches ; les 19 routes des modules métier sont rattachées à leur lot (RH lot 6, Terrain lot 2, Stock lot 3, Chimie lot 8 ; `lot-1-conception.md` §4, sous 1b).
 5. Écran de supervision de l'outbox.

@@ -53,27 +53,28 @@ class RoutesSuppressionIT extends SecuriteITBase {
             entry("DELETE /api/employe-complet/{id}/contrat", "1i"),
             entry("DELETE /api/gestion-personnel/contrats/{id}/fichier", "1i"),
             entry("DELETE /api/production-chimie/stock-chimie/matieres-premieres/{id}/fiche-securite", "1i"),
-            // À affecter — pièces et paramètres des modules (RH, Terrain, Chimie, Stock), portés
-            // sur le modèle pièce dans le lot de leur module
-            entry("DELETE /api/developpement-rh/evaluations/{id}", "à affecter"),
-            entry("DELETE /api/developpement-rh/formations/besoins/{id}", "à affecter"),
-            entry("DELETE /api/developpement-rh/formations/sessions/{sessionId}", "à affecter"),
-            entry("DELETE /api/developpement-rh/formations/{id}", "à affecter"),
-            entry("DELETE /api/developpement-rh/sanctions/{id}", "à affecter"),
-            entry("DELETE /api/gestion-personnel/contrats/{id}", "à affecter"),
-            entry("DELETE /api/gestion-personnel/documents/{id}", "à affecter"),
-            entry("DELETE /api/paie/bulletins/{id}", "à affecter"),
-            entry("DELETE /api/paie/declarations-sociales/{id}", "à affecter"),
-            entry("DELETE /api/temps-presences/absences/{id}", "à affecter"),
-            entry("DELETE /api/temps-presences/conges/demandes/{id}", "à affecter"),
-            entry("DELETE /api/temps-presences/heures-supplementaires/{id}", "à affecter"),
-            entry("DELETE /api/terrain/controles-terrain/grilles/{id}", "à affecter"),
-            entry("DELETE /api/terrain/interventions/{id}", "à affecter"),
-            entry("DELETE /api/terrain/phytosanitaire/applications/{id}", "à affecter"),
-            entry("DELETE /api/production-chimie/controle-qualite/grilles/{id}", "à affecter"),
-            entry("DELETE /api/production-chimie/formulations/{id}", "à affecter"),
-            entry("DELETE /api/stock/chantiers/{id}", "à affecter"),
-            entry("DELETE /api/stock/plafonds/{id}", "à affecter")
+            // Pièces et paramètres des modules métier, portés sur le modèle pièce dans le lot de
+            // leur module (lot-1-conception.md §4, sous 1b) : RH lot 6, Terrain lot 2, Stock lot 3,
+            // Production chimie lot 8
+            entry("DELETE /api/developpement-rh/evaluations/{id}", "lot 6"),
+            entry("DELETE /api/developpement-rh/formations/besoins/{id}", "lot 6"),
+            entry("DELETE /api/developpement-rh/formations/sessions/{sessionId}", "lot 6"),
+            entry("DELETE /api/developpement-rh/formations/{id}", "lot 6"),
+            entry("DELETE /api/developpement-rh/sanctions/{id}", "lot 6"),
+            entry("DELETE /api/gestion-personnel/contrats/{id}", "lot 6"),
+            entry("DELETE /api/gestion-personnel/documents/{id}", "lot 6"),
+            entry("DELETE /api/paie/bulletins/{id}", "lot 6"),
+            entry("DELETE /api/paie/declarations-sociales/{id}", "lot 6"),
+            entry("DELETE /api/temps-presences/absences/{id}", "lot 6"),
+            entry("DELETE /api/temps-presences/conges/demandes/{id}", "lot 6"),
+            entry("DELETE /api/temps-presences/heures-supplementaires/{id}", "lot 6"),
+            entry("DELETE /api/terrain/controles-terrain/grilles/{id}", "lot 2"),
+            entry("DELETE /api/terrain/interventions/{id}", "lot 2"),
+            entry("DELETE /api/terrain/phytosanitaire/applications/{id}", "lot 2"),
+            entry("DELETE /api/production-chimie/controle-qualite/grilles/{id}", "lot 8"),
+            entry("DELETE /api/production-chimie/formulations/{id}", "lot 8"),
+            entry("DELETE /api/stock/chantiers/{id}", "lot 3"),
+            entry("DELETE /api/stock/plafonds/{id}", "lot 3")
     );
 
     /** Retirées en 1b : elles ne doivent pas réapparaître. */
