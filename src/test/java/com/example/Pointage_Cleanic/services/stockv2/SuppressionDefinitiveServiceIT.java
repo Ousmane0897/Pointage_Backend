@@ -112,25 +112,6 @@ class SuppressionDefinitiveServiceIT extends MongoTestContainer {
                 new UsernamePasswordAuthenticationToken(email, null, List.of()));
     }
 
-    private BonEntreeDto entreeEffective(double qte) {
-        BonEntreeDto bon = bonEntreeService.creer(BonEntreePayload.builder()
-                .type(TypeEntree.ACHAT_FOURNISSEUR).siteDestinationId(SITE_A).fournisseur("Fournisseur X")
-                .lignes(List.of(LignePayload.builder().produitId(produitId).quantite(qte).build()))
-                .build());
-        bonEntreeService.soumettre(bon.getId());
-        return bonEntreeService.valider(bon.getId(), null);
-    }
-
-    private BonSortieDto sortieEffective(double qte) {
-        BonSortieDto bon = bonSortieService.creer(BonSortiePayload.builder()
-                .type(TypeSortie.CONSOMMATION_INTERNE).siteSourceId(SITE_A)
-                .destinataire(DestinatairePayload.builder().type(TypeDestinataire.CLIENT).clientNom("Client A").build())
-                .lignes(List.of(LignePayload.builder().produitId(produitId).quantite(qte).build()))
-                .build());
-        bonSortieService.soumettre(bon.getId());
-        return bonSortieService.valider(bon.getId(), null);
-    }
-
     /** Inventaire clôturé sur un écart de -5 (20 comptés 15). */
     private InventaireDto inventaireCloture() {
         balanceService.appliquerDelta(produitId, SITE_A, 20);
@@ -188,71 +169,6 @@ class SuppressionDefinitiveServiceIT extends MongoTestContainer {
     }
 
     /**
-     * ⚠ Les soldes des bons se lisent sur l'{@link StockBalanceService#ENTREPOT} (lieu de stockage
-     * unique) et non sur le site du bon : une entrée y crédite tout, une sortie y puise. Le site
-     * reste à zéro, c'est un destinataire, pas un emplacement.
-     */
-    @Test
-    void suppression_bon_sortie_effectif_recredite_l_entrepot() {
-        entreeEffective(20);
-        BonSortieDto sortie = sortieEffective(8);
-        assertThat(balanceService.quantite(produitId, StockBalanceService.ENTREPOT)).isEqualTo(12.0);
-
-        suppressionService.supprimerBonSortie(sortie.getId(), MOTIF);
-
-        assertThat(balanceService.quantite(produitId, StockBalanceService.ENTREPOT)).isEqualTo(20.0);
-        // Aucun stock fantôme créé sur le site source du bon.
-        assertThat(balanceService.quantite(produitId, SITE_A)).isZero();
-        assertThat(mouvementRepository.findByBonId(sortie.getId())).isEmpty();
-        assertThat(bonSortieRepository.findById(sortie.getId())).isEmpty();
-        assertThat(logRepository.findByDocumentId(sortie.getId())).hasSize(1);
-    }
-
-    @Test
-    void suppression_bon_entree_effectif_retire_le_stock_recu_de_l_entrepot() {
-        BonEntreeDto entree = entreeEffective(20);
-        assertThat(balanceService.quantite(produitId, StockBalanceService.ENTREPOT)).isEqualTo(20.0);
-
-        suppressionService.supprimerBonEntree(entree.getId(), MOTIF);
-
-        assertThat(balanceService.quantite(produitId, StockBalanceService.ENTREPOT)).isZero();
-        assertThat(balanceService.quantite(produitId, SITE_A)).isZero();
-        assertThat(mouvementRepository.findByBonId(entree.getId())).isEmpty();
-        assertThat(bonEntreeRepository.findById(entree.getId())).isEmpty();
-    }
-
-    @Test
-    void suppression_bon_entree_refusee_422_si_la_marchandise_a_ete_consommee() {
-        BonEntreeDto entree = entreeEffective(20);
-        sortieEffective(15);   // il ne reste que 5 des 20 reçus
-
-        assertThatThrownBy(() -> suppressionService.supprimerBonEntree(entree.getId(), MOTIF))
-                .isInstanceOf(StockOperationException.class);
-
-        // Rien touché : le bon et son mouvement sont toujours là, le solde est intact.
-        assertThat(bonEntreeRepository.findById(entree.getId())).isPresent();
-        assertThat(mouvementRepository.findByBonId(entree.getId())).hasSize(1);
-        assertThat(balanceService.quantite(produitId, StockBalanceService.ENTREPOT)).isEqualTo(5.0);
-    }
-
-    @Test
-    void suppression_d_un_brouillon_est_un_no_op_sur_le_stock() {
-        BonSortieDto brouillon = bonSortieService.creer(BonSortiePayload.builder()
-                .type(TypeSortie.CONSOMMATION_INTERNE).siteSourceId(SITE_A)
-                .destinataire(DestinatairePayload.builder().type(TypeDestinataire.CLIENT).clientNom("Client A").build())
-                .lignes(List.of(LignePayload.builder().produitId(produitId).quantite(3).build()))
-                .build());
-
-        suppressionService.supprimerBonSortie(brouillon.getId(), MOTIF);
-
-        assertThat(bonSortieRepository.findById(brouillon.getId())).isEmpty();
-        assertThat(balanceService.quantite(produitId, StockBalanceService.ENTREPOT)).isZero();
-        assertThat(balanceService.quantite(produitId, SITE_A)).isZero();
-        assertThat(logRepository.findByDocumentId(brouillon.getId())).singleElement()
-                .satisfies(l -> assertThat(l.getNbMouvementsContrePasses()).isZero());
-    }
-
-    /**
      * La clôture d'un inventaire applique les écarts au stock réel : contrôleur de stock ou
      * super-administrateur, comme la suppression définitive.
      */
@@ -295,17 +211,13 @@ class SuppressionDefinitiveServiceIT extends MongoTestContainer {
 
     @Test
     void suppression_refusee_400_si_motif_absent_ou_trop_court() {
-        BonSortieDto sortie = bonSortieService.creer(BonSortiePayload.builder()
-                .type(TypeSortie.CONSOMMATION_INTERNE).siteSourceId(SITE_A)
-                .destinataire(DestinatairePayload.builder().type(TypeDestinataire.CLIENT).clientNom("Client A").build())
-                .lignes(List.of(LignePayload.builder().produitId(produitId).quantite(1).build()))
-                .build());
+        InventaireDto inv = inventaireCloture();
 
-        assertThatThrownBy(() -> suppressionService.supprimerBonSortie(sortie.getId(), null))
+        assertThatThrownBy(() -> suppressionService.supprimerInventaire(inv.getId(), null))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> suppressionService.supprimerBonSortie(sortie.getId(), "erreur"))
+        assertThatThrownBy(() -> suppressionService.supprimerInventaire(inv.getId(), "erreur"))
                 .isInstanceOf(IllegalArgumentException.class);
 
-        assertThat(bonSortieRepository.findById(sortie.getId())).isPresent();
+        assertThat(inventaireRepository.findById(inv.getId())).isPresent();
     }
 }

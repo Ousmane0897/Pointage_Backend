@@ -56,6 +56,7 @@ public class BonEntreeService {
     private final NumerotationService numerotation;
     private final TraceurPieces traceur;
     private final PiecesBon piecesBon;
+    private final ContrePassementStockService contrePassement;
     private final HabilitationStock habilitation;
     private final MongoTemplate mongoTemplate;
 
@@ -276,6 +277,34 @@ public class BonEntreeService {
         BonEntree saved = repository.save(bon);
         tracer(TypesEvenement.PIECE_REFUSEE, ActionAudit.REFUS, avant, saved, motif);
         return mapper.toDto(saved);
+    }
+
+    /**
+     * Annulation d'un bon EFFECTIF (lot 1 / 1b, D4) : remplace la suppression définitive. Le bon
+     * reste en base (statut ANNULE, qui, quand, motif) ; ses mouvements sont contre-passés par le
+     * consommateur de l'événement {@code PIECE_ANNULEE}. Garde synchrone : la marchandise reçue
+     * doit être encore en stock (422 {@code STOCK_INSUFFISANT} sinon, rien n'est écrit).
+     * Super-administrateur seul, motif de 10 caractères minimum (400), autre statut 409.
+     */
+    public BonEntreeDto annuler(String id, String motif) {
+        String motifNet = PiecesBon.exigerMotifAnnulation(motif);
+        return executeur.executer(() -> {
+            BonEntree bon = loadOrThrow(id);
+            if (bon.getStatut() != StatutBon.EFFECTIF) {
+                throw new StockConflitException("Seul un bon EFFECTIF peut être annulé (statut actuel : " + bon.getStatut() + ")");
+            }
+            habilitation.exigerSuperAdmin("Annulation");
+            contrePassement.verifierRetraitPossible(bon.getId());
+            Map<String, Object> avant = piecesBon.instantane(bon);
+            LocalDateTime now = LocalDateTime.now();
+            piecesBon.assurer(bon).setAnnulation(piecesBon.annulation(motifNet, now));
+            bon.setStatut(StatutBon.ANNULE);
+            bon.setUpdatedAt(now);
+            bon.getHistorique().add(support.historique(ActionWorkflow.ANNULATION, motifNet));
+            BonEntree saved = repository.save(bon);
+            tracer(TypesEvenement.PIECE_ANNULEE, ActionAudit.ANNULATION, avant, saved, motifNet);
+            return mapper.toDto(saved);
+        });
     }
 
     /** Audit + événement de la transition, dans la transaction courante. */

@@ -1,6 +1,7 @@
 package com.example.Pointage_Cleanic.services.stockv2;
 
 import com.example.Pointage_Cleanic.Enum.pieces.TypePiece;
+import com.example.Pointage_Cleanic.entities.pieces.Annulation;
 import com.example.Pointage_Cleanic.entities.pieces.AuteurInstantane;
 import com.example.Pointage_Cleanic.entities.pieces.PieceBase;
 import com.example.Pointage_Cleanic.entities.stockv2.BonEntree;
@@ -25,6 +26,24 @@ public class PiecesBon {
 
     private final CurrentUserProvider currentUser;
     private final ObjectMapper objectMapper;
+
+    /** Longueur minimale du motif d'annulation (reprise de l'ancienne suppression définitive). */
+    public static final int MOTIF_ANNULATION_MIN = 10;
+
+    /** Motif d'annulation obligatoire, {@value #MOTIF_ANNULATION_MIN} caractères minimum (400 sinon). */
+    public static String exigerMotifAnnulation(String motif) {
+        String net = motif == null ? "" : motif.trim();
+        if (net.length() < MOTIF_ANNULATION_MIN) {
+            throw new IllegalArgumentException("Le motif d'annulation est obligatoire ("
+                    + MOTIF_ANNULATION_MIN + " caractères minimum)");
+        }
+        return net;
+    }
+
+    /** Bloc d'annulation : auteur courant, date, motif. */
+    public Annulation annulation(String motif, LocalDateTime le) {
+        return Annulation.builder().par(auteurCourant()).le(le).motif(motif).build();
+    }
 
     public AuteurInstantane auteurCourant() {
         return AuteurInstantane.builder()

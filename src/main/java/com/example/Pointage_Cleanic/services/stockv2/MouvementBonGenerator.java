@@ -100,10 +100,14 @@ public class MouvementBonGenerator {
                 balanceService.verifierDisponibiliteAvecConsolide(produitId, bon.getSiteSourceId(), total, bon.getSiteSourceNom()));
 
         for (LigneBon ligne : bon.getLignes()) {
-            balanceService.debiterAvecRepli(ligne.getProduitId(), bon.getSiteSourceId(), ligne.getQuantite());
+            StockBalanceService.RepartitionDebit repartition =
+                    balanceService.debiterAvecRepli(ligne.getProduitId(), bon.getSiteSourceId(), ligne.getQuantite());
 
             MouvementStock mvt = baseMouvement(bon.getReference(), bon.getId(), bon.getDate(), ligne);
             mvt.setType(TypeMouvement.SORTIE);
+            // Lot 1 / 1b : répartition gardée pour recréditer à l'identique si le bon est annulé.
+            mvt.setQuantiteSurSite(repartition.surSite());
+            mvt.setQuantiteSurConsolide(repartition.surConsolide());
             mvt.setMotif(StockLibelles.motif(bon.getType()));
             mvt.setCategorieSortie(bon.getType());
             mvt.setSiteSourceId(bon.getSiteSourceId());

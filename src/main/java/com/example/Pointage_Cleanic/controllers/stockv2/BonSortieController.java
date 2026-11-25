@@ -9,7 +9,6 @@ import com.example.Pointage_Cleanic.Enum.stockv2.StatutBon;
 import com.example.Pointage_Cleanic.Enum.stockv2.TypeSortie;
 import com.example.Pointage_Cleanic.Dto.stockv2.MotifPayload;
 import com.example.Pointage_Cleanic.services.stockv2.BonSortieService;
-import com.example.Pointage_Cleanic.services.stockv2.SuppressionDefinitiveService;
 import com.example.Pointage_Cleanic.util.PageResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -33,7 +32,6 @@ import java.time.LocalDate;
 public class BonSortieController {
 
     private final BonSortieService service;
-    private final SuppressionDefinitiveService suppressionService;
 
     @GetMapping
     public ResponseEntity<PageResponse<BonSortieDto>> list(
@@ -70,15 +68,13 @@ public class BonSortieController {
     }
 
     /**
-     * Suppression d'un bon quel que soit son statut, <b>super-administrateur uniquement</b> : les
-     * mouvements de sortie générés à la validation sont contre-passés (stock recrédité) et
-     * l'opération est journalisée.
+     * Annulation d'un bon EFFECTIF (lot 1 / 1b, D4) : remplace la suppression définitive. Le bon
+     * est conservé (statut ANNULE, motif tracé) et ses mouvements sont contre-passés par des
+     * mouvements inverses. Super-administrateur, motif de 10 caractères minimum.
      */
-    @PostMapping("/{id}/suppression-definitive")
-    public ResponseEntity<Void> supprimerDefinitivement(@PathVariable String id,
-                                                        @RequestBody(required = false) MotifPayload payload) {
-        suppressionService.supprimerBonSortie(id, payload == null ? null : payload.getMotif());
-        return ResponseEntity.noContent().build();
+    @PostMapping("/{id}/annuler")
+    public BonSortieDto annuler(@PathVariable String id, @RequestBody(required = false) MotifPayload payload) {
+        return service.annuler(id, payload == null ? null : payload.getMotif());
     }
 
     @PostMapping("/{id}/soumettre")

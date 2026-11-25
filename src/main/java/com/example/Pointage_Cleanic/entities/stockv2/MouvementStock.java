@@ -88,4 +88,17 @@ public class MouvementStock {
     private Long coutUnitaireSnapshot;
     /** Valeur du mouvement en FCFA = quantité × coutUnitaireSnapshot. Null pour les mouvements pré-7.6. */
     private Long valeurMouvement;
+
+    // --- Lot 1 / 1b (D4) : annulation d'une pièce par contre-passement, sans suppression ---
+    /** Vrai si ce mouvement a été contre-passé (pièce annulée) : exclu des consommations. */
+    private Boolean contrePasse;
+    /** Sur un mouvement inverse ({@code origine = "ANNULATION"}) : le mouvement qu'il annule. */
+    private String mouvementAnnuleId;
+    /**
+     * Répartition du débit d'une sortie de bon (site source, puis entrepôt en repli), pour la
+     * recréditer à l'identique en cas d'annulation. Nulle sur les mouvements antérieurs à 1b :
+     * l'annulation recrédite alors l'entrepôt.
+     */
+    private Double quantiteSurSite;
+    private Double quantiteSurConsolide;
 }

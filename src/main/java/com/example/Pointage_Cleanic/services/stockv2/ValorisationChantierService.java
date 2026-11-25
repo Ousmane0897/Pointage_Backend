@@ -70,7 +70,8 @@ public class ValorisationChantierService {
         if (chantier == null) {
             throw new ResourceNotFoundException("Chantier introuvable : " + id);
         }
-        List<MouvementStock> mouvements = mouvementRepository.findByChantierId(id);
+        List<MouvementStock> mouvements = mouvementRepository.findByChantierId(id).stream()
+                .filter(MouvementsEffectifs::compte).toList(); // lot 1 / 1b : pièces annulées
         Map<String, ProduitStock> produits = analyseSupport.produitsByIds(mouvements);
 
         Map<String, CoutRevientChantierDto.LigneChantier> lignes = new LinkedHashMap<>();
@@ -119,7 +120,8 @@ public class ValorisationChantierService {
     }
 
     private ChantierValoriseDto toValorise(Chantier chantier) {
-        List<MouvementStock> mouvements = mouvementRepository.findByChantierId(chantier.getId());
+        List<MouvementStock> mouvements = mouvementRepository.findByChantierId(chantier.getId()).stream()
+                .filter(MouvementsEffectifs::compte).toList(); // lot 1 / 1b : pièces annulées
         Map<String, ProduitStock> produits = analyseSupport.produitsByIds(mouvements);
         long coutTotal = 0;
         java.util.Set<String> produitsDistincts = new java.util.HashSet<>();
@@ -156,7 +158,8 @@ public class ValorisationChantierService {
         }
         long somme = 0;
         for (Chantier c : similaires) {
-            List<MouvementStock> mvts = mouvementRepository.findByChantierId(c.getId());
+            List<MouvementStock> mvts = mouvementRepository.findByChantierId(c.getId()).stream()
+                .filter(MouvementsEffectifs::compte).toList(); // lot 1 / 1b : pièces annulées
             Map<String, ProduitStock> produits = analyseSupport.produitsByIds(mvts);
             somme += mvts.stream()
                     .mapToLong(m -> Math.round(m.getQuantite() * valorisationSupport.coutDe(m, produits).coutUnitaire()))

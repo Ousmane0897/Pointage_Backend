@@ -83,7 +83,8 @@ public class ChantierService {
 
     public DetailChantierDto detail(String id) {
         Chantier chantier = loadOrThrow(id);
-        List<MouvementStock> mouvements = mouvementRepository.findByChantierId(id);
+        List<MouvementStock> mouvements = mouvementRepository.findByChantierId(id).stream()
+                .filter(MouvementsEffectifs::compte).toList(); // lot 1 / 1b : pièces annulées
         Map<String, ProduitStock> produits = support.produitsByIds(mouvements);
 
         Map<String, LigneConsommationChantierDto> lignes = new LinkedHashMap<>();
@@ -196,7 +197,8 @@ public class ChantierService {
     }
 
     private ChantierDto toDtoEnrichi(Chantier chantier) {
-        List<MouvementStock> mouvements = mouvementRepository.findByChantierId(chantier.getId());
+        List<MouvementStock> mouvements = mouvementRepository.findByChantierId(chantier.getId()).stream()
+                .filter(MouvementsEffectifs::compte).toList(); // lot 1 / 1b : pièces annulées
         Map<String, ProduitStock> produits = support.produitsByIds(mouvements);
         long coutTotal = mouvements.stream().mapToLong(m -> support.montant(m, produits)).sum();
         return mapper.toDto(applyDenormalisation(chantier, coutTotal, mouvements.size()));

@@ -459,6 +459,32 @@ public class BonSortieService {
         }
     }
 
+    /**
+     * Annulation d'un bon EFFECTIF (lot 1 / 1b, D4) : remplace la suppression définitive. Le bon
+     * reste en base (statut ANNULE, qui, quand, motif) ; ses mouvements sont contre-passés (stock
+     * recrédité) par le consommateur de l'événement {@code PIECE_ANNULEE}. Super-administrateur
+     * seul, motif de 10 caractères minimum (400), autre statut 409.
+     */
+    public BonSortieDto annuler(String id, String motif) {
+        String motifNet = PiecesBon.exigerMotifAnnulation(motif);
+        return executeur.executer(() -> {
+            BonSortie bon = loadOrThrow(id);
+            if (bon.getStatut() != StatutBon.EFFECTIF) {
+                throw new StockConflitException("Seul un bon EFFECTIF peut être annulé (statut actuel : " + bon.getStatut() + ")");
+            }
+            habilitation.exigerSuperAdmin("Annulation");
+            Map<String, Object> avant = piecesBon.instantane(bon);
+            LocalDateTime now = LocalDateTime.now();
+            piecesBon.assurer(bon).setAnnulation(piecesBon.annulation(motifNet, now));
+            bon.setStatut(StatutBon.ANNULE);
+            bon.setUpdatedAt(now);
+            bon.getHistorique().add(support.historique(ActionWorkflow.ANNULATION, motifNet));
+            BonSortie saved = repository.save(bon);
+            tracer(TypesEvenement.PIECE_ANNULEE, ActionAudit.ANNULATION, avant, saved, motifNet);
+            return mapper.toDto(saved);
+        });
+    }
+
     /** Audit + événement de la transition, dans la transaction courante. */
     private void tracer(String evenement, ActionAudit action, Map<String, Object> avant, BonSortie apres,
                         String motif) {

@@ -1,10 +1,7 @@
 package com.example.Pointage_Cleanic.services.stockv2;
 
 import com.example.Pointage_Cleanic.Enum.stockv2.MotifMouvement;
-import com.example.Pointage_Cleanic.Enum.stockv2.StatutBon;
 import com.example.Pointage_Cleanic.Enum.stockv2.StatutInventaire;
-import com.example.Pointage_Cleanic.entities.stockv2.BonEntree;
-import com.example.Pointage_Cleanic.entities.stockv2.BonSortie;
 import com.example.Pointage_Cleanic.entities.stockv2.HistoriquePointCout;
 import com.example.Pointage_Cleanic.entities.stockv2.Inventaire;
 import com.example.Pointage_Cleanic.entities.stockv2.LigneInventaire;
@@ -15,9 +12,6 @@ import com.example.Pointage_Cleanic.entities.stockv2.SuppressionStockLog.TypeDoc
 import com.example.Pointage_Cleanic.exception.ResourceNotFoundException;
 import com.example.Pointage_Cleanic.exception.StockAccesRefuseException;
 import com.example.Pointage_Cleanic.exception.StockOperationException;
-import com.example.Pointage_Cleanic.repositories.stockv2.BonEntreeRepository;
-import com.example.Pointage_Cleanic.repositories.stockv2.BonSortieRepository;
-import com.example.Pointage_Cleanic.repositories.stockv2.HistoriquePointCoutRepository;
 import com.example.Pointage_Cleanic.repositories.stockv2.InventaireRepository;
 import com.example.Pointage_Cleanic.repositories.stockv2.MouvementStockRepository;
 import com.example.Pointage_Cleanic.repositories.stockv2.SuppressionStockLogRepository;
@@ -36,6 +30,10 @@ import static com.example.Pointage_Cleanic.services.stockv2.StockBalanceService.
 
 /**
  * Suppression définitive d'un document de stock déjà engagé — <b>super-administrateur uniquement</b>.
+ *
+ * <p>Depuis le lot 1 / 1b, seuls les inventaires passent encore ici (les bons s'annulent :
+ * {@code BonEntreeService.annuler}, {@code BonSortieService.annuler}) ; le service disparaît en
+ * B8 avec l'annulation des inventaires.
  *
  * <p>Un inventaire clôturé et un bon effectif ont déjà touché le stock : les supprimer sans rien
  * faire d'autre laisserait des mouvements orphelins et des soldes faux. Chaque suppression
@@ -69,10 +67,7 @@ public class SuppressionDefinitiveService {
     public static final int MOTIF_MIN = 10;
 
     private final InventaireRepository inventaireRepository;
-    private final BonEntreeRepository bonEntreeRepository;
-    private final BonSortieRepository bonSortieRepository;
     private final MouvementStockRepository mouvementRepository;
-    private final HistoriquePointCoutRepository historiqueCoutRepository;
     private final SuppressionStockLogRepository logRepository;
     private final StockBalanceService balanceService;
     private final CurrentUserProvider currentUser;
@@ -131,103 +126,6 @@ public class SuppressionDefinitiveService {
                 .toList();
     }
 
-    // ─── Bon de sortie ──────────────────────────────────────────────────────
-
-    public void supprimerBonSortie(String id, String motif) {
-        exigerSuperAdmin();
-        String motifNet = exigerMotif(motif);
-        BonSortie bon = bonSortieRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Bon de sortie introuvable : " + id));
-
-        List<LigneContrePassee> contrePassees = new ArrayList<>();
-        List<MouvementStock> mouvements = List.of();
-
-        if (bon.getStatut() == StatutBon.EFFECTIF) {
-            mouvements = mouvementRepository.findByBonId(bon.getId());
-            for (MouvementStock mvt : mouvements) {
-                // Recrédit de l'entrepôt : c'est lui que la validation a débité (cf. en-tête de classe),
-                // pas le site source, qui n'est qu'un point de départ documentaire.
-                balanceService.appliquerDelta(mvt.getProduitId(), ENTREPOT, mvt.getQuantite());
-                contrePassees.add(ligneDe(mvt, mvt.getQuantite(), ENTREPOT));
-            }
-            supprimerMouvements(mouvements);
-        }
-
-        journaliser(TypeDocument.BON_SORTIE, bon.getId(), bon.getReference(),
-                String.valueOf(bon.getStatut()), motifNet, mouvements.size(), contrePassees);
-        bonSortieRepository.deleteById(bon.getId());
-    }
-
-    // ─── Bon d'entrée ───────────────────────────────────────────────────────
-
-    public void supprimerBonEntree(String id, String motif) {
-        exigerSuperAdmin();
-        String motifNet = exigerMotif(motif);
-        BonEntree bon = bonEntreeRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Bon d'entrée introuvable : " + id));
-
-        List<LigneContrePassee> contrePassees = new ArrayList<>();
-        List<MouvementStock> mouvements = List.of();
-
-        if (bon.getStatut() == StatutBon.EFFECTIF) {
-            mouvements = mouvementRepository.findByBonId(bon.getId());
-            verifierRetraitPossible(mouvements);
-            for (MouvementStock mvt : mouvements) {
-                // Retrait de l'entrepôt, seul crédité à la réception — le site de destination du bon
-                // est documentaire et ne porte aucun solde.
-                balanceService.appliquerDelta(mvt.getProduitId(), ENTREPOT, -mvt.getQuantite());
-                contrePassees.add(ligneDe(mvt, -mvt.getQuantite(), ENTREPOT));
-            }
-            nettoyerHistoriqueCout(mouvements);
-            supprimerMouvements(mouvements);
-        }
-
-        journaliser(TypeDocument.BON_ENTREE, bon.getId(), bon.getReference(),
-                String.valueOf(bon.getStatut()), motifNet, mouvements.size(), contrePassees);
-        bonEntreeRepository.deleteById(bon.getId());
-    }
-
-    /**
-     * Retirer une entrée déjà consommée rendrait le solde négatif — une donnée fausse qui se
-     * propagerait aux statuts de rupture et à la valorisation. On refuse en 422 avec le détail :
-     * au super-administrateur d'ajuster le stock d'abord (message actionnable), plutôt que de
-     * laisser l'application produire des quantités négatives.
-     */
-    private void verifierRetraitPossible(List<MouvementStock> mouvements) {
-        // Cumul par produit — et non par couple (produit, site) : le retrait vise l'entrepôt, un
-        // même produit pouvant apparaître sur plusieurs lignes du bon.
-        Map<String, Double> cumulParProduit = new LinkedHashMap<>();
-        Map<String, String> codeParProduit = new LinkedHashMap<>();
-        for (MouvementStock mvt : mouvements) {
-            cumulParProduit.merge(mvt.getProduitId(), mvt.getQuantite(), Double::sum);
-            codeParProduit.putIfAbsent(mvt.getProduitId(), mvt.getProduitCode());
-        }
-        cumulParProduit.forEach((produitId, aRetirer) -> {
-            double disponible = balanceService.quantite(produitId, ENTREPOT);
-            if (disponible < aRetirer) {
-                throw new StockOperationException(
-                        "Contre-passement impossible pour " + codeParProduit.get(produitId)
-                                + " : la marchandise reçue a déjà été consommée (disponible " + disponible
-                                + ", à retirer " + aRetirer + "). Ajustez le stock avant de supprimer ce bon.");
-            }
-        });
-    }
-
-    /** Supprime les points de coût 7.6 rattachés aux mouvements effacés (le CUMP reste en l'état). */
-    private void nettoyerHistoriqueCout(List<MouvementStock> mouvements) {
-        List<String> references = mouvements.stream()
-                .map(MouvementStock::getReference)
-                .filter(Objects::nonNull)
-                .toList();
-        if (references.isEmpty()) {
-            return;
-        }
-        List<HistoriquePointCout> points = historiqueCoutRepository.findByReferenceMouvementIn(references);
-        if (!points.isEmpty()) {
-            historiqueCoutRepository.deleteAll(points);
-        }
-    }
-
     // ─── Briques communes ───────────────────────────────────────────────────
 
     private void exigerSuperAdmin() {
@@ -241,15 +139,6 @@ public class SuppressionDefinitiveService {
                     "Le motif de suppression est obligatoire (" + MOTIF_MIN + " caractères minimum)");
         }
         return net;
-    }
-
-    private LigneContrePassee ligneDe(MouvementStock mvt, double delta, String siteId) {
-        return LigneContrePassee.builder()
-                .produitId(mvt.getProduitId())
-                .produitCode(mvt.getProduitCode())
-                .delta(delta)
-                .siteId(siteId)
-                .build();
     }
 
     private void supprimerMouvements(List<MouvementStock> mouvements) {
