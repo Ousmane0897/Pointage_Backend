@@ -32,8 +32,10 @@ import static com.example.Pointage_Cleanic.services.stockv2.StockBalanceService.
  *   <li>inventaire annulé : ajustements opposés sur le site de l'inventaire, non gardés,
  *       comme la clôture.</li>
  * </ul>
- * Le coût courant (CUMP) n'est pas restauré, comme avant 1b ; le mouvement inverse reprend le
- * coût du mouvement annulé.
+ * Appelé <b>dans la transaction d'annulation</b> de la pièce (D5 : les soldes font partie de la
+ * pièce, comme à la validation) : un retrait impossible refuse l'annulation (422), jamais d'état
+ * intermédiaire ni d'événement en erreur. Le coût courant (CUMP) n'est pas restauré, comme avant
+ * 1b ; le mouvement inverse reprend le coût du mouvement annulé.
  */
 @Service
 @RequiredArgsConstructor
@@ -66,7 +68,7 @@ public class ContrePassementStockService {
         });
     }
 
-    /** Contre-passe les mouvements du bon (dans la transaction du consommateur). Idempotent. */
+    /** Contre-passe les mouvements du bon, dans la transaction d'annulation. Idempotent. */
     public int contrePasserBon(String bonId, String motif, String auteur) {
         if (!TransactionSynchronizationManager.isActualTransactionActive()) {
             throw new IllegalStateException("Contre-passement hors transaction");
@@ -87,7 +89,7 @@ public class ContrePassementStockService {
     }
 
     /**
-     * Contre-passe les ajustements d'un inventaire clôturé (dans la transaction du consommateur).
+     * Contre-passe les ajustements d'un inventaire clôturé, dans la transaction d'annulation.
      * Les ajustements antérieurs au rattachement par {@code inventaireId} sont retrouvés par leur
      * commentaire, comme le faisait l'ancienne suppression définitive. Idempotent.
      */

@@ -67,6 +67,7 @@ public class BonSortieService {
     private final ChantierRepository chantierRepository;
     private final MongoTemplate mongoTemplate;
     private final HabilitationStock habilitation;
+    private final ContrePassementStockService contrePassement;
 
     public PageResponse<BonSortieDto> list(int page, int size, String q, StatutBon statut, TypeSortie type,
                                            String siteId, LocalDate dateDebut, LocalDate dateFin) {
@@ -461,9 +462,10 @@ public class BonSortieService {
 
     /**
      * Annulation d'un bon EFFECTIF (lot 1 / 1b, D4) : remplace la suppression définitive. Le bon
-     * reste en base (statut ANNULE, qui, quand, motif) ; ses mouvements sont contre-passés (stock
-     * recrédité) par le consommateur de l'événement {@code PIECE_ANNULEE}. Super-administrateur
-     * seul, motif de 10 caractères minimum (400), autre statut 409.
+     * reste en base (statut ANNULE, qui, quand, motif) ; ses mouvements sont contre-passés et le
+     * stock recrédité <b>dans la même transaction</b> (D5 : les soldes font partie de la pièce).
+     * L'événement {@code PIECE_ANNULEE} ne porte plus que les effets secondaires.
+     * Super-administrateur seul, motif de 10 caractères minimum (400), autre statut 409.
      */
     public BonSortieDto annuler(String id, String motif) {
         String motifNet = PiecesBon.exigerMotifAnnulation(motif);
@@ -480,6 +482,7 @@ public class BonSortieService {
             bon.setUpdatedAt(now);
             bon.getHistorique().add(support.historique(ActionWorkflow.ANNULATION, motifNet));
             BonSortie saved = repository.save(bon);
+            contrePassement.contrePasserBon(saved.getId(), motifNet, piecesBon.auteurCourant().getNom());
             tracer(TypesEvenement.PIECE_ANNULEE, ActionAudit.ANNULATION, avant, saved, motifNet);
             return mapper.toDto(saved);
         });

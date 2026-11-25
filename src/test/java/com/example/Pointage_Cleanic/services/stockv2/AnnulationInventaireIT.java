@@ -111,18 +111,14 @@ class AnnulationInventaireIT extends MongoTestContainer {
     }
 
     @Test
-    void annulation_d_un_inventaire_cloture_contre_ajuste_par_evenement() {
+    void annulation_d_un_inventaire_cloture_contre_ajuste_dans_la_transaction() {
         InventaireDto inv = cloturerAvecEcart(creer().getId());
         assertThat(balanceService.quantite(produitId, SITE_A)).isEqualTo(15.0);
 
         InventaireDto annule = inventaireService.annuler(inv.getId(), MOTIF);
         assertThat(annule.getStatut()).isEqualTo(StatutInventaire.ANNULE);
         assertThat(annule.getAnnulation().getMotif()).isEqualTo(MOTIF);
-        assertThat(balanceService.quantite(produitId, SITE_A)).as("asynchrone").isEqualTo(15.0);
-
-        dispatcher.traiterLot();
-
-        assertThat(balanceService.quantite(produitId, SITE_A)).isEqualTo(20.0);
+        assertThat(balanceService.quantite(produitId, SITE_A)).as("rétabli dans la transaction").isEqualTo(20.0);
         List<MouvementStock> mvts = mouvementRepository.findByInventaireId(inv.getId());
         assertThat(mvts).hasSize(2);
         assertThat(mvts).filteredOn(m -> "ANNULATION".equals(m.getOrigine())).singleElement()
@@ -133,6 +129,7 @@ class AnnulationInventaireIT extends MongoTestContainer {
         assertThat(mvts).filteredOn(m -> "INVENTAIRE".equals(m.getOrigine())).singleElement()
                 .satisfies(m -> assertThat(m.getContrePasse()).isTrue());
         assertThat(mongoTemplate.count(new Query(), Inventaire.class)).isEqualTo(1);
+        dispatcher.traiterLot();
         assertThat(mongoTemplate.findOne(Query.query(Criteria.where("pieceId").is(inv.getId())),
                 LignePieceRegistre.class).getStatut()).isEqualTo(StatutPiece.ANNULEE);
 
@@ -148,7 +145,6 @@ class AnnulationInventaireIT extends MongoTestContainer {
                 new Update().unset("inventaireId").unset("inventaireReference").unset("origine"), MouvementStock.class);
 
         inventaireService.annuler(inv.getId(), MOTIF);
-        dispatcher.traiterLot();
 
         assertThat(balanceService.quantite(produitId, SITE_A)).isEqualTo(20.0);
         assertThat(mongoTemplate.findById(ajustement.getId(), MouvementStock.class).getContrePasse()).isTrue();

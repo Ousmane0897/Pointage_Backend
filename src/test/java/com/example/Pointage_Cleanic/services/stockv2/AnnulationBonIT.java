@@ -53,10 +53,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * Critère 1b « annulation d'un bon EFFECTIF » (décision D4, D5) : l'annulation trace le motif et
- * publie {@code PIECE_ANNULEE} ; le consommateur produit les mouvements inverses et rétablit le
- * stock ; rien n'est supprimé ; les consommations n'en comptent plus. Remplace les tests de bons
- * de l'ancienne suppression définitive.
+ * Critère 1b « annulation d'un bon EFFECTIF » (décision D4, D5) : l'annulation trace le motif,
+ * produit les mouvements inverses et rétablit le stock <b>dans sa transaction</b> (écart 5 tranché
+ * le 25/11), puis publie {@code PIECE_ANNULEE} pour les effets secondaires ; rien n'est supprimé ;
+ * les consommations n'en comptent plus. Remplace les tests de bons de l'ancienne suppression
+ * définitive.
  */
 @SpringBootTest(properties = {
         "spring.mail.host=localhost",
@@ -99,7 +100,7 @@ class AnnulationBonIT extends MongoTestContainer {
     }
 
     @Test
-    void bon_de_sortie_annule_mouvements_inverses_par_evenement_et_stock_recredite() {
+    void bon_de_sortie_annule_mouvements_inverses_et_stock_recredite_dans_la_transaction() {
         entreeEffective(20);
         BonSortieDto sortie = sortieEffective(8);
         assertThat(balanceService.quantite(produitId, ENTREPOT)).isEqualTo(12.0);
@@ -111,11 +112,7 @@ class AnnulationBonIT extends MongoTestContainer {
         assertThat(annule.getAnnulation().getMotif()).isEqualTo(MOTIF);
         assertThat(annule.getAnnulation().getPar().getNom()).isNotBlank();
         assertThat(annule.getHistorique()).anyMatch(h -> h.getAction() == ActionWorkflow.ANNULATION);
-        // Les contre-effets sont asynchrones : rien encore sur le stock.
-        assertThat(balanceService.quantite(produitId, ENTREPOT)).isEqualTo(12.0);
-
-        dispatcher.traiterLot();
-
+        // Les contre-effets de stock sont dans la transaction d'annulation : aucun délai.
         assertThat(balanceService.quantite(produitId, ENTREPOT)).isEqualTo(20.0);
         assertThat(balanceService.quantite(produitId, SITE_A)).as("pas de stock fantôme sur le site").isZero();
         List<MouvementStock> mvts = mouvementRepository.findByBonId(sortie.getId());
@@ -131,6 +128,7 @@ class AnnulationBonIT extends MongoTestContainer {
         // Rien n'est supprimé, et les consommations n'en comptent plus.
         assertThat(mongoTemplate.count(new Query(), BonSortie.class)).isEqualTo(1);
         assertThat(sortiesComptees()).isZero();
+        dispatcher.traiterLot();
         assertThat(registre(sortie.getId()).getStatut()).isEqualTo(StatutPiece.ANNULEE);
         assertThat(mongoTemplate.count(Query.query(Criteria.where("statut").ne(StatutEvenement.TRAITE)),
                 EvenementDomaine.class)).as("tous les événements traités").isZero();
@@ -141,7 +139,6 @@ class AnnulationBonIT extends MongoTestContainer {
         BonEntreeDto entree = entreeEffective(20);
 
         bonEntreeService.annuler(entree.getId(), MOTIF);
-        dispatcher.traiterLot();
 
         assertThat(balanceService.quantite(produitId, ENTREPOT)).isZero();
         List<MouvementStock> mvts = mouvementRepository.findByBonId(entree.getId());
@@ -162,8 +159,8 @@ class AnnulationBonIT extends MongoTestContainer {
 
         assertThat(bonEntreeService.getById(entree.getId()).getStatut()).isEqualTo(StatutBon.EFFECTIF);
         assertThat(mongoTemplate.count(new Query(), EvenementDomaine.class)).isEqualTo(evenementsAvant);
-        dispatcher.traiterLot();
         assertThat(mouvementRepository.findByBonId(entree.getId())).hasSize(1);
+        assertThat(bonEntreeService.getById(entree.getId()).getAnnulation()).isNull();
         assertThat(balanceService.quantite(produitId, ENTREPOT)).isEqualTo(5.0);
     }
 
@@ -197,14 +194,16 @@ class AnnulationBonIT extends MongoTestContainer {
     }
 
     @Test
-    void consommateur_rejoue_un_seul_jeu_de_mouvements_inverses() {
+    void evenements_rejoues_sans_second_contre_passement() {
         entreeEffective(20);
         BonSortieDto sortie = sortieEffective(8);
         bonSortieService.annuler(sortie.getId(), MOTIF);
+        assertThatThrownBy(() -> bonSortieService.annuler(sortie.getId(), MOTIF))
+                .isInstanceOf(StockConflitException.class);
         dispatcher.traiterLot();
 
-        // Redistribution de tous les événements, traces d'idempotence comprises effacées : le
-        // contre-passement ne repasse que sur les mouvements non encore contre-passés.
+        // Redistribution de tous les événements, traces d'idempotence comprises effacées : aucun
+        // consommateur ne touche plus au stock.
         mongoTemplate.updateMulti(new Query(), new Update().set("statut", StatutEvenement.A_TRAITER)
                 .set("prochainEssai", Instant.EPOCH), EvenementDomaine.class);
         dispatcher.traiterLot();

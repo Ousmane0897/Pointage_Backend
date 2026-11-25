@@ -68,6 +68,7 @@ public class InventaireService {
     private final NumerotationService numerotation;
     private final TraceurPieces traceur;
     private final PiecesBon piecesBon;
+    private final ContrePassementStockService contrePassement;
 
     public PageResponse<InventaireDto> list(int page, int size, String q, StatutInventaire statut,
                                             String siteId, LocalDate dateDebut, LocalDate dateFin) {
@@ -337,8 +338,8 @@ public class InventaireService {
     /**
      * Annulation d'un inventaire clôturé (lot 1 / 1b, D4) : remplace la suppression définitive.
      * L'inventaire reste en base (statut ANNULE, qui, quand, motif) ; ses ajustements sont
-     * contre-passés par le consommateur de {@code PIECE_ANNULEE}. Super-administrateur, motif de
-     * 10 caractères minimum (400), autre statut 409.
+     * contre-passés <b>dans la même transaction</b>, comme les bons (D5). Super-administrateur,
+     * motif de 10 caractères minimum (400), autre statut 409.
      */
     public InventaireDto annuler(String id, String motif) {
         String motifNet = PiecesBon.exigerMotifAnnulation(motif);
@@ -354,6 +355,8 @@ public class InventaireService {
             inv.setStatut(StatutInventaire.ANNULE);
             inv.setUpdatedAt(now);
             Inventaire saved = repository.save(inv);
+            contrePassement.contrePasserInventaire(saved.getId(), saved.getReference(), motifNet,
+                    piecesBon.auteurCourant().getNom());
             tracer(TypesEvenement.PIECE_ANNULEE, ActionAudit.ANNULATION, avant, saved, motifNet);
             return mapper.toDto(saved);
         });

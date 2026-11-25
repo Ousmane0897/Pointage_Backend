@@ -281,10 +281,12 @@ public class BonEntreeService {
 
     /**
      * Annulation d'un bon EFFECTIF (lot 1 / 1b, D4) : remplace la suppression définitive. Le bon
-     * reste en base (statut ANNULE, qui, quand, motif) ; ses mouvements sont contre-passés par le
-     * consommateur de l'événement {@code PIECE_ANNULEE}. Garde synchrone : la marchandise reçue
-     * doit être encore en stock (422 {@code STOCK_INSUFFISANT} sinon, rien n'est écrit).
-     * Super-administrateur seul, motif de 10 caractères minimum (400), autre statut 409.
+     * reste en base (statut ANNULE, qui, quand, motif) ; ses mouvements sont contre-passés <b>dans
+     * la même transaction</b> (D5 : les soldes font partie de la pièce, comme à la validation) : la
+     * marchandise reçue est retirée de l'entrepôt par débit gardé, 422 {@code STOCK_INSUFFISANT}
+     * si elle a été consommée, et rien n'est écrit. L'événement {@code PIECE_ANNULEE} ne porte plus
+     * que les effets secondaires (notification, registre). Super-administrateur seul, motif de 10
+     * caractères minimum (400), autre statut 409.
      */
     public BonEntreeDto annuler(String id, String motif) {
         String motifNet = PiecesBon.exigerMotifAnnulation(motif);
@@ -302,6 +304,7 @@ public class BonEntreeService {
             bon.setUpdatedAt(now);
             bon.getHistorique().add(support.historique(ActionWorkflow.ANNULATION, motifNet));
             BonEntree saved = repository.save(bon);
+            contrePassement.contrePasserBon(saved.getId(), motifNet, piecesBon.auteurCourant().getNom());
             tracer(TypesEvenement.PIECE_ANNULEE, ActionAudit.ANNULATION, avant, saved, motifNet);
             return mapper.toDto(saved);
         });
