@@ -1,0 +1,23 @@
+# Profil des essais de bout en bout (Playwright, dépôt front, npm run e2e). Jamais en production.
+# Base dédiée cleanic_e2e sur le replica set de dev du poste, remise à zéro par le lanceur à chaque
+# lancement ; jeu de départ créé par les ChangeUnits 9101/9102 (@Profile("e2e")), qui refusent
+# toute base dont le nom ne contient pas « e2e ». Mots de passe des comptes d'essai :
+# E2E_SUPERADMIN_PASSWORD, E2E_STOCK_PASSWORD (variables d'environnement, jamais en dur).
+server:
+  # Port dédié : ne gêne jamais le backend de dev (8080).
+  port: 8089
+
+spring:
+  data:
+    mongodb:
+      uri: mongodb://localhost:27017/cleanic_e2e?directConnection=true
+  mail:
+    # Aucun e-mail réel pendant les essais : l'envoi échoue, capté et journalisé en WARN
+    # (tolérance aux pannes des consommateurs de l'outbox).
+    host: disabled
+
+logging:
+  level:
+    root: WARN
+    org.springframework.data.mongodb.core.MongoTemplate: INFO
+    com.example: INFO
