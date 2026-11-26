@@ -62,4 +62,9 @@ public class MouvementStockDto {
     // --- 7.6 : traçabilité financière (null pour les mouvements antérieurs à 7.6) ---
     private Long coutUnitaireSnapshot;
     private Long valeurMouvement;
+
+    /** Lot 1 / 1b : mouvement contre-passé (pièce annulée). */
+    private Boolean contrePasse;
+    /** Lot 1 / 1b : sur un mouvement d'annulation, le mouvement annulé. */
+    private String mouvementAnnuleId;
 }

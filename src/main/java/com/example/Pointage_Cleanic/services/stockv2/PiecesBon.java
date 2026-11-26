@@ -1,0 +1,106 @@
+package com.example.Pointage_Cleanic.services.stockv2;
+
+import com.example.Pointage_Cleanic.Enum.pieces.TypePiece;
+import com.example.Pointage_Cleanic.entities.pieces.Annulation;
+import com.example.Pointage_Cleanic.entities.pieces.AuteurInstantane;
+import com.example.Pointage_Cleanic.entities.pieces.PieceBase;
+import com.example.Pointage_Cleanic.entities.stockv2.BonEntree;
+import com.example.Pointage_Cleanic.entities.stockv2.BonSortie;
+import com.example.Pointage_Cleanic.entities.stockv2.Inventaire;
+import com.example.Pointage_Cleanic.services.terrain.CurrentUserProvider;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Component;
+
+import java.time.LocalDateTime;
+import java.util.Map;
+
+/**
+ * Les pièces de stock (bons, inventaires ; lot 1 / 1b, D4) : bloc
+ * {@link PieceBase} (créé à la volée pour un bon antérieur à 1b), auteur courant, instantané de
+ * l'état avant une transition (pour le différentiel d'audit).
+ */
+@Component
+@RequiredArgsConstructor
+public class PiecesBon {
+
+    private final CurrentUserProvider currentUser;
+    private final ObjectMapper objectMapper;
+
+    /** Longueur minimale du motif d'annulation (reprise de l'ancienne suppression définitive). */
+    public static final int MOTIF_ANNULATION_MIN = 10;
+
+    /** Motif d'annulation obligatoire, {@value #MOTIF_ANNULATION_MIN} caractères minimum (400 sinon). */
+    public static String exigerMotifAnnulation(String motif) {
+        String net = motif == null ? "" : motif.trim();
+        if (net.length() < MOTIF_ANNULATION_MIN) {
+            throw new IllegalArgumentException("Le motif d'annulation est obligatoire ("
+                    + MOTIF_ANNULATION_MIN + " caractères minimum)");
+        }
+        return net;
+    }
+
+    /** Bloc d'annulation : auteur courant, date, motif. */
+    public Annulation annulation(String motif, LocalDateTime le) {
+        return Annulation.builder().par(auteurCourant()).le(le).motif(motif).build();
+    }
+
+    public AuteurInstantane auteurCourant() {
+        return AuteurInstantane.builder()
+                .compteId(currentUser.currentUserId())
+                .nom(currentUser.currentUserNom())
+                .build();
+    }
+
+    /** Bloc pièce d'un nouveau bon : auteur et date de création. */
+    public PieceBase nouvelle(TypePiece type, LocalDateTime creeLe) {
+        return PieceBase.builder().type(type).creePar(auteurCourant()).creeLe(creeLe).build();
+    }
+
+    /**
+     * Bloc pièce du bon, créé s'il manque (bon antérieur à 1b, avant la ChangeUnit 0012 ou
+     * pendant elle) : la référence existante devient le numéro, sans exercice (série historique).
+     */
+    public PieceBase assurer(BonEntree bon) {
+        if (bon.getPiece() == null) {
+            bon.setPiece(historique(TypePiece.BE, bon.getReference(), bon.getCreeParId(), bon.getCreeParNom(),
+                    bon.getCreatedAt()));
+        }
+        return bon.getPiece();
+    }
+
+    public PieceBase assurer(BonSortie bon) {
+        if (bon.getPiece() == null) {
+            bon.setPiece(historique(TypePiece.BS, bon.getReference(), bon.getCreeParId(), bon.getCreeParNom(),
+                    bon.getCreatedAt()));
+        }
+        return bon.getPiece();
+    }
+
+    /** Inventaire : la référence existante devient le numéro, l'auteur est le responsable. */
+    public PieceBase assurer(Inventaire inv) {
+        if (inv.getPiece() == null) {
+            inv.setPiece(historique(TypePiece.INV, inv.getReference(), null, inv.getResponsable(),
+                    inv.getCreatedAt()));
+        }
+        return inv.getPiece();
+    }
+
+    static PieceBase historique(TypePiece type, String reference, String creeParId, String creeParNom,
+                                LocalDateTime creeLe) {
+        return PieceBase.builder()
+                .type(type)
+                .numero(reference)
+                .creePar(creeParId == null && creeParNom == null ? null
+                        : AuteurInstantane.builder().compteId(creeParId).nom(creeParNom).build())
+                .creeLe(creeLe)
+                .build();
+    }
+
+    /** Instantané de l'état courant, à prendre avant de modifier le bon (différentiel d'audit). */
+    public Map<String, Object> instantane(Object bon) {
+        return objectMapper.convertValue(bon, new TypeReference<Map<String, Object>>() {
+        });
+    }
+}

@@ -6,7 +6,7 @@ Branche `refonte/v3-1a-socle-technique` (backend et frontend), créée depuis `r
 
 | | |
 |---|---|
-| **Statut** | Développement terminé, **non fusionné, non poussé**. Mise en production **non faite** : elle suit la procédure du §7, par SSH. |
+| **Statut** | Développement terminé, fusionné dans `refonte/v3`. Mise en production **non faite** : procédure écrite pour l'administrateur du serveur, à jouer au basculement final de la V3 (§7, pas d'accès au VPS). |
 | **Spike Mongock** | **Retenu** : Mongock 5.5.1, Apache 2.0 (§1). Seule limite : une « baseline » ne peut pas marquer d'autres ChangeUnits, d'où des gardes d'idempotence à la place (§3.4). |
 | **D1 Transactions** | Replica set `mongo:7.0` en dev et en prod, authentification et port non publié en prod, `MongoTransactionManager` et `ExecuteurTransactionnel` (rejeu des conflits), `@Version` sur bons, inventaires et produits, soldes atomiques avec débit gardé, bons de stock validés en transaction **sans compensation** (§2, §5, §6). |
 | **D2 Migrations** | 12 runners → 10 ChangeUnits, 2 seeds `demo` et un amorçage hors Mongock, plus `0011` (versions) ; 2 en `runAlways` pour ne rien changer (§3). |
@@ -253,7 +253,7 @@ Comme le spike l'a montré (§1.3, point 9), une ChangeUnit ne peut pas marquer 
 
 ### 4.3 Script d'exploitation `ops/mongo/detecter-doublons.js`
 
-Il est en **lecture seule**, à jouer en production **avant** de démarrer 1a (procédure, §7). Pour chacun des 22 index uniques, il affiche les valeurs en double, avec un échantillon d'identifiants ; puis il liste les index déjà présents en base, pour repérer un conflit de nom ou de définition.
+Il est en **lecture seule**. L'administrateur du serveur le joue en production avant la bascule (procédure `docs/exploitation/basculement-v3.md`, étape 2) et en renvoie le résultat. Pour chacun des 22 index uniques, il affiche les valeurs en double, avec un échantillon d'identifiants ; puis il liste les index déjà présents en base, pour repérer un conflit de nom ou de définition.
 
 `DetecterDoublonsScriptTest` vérifie que le script couvre **exactement** les index uniques d'`IndexesAttendus`, avec le même filtre partiel ou sans filtre.
 
@@ -276,12 +276,12 @@ Il est en **lecture seule**, à jouer en production **avant** de démarrer 1a (p
 
 ### 4.5 Index en échec éventuels en production
 
-**Inconnus à ce jour** : il faut jouer `detecter-doublons.js` sur la base de production. Je n'ai pas accès au serveur, et aucune copie n'a été faite. Les candidats probables sont les mêmes que ceux de la conception (D3) :
+**Inconnus à ce jour** : seul l'administrateur du serveur peut jouer `detecter-doublons.js` sur la base de production (pas d'accès au VPS), à l'étape 2 de `docs/exploitation/basculement-v3.md`. Le développement n'en dépend pas : la détection est testée sur des jeux piégés (§4.4). Les candidats probables sont les mêmes que ceux de la conception (D3) :
 - `dossiers_employes.matricule` et `agentId` (index jamais créés, saisie libre, import Excel) ;
 - `stockv2_etats_stock (produitId, siteId)` (`appliquerDelta` pouvait créer deux soldes en concurrence) ;
 - `stockv2_produits.code`.
 
-Résultat à reporter ici après le passage du script. Chaque doublon se tranche à la main (fusion, renommage ou suppression), puis on relance.
+Résultat à reporter ici quand l'administrateur l'aura renvoyé. Chaque doublon se tranche avec le métier (fusion ou correction), puis l'administrateur rejoue le script.
 
 ---
 
@@ -327,93 +327,21 @@ Résultat à reporter ici après le passage du script. Chaque doublon se tranche
 
 ---
 
-## 7. Procédure serveur (mise en production de 1a)
+## 7. Mise en production (procédure pour l'administrateur du serveur)
 
-**Prérequis**
-- accès SSH au VPS (Q16) ;
-- la version 1a fusionnée et récupérée sur le serveur (rien n'est poussé à ce jour) ;
-- un créneau sans utilisateurs, avec **environ 30 minutes d'indisponibilité**.
+**Pas d'accès au VPS** (contrainte permanente, conception Q16, corrigée le 24/11). La mise en production de 1a n'est donc pas une étape de développement : c'est une **procédure écrite pour l'administrateur du serveur**, à jouer une seule fois, **au basculement final de la V3**, et non à la fusion de 1a.
 
-Les commandes supposent le dossier de déploiement (celui qui contient `docker-compose.yml` et `.env`). Les noms réels des volumes portent le préfixe du projet Docker : `docker volume ls` (par exemple `<dossier>_mongo_data`).
+Procédure complète : [`docs/exploitation/basculement-v3.md`](../exploitation/basculement-v3.md). Elle couvre, dans l'ordre :
+1. la sauvegarde de la base `mongo:6` en service ;
+2. la détection des doublons (`ops/mongo/detecter-doublons.js`, lecture seule), avec point d'arrêt si un cas est bloquant ;
+3. les comptages de référence ;
+4. les secrets `MONGO_ROOT_*` et `MONGO_APP_*` dans le `.env` du serveur ;
+5. la bascule vers `mongo:7.0` en replica set authentifié, port Mongo non publié, restauration et contrôle des comptages ;
+6. le premier démarrage (migrations et index), les vérifications, le retour arrière.
 
-> ⚠ **Ne jamais lancer `docker compose down -v`** : `-v` supprime les volumes, donc les données.
+L'administrateur renvoie les résultats attendus listés en fin de procédure : rapport de doublons, comptages, registre et rapports des migrations, constats de vérification. **Aucun critère d'acceptation de 1a n'en dépend** : tous ont été vérifiés par les tests et dans des conteneurs locaux (§2.3, §8).
 
-### 7.1 Avant la coupure (base en service, lecture seule)
-
-1. **Sauvegarde** de la base actuelle (`mongo:6`, conteneur `mongo`) :
-   ```bash
-   mkdir -p ~/sauvegardes
-   docker exec mongo mongodump --db pointage_cleanic --archive --gzip > ~/sauvegardes/pointage_cleanic-$(date +%Y%m%d-%H%M)-avant-1a.archive.gz
-   ls -lh ~/sauvegardes/
-   ```
-   Le fichier ne doit pas être vide. **Aucun stockage hors serveur n'est prévu (Q16)** : je recommande au minimum d'en rapatrier une copie sur un poste sûr (`scp`), sans quoi une panne du disque emporterait la base et sa sauvegarde ensemble.
-2. **Détection des doublons** :
-   ```bash
-   docker exec -i mongo mongosh pointage_cleanic --quiet < ops/mongo/detecter-doublons.js | tee ~/sauvegardes/doublons-avant-1a.txt
-   ```
-   - **Tout « BLOQUANT » se tranche avant d'aller plus loin** : fusion, correction ou suppression décidée par le métier, document par document. Sinon l'application refusera de démarrer en version 1a (§4).
-   - La seconde partie du rapport liste les index déjà présents : un index de mêmes clés sous un autre nom ferait aussi échouer la ChangeUnit.
-   - Reporter le résultat au §4.5.
-3. **Comptages de référence** :
-   ```bash
-   docker exec mongo mongosh pointage_cleanic --quiet --eval 'db.getCollectionNames().sort().forEach(c => print(c, db.getCollection(c).countDocuments()))' > ~/sauvegardes/comptages-avant-1a.txt
-   ```
-4. **Secrets** : ajouter au `.env` du serveur, sans les commiter, `MONGO_ROOT_USERNAME`, `MONGO_ROOT_PASSWORD`, `MONGO_APP_USERNAME` et `MONGO_APP_PASSWORD`. Les mots de passe se génèrent par `openssl rand -hex 32` : lettres et chiffres seulement, car ils sont insérés dans l'URI.
-
-### 7.2 Bascule
-
-5. **Arrêt de l'ancienne pile**, en gardant son volume :
-   ```bash
-   docker compose down
-   ```
-   Elle utilise encore l'ancien `docker-compose.yml`. Sans `-v`, le volume `mongo_data` reste intact.
-6. **Mise à jour du code** vers la version 1a (`git pull`, ou copie des fichiers), puis démarrage de **Mongo seul** :
-   ```bash
-   docker compose up -d mongo mongo-init
-   docker compose ps -a        # mongo « healthy », mongo-init « Exited (0) »
-   docker logs mongo-init      # « Replica set non initialisé : rs.initiate() » … « Initialisation terminée. »
-   ```
-7. **Restauration** dans le nouveau volume `mongo7_data` :
-   ```bash
-   docker exec -i mongo sh -c 'mongorestore -u "$MONGO_INITDB_ROOT_USERNAME" -p "$MONGO_INITDB_ROOT_PASSWORD" --authenticationDatabase admin --archive --gzip --nsInclude "pointage_cleanic.*"' < ~/sauvegardes/pointage_cleanic-<horodatage>-avant-1a.archive.gz
-   ```
-8. **Contrôle des comptages** :
-   ```bash
-   docker exec mongo sh -c 'mongosh -u "$MONGO_INITDB_ROOT_USERNAME" -p "$MONGO_INITDB_ROOT_PASSWORD" --authenticationDatabase admin pointage_cleanic --quiet --eval "db.getCollectionNames().sort().forEach(c => print(c, db.getCollection(c).countDocuments()))"' > ~/sauvegardes/comptages-apres-restauration.txt
-   diff ~/sauvegardes/comptages-avant-1a.txt ~/sauvegardes/comptages-apres-restauration.txt
-   ```
-   Le `diff` doit être vide.
-9. **Démarrage de l'application** :
-   ```bash
-   docker compose up -d --build springboot
-   docker logs -f springboot-backend
-   ```
-   - Au premier démarrage, Mongock joue les ChangeUnits `0001` à `0011`, puis les index `0101` à `0105`. Sur une base déjà migrée par les anciens runners, les migrations de données ne modifient rien (§3.4).
-   - **Si une ChangeUnit d'index échoue**, l'application s'arrête et `restart: always` la relance en boucle. Arrêter le service (`docker compose stop springboot`), puis lire le rapport :
-     ```bash
-     docker exec mongo sh -c 'mongosh -u "$MONGO_INITDB_ROOT_USERNAME" -p "$MONGO_INITDB_ROOT_PASSWORD" --authenticationDatabase admin pointage_cleanic --quiet --eval "db.migration_rapports.find().sort({executeLe:-1}).limit(1).forEach(printjson)"'
-     ```
-     Trancher les doublons, puis redémarrer : les ChangeUnits déjà appliquées ne repassent pas.
-10. **Vérifications** :
-    - `Started PointageCleanicApplication` dans les journaux ;
-    - connexion du super-administrateur ;
-    - consultation d'un bon et de l'état du stock ;
-    - `docker port mongo` ne publie **aucun** port ;
-    - `mongockChangeLog` contient les 16 ChangeUnits `EXECUTED`.
-
-### 7.3 Retour arrière
-
-Il est possible tant que l'ancien volume `mongo_data` existe : ne pas le supprimer avant plusieurs semaines de fonctionnement.
-
-```bash
-docker compose down                      # sans -v : mongo7_data est conservé
-git checkout <version précédente>        # ancien docker-compose.yml (mongo:6, volume mongo_data)
-docker compose up -d --build
-```
-
-Les écritures faites entre la bascule et le retour arrière sont perdues : elles ne sont que dans `mongo7_data`. En cas de besoin, on peut les exporter par `mongodump` depuis le nouveau conteneur avant de redescendre.
-
-### 7.4 Poste de développement
+### 7.1 Poste de développement
 
 Voir §2.4 : `docker-compose.dev.yml`, ou service MongoDB local passé en replica set.
 
@@ -481,9 +409,9 @@ Branche `refonte/v3-1a-socle-technique` créée dans `pointage-agents` depuis `r
 ## 10. Ce qui reste
 
 **Pour mettre 1a en production**
-1. Fusionner (`refonte/v3-1a-socle-technique` → `refonte/v3`), puis pousser : **à votre initiative**, rien n'est poussé.
-2. Jouer la procédure du §7, en commençant par `detecter-doublons.js`, et reporter les doublons au §4.5.
-3. **Risque à arbitrer** : aucune copie hors du serveur (Q16, écart avec le CDC §14). Au minimum, rapatrier la sauvegarde d'avant bascule sur un poste sûr.
+1. Fusion dans `refonte/v3` : faite.
+2. Au basculement final de la V3, l'administrateur du serveur joue `docs/exploitation/basculement-v3.md` (§7), en commençant par `detecter-doublons.js`, et renvoie les résultats ; les doublons sont reportés au §4.5. Pas d'accès au VPS : aucune étape de développement n'en dépend.
+3. **Risque à arbitrer** : aucune copie hors du serveur (Q16, écart avec le CDC §14). La procédure recommande à l'administrateur de rapatrier la sauvegarde d'avant bascule sur un poste sûr.
 
 **Décisions métier relevées en 1a**
 4. **Congés** : les demandes dont `nombreJours` a été réécrasé sans les jours fériés par l'ancien runner gardent cette valeur (§3.3, constat 1). Une ChangeUnit corrective est possible mais modifie des soldes : à décider avec la RH.

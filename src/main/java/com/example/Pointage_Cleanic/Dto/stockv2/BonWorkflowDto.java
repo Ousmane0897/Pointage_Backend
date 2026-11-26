@@ -19,7 +19,10 @@ import java.time.LocalDate;
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class BonWorkflowDto {
     private String id;
+    /** Nul en brouillon depuis le lot 1 / 1b (D4). */
     private String reference;
+    /** Numéro à afficher : la référence, sinon {@code BROUILLON-<6 derniers caractères de l'id>}. */
+    private String libelleNumero;
     private SensBon sens;
     private StatutBon statut;
 

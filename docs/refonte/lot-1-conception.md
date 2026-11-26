@@ -1,6 +1,6 @@
 # Lot 1 V3 — Conception du socle
 
-Document de conception, rédigé le 23/11/2026 sur la branche `refonte/v3` (backend et frontend). **Aucun code n'a été modifié.** Conception validée le 23/11 avec corrections, intégrées dans la révision ci-dessous. **Révision validée le 24/11 ; la sous-branche 1a est lancée** (`refonte/v3-1a-socle-technique`, compte rendu dans `docs/refonte/1a-socle-technique.md`).
+Document de conception, rédigé le 23/11/2026 sur la branche `refonte/v3` (backend et frontend). **Aucun code n'a été modifié.** Conception validée le 23/11 avec corrections, intégrées dans la révision ci-dessous. **Révision validée le 24/11 ; la sous-branche 1a est lancée** (`refonte/v3-1a-socle-technique`, compte rendu dans `docs/refonte/1a-socle-technique.md`). **Correction du 24/11, au lancement de 1b : pas d'accès au VPS** (Q16, R.1) ; toute opération serveur est livrée comme procédure écrite pour l'administrateur du serveur (`docs/exploitation/`).
 
 ## Révision du 23/11
 
@@ -24,7 +24,7 @@ Le CDC est désormais versionné (`docs/cdc/PointIC_CDC.pdf`, version texte `doc
 | Q-B Emplacement | Documentation de refonte dans le backend ; l'audit est déplacé dans `docs/audit/` du backend. | votre réponse | Fait : `docs/audit/etat-des-lieux-v3.md` et `checklist-v3.csv`, retirés du dépôt front. §0.1 mis à jour. |
 | Q-C Migrations | Mongock, avec le spike d'un jour, repli sur l'exécuteur maison. | votre réponse | D2 confirmé tel quel. |
 | Q-D Pile technique | On garde Angular 19, Spring Boot et MongoDB, en service aujourd'hui, et non React, Node.js et PostgreSQL cités au CDC §14. Décision prise ; WOORTECH corrigera le CDC. | votre réponse du 23/11, confirmée le 24/11 | Tout le document reste valable. 1a n'est plus bloquée par aucune question. |
-| Q16 Accès au serveur, stockage hors serveur | Accès SSH au VPS : oui. Aucun stockage hors du serveur principal n'est prévu. | votre réponse du 24/11 | 1a : la mise en production du replica set est possible (procédure dans `docs/refonte/1a-socle-technique.md`). D15 / 1l : sauvegarde et archive sur le serveur seulement ; **écart avec le CDC §14** (« copie hors du serveur principal »), signalé comme risque, non bloquant. §3.7 : extraction possible par SSH. |
+| Q16 Accès au serveur, stockage hors serveur | **Pas d'accès au VPS**, contrainte permanente (elle corrige la réponse « accès SSH : oui » donnée plus tôt le 24/11). Aucun stockage hors du serveur principal n'est prévu. | votre consigne du 24/11, au lancement de 1b | Toute opération serveur (sauvegarde, détection des doublons, copie anonymisée, mise en service, fermeture du port Mongo) est livrée sous forme de **procédure écrite dans `docs/exploitation/`**, destinée à l'administrateur du serveur, avec les résultats attendus à vous renvoyer. **Aucun critère d'acceptation ni aucune étape de développement ne dépend d'un accès au serveur** ; les migrations se testent sur des jeux de données construits dans les tests. 1a : procédure de mise en service à jouer par l'administrateur au **basculement final de la V3** (`docs/exploitation/basculement-v3.md`). D15 / 1l : sauvegarde et archive sur le serveur seulement ; **écart avec le CDC §14** (« copie hors du serveur principal »), signalé comme risque, non bloquant. §3.7 : la copie anonymisée devient une procédure facultative de l'administrateur. |
 
 ### R.2 Autres corrections
 
@@ -44,7 +44,7 @@ Le CDC est désormais versionné (`docs/cdc/PointIC_CDC.pdf`, version texte `doc
 
 ### R.4 Questions restantes
 
-Pour la Direction : **Q1, Q2, Q3, Q4, Q8 (reste), Q10**. Plus aucune pour vous : Q16 est tranchée le 24/11 (R.1). Voir §5.
+Pour la Direction : **Q1, Q2, Q3, Q4, Q8 (reste), Q10**. Plus aucune pour vous : Q16 est tranchée le 24/11 (R.1). **Contrainte permanente : pas d'accès au VPS.** Toute opération serveur est une procédure écrite pour l'administrateur du serveur (`docs/exploitation/`), avec les résultats attendus à renvoyer ; aucun critère d'acceptation ni aucune étape de développement n'en dépend. Voir §5.
 
 ## 0. Cadre
 
@@ -121,7 +121,7 @@ Format : **Contexte** (avec preuves), **Décision**, **Écarté**, **Conséquenc
 
 **Écarté.** Garder les compensations : elles ne protègent pas d'un arrêt du processus ; replica set à 3 nœuds : un seul serveur est connu, il n'apporte pas de haute disponibilité sur une machine unique ; verrou pessimiste par document « lock » : réinvente ce que fait la transaction.
 
-**Conséquences.** Opération d'exploitation sur le VPS (accès SSH disponible, Q16) ; les tests IT existants restent valides (déjà sur replica set) ; tout test « concurrence » devient écrivable : 2 validations simultanées ⇒ 1 seule réussit.
+**Conséquences.** Opération d'exploitation sur le VPS, livrée comme procédure écrite pour l'administrateur du serveur (pas d'accès au VPS, Q16 ; `docs/exploitation/basculement-v3.md`) ; les tests IT existants restent valides (déjà sur replica set) ; tout test « concurrence » devient écrivable : 2 validations simultanées ⇒ 1 seule réussit.
 
 ### D2 — Migrations de données versionnées
 
@@ -158,7 +158,7 @@ Format : **Contexte** (avec preuves), **Décision**, **Écarté**, **Conséquenc
 
 **Écarté.** Activer `auto-index-creation` : non versionné, se déclenche au démarrage sans rapport, et échoue mal sur des doublons.
 
-**Conséquences.** Il faut un premier passage en lecture seule sur la copie anonymisée (§3.7) pour connaître les doublons réels (matricule, agentId, code produit, couple produit/site).
+**Conséquences.** Les doublons réels (matricule, agentId, code produit, couple produit/site) ne sont connus qu'après le passage, en lecture seule, du script de détection par l'administrateur du serveur (procédure `docs/exploitation/basculement-v3.md`, résultat à renvoyer). Le développement n'en dépend pas : la détection est testée sur des jeux piégés construits dans les tests.
 
 ### D4 — Modèle « pièce » commun
 
@@ -167,27 +167,30 @@ Format : **Contexte** (avec preuves), **Décision**, **Écarté**, **Conséquenc
 **Décision.**
 - **Classe de base `PieceBase`** (incorporée dans chaque document de pièce) :
   - `type` (`TypePiece`). Codes imposés par le CDC §3 : `DEV`, `FAC`, `BS`, `BE`, `OF`, `LOT`, `DD`, `BC`, `BCA`, `CHQ`. Codes proposés pour les pièces que le CDC ne code pas : `CNG` (congé), `INV`, `MVT`, `BUL` (bulletin), `DSO` (déclaration sociale), `SAN` (sanction), `IMP` (import) ;
-  - `numero` (nul tant que la pièce n'est pas validée), `exercice` ;
-  - `statut` (`BROUILLON → SOUMISE → VALIDEE`, branches `REFUSEE`, `ANNULEE`, `ABANDONNEE`) ;
+  - `numero` (nul tant que la pièce n'est pas validée), `exercice`, `compteur` (tri) ;
   - `creePar` / `creeLe`, `soumisePar` / `soumiseLe`, `valideePar` / `valideeLe` (identifiants de compte + **instantané** du nom) ;
-  - bloc `annulation {par, le, motif, pieceCorrectiveId}` et `version`.
+  - blocs `annulation {par, le, motif, pieceCorrectiveId}` et `abandon {par, le}`.
+  - **Statut et version restent à la racine du document** (écart accepté le 25/11, réalisé en 1b) : `@Version` n'est reconnu par Spring Data qu'à la racine, et chaque pièce garde son statut métier (contrat du front, index existants : `StatutBon`, `StatutInventaire`…). Le **statut commun** (`BROUILLON → SOUMISE → VALIDEE`, branches `REFUSEE`, `ANNULEE`, `ABANDONNEE`) est calculé par l'interface `Piece.statutPiece()` à partir du statut métier, et c'est lui qu'alimentent le registre et l'audit. Le bloc `PieceBase` est incorporé sous le champ `piece`.
 - **Numérotation** :
   - un service unique `NumerotationService`, une collection unique `compteurs_pieces`, `_id = "<TYPE>-<EXERCICE>"` ;
   - `findAndModify($inc)` **dans la transaction de validation** : si la validation échoue, l'incrément est annulé avec elle, donc ni trou ni doublon ;
   - format `<TYPE>-<EXERCICE>-<NNNN>` (CDC §3 : `DEV-2026-0001`), compteur sur **4 chiffres minimum**, qui s'allonge sans troncature au-delà de 9999 (`BS-2027-12345`). Le tri des numéros se fait donc sur `(exercice, compteur)`, jamais sur la chaîne ;
   - exercice = **année civile** (Q7), calculée en `Africa/Dakar` à la date de validation, via l'horloge injectée (`back:configurations/TimeConfig.java`). L'heure du serveur fait foi (CDC §14 « Intégrité comptable ») ;
-  - un brouillon s'affiche sous `BROUILLON-<6 derniers caractères de l'id>`.
+  - un brouillon s'affiche sous `BROUILLON-<6 derniers caractères de l'id>` (`Piece.libelleNumero()`, renvoyé par les DTO) ; la recherche des listes porte sur le numéro, un brouillon ne se retrouve donc pas par ce libellé ;
+  - ChangeUnits réalisées en 1b : `0106` crée `compteurs_pieces` ; index `0107` (outbox), `0108` (audit), `0109` (registre) ; portage des pièces existantes `0012` (bons) et `0013` (inventaires), qui gardent leur référence comme numéro.
 - **Fin des suppressions** :
   - plus aucun `@DeleteMapping` métier : `POST /{id}/annuler {motif}` (au moins 10 caractères, comme `MOTIF_MIN` de `SuppressionDefinitiveService`) pour une pièce validée, `POST /{id}/abandonner` pour un brouillon (conservé, statut `ABANDONNEE`) ;
   - les référentiels se **désactivent** (`actif=false`, motif), sans suppression ;
   - un test ArchUnit interdit `deleteById`, `delete(`, `deleteAll`, `remove(` hors d'une liste blanche nommée (jetons de réinitialisation, éphémères `sms_envoyes` en dev, `PurgeService` de D16, nettoyage de l'outbox traitée) ;
   - `RoutesSuppressionIT` vérifie qu'aucune route `DELETE` n'existe hors liste blanche (même principe que `RoutesPubliquesIT` du lot 0).
 - **Annulation d'une pièce validée** :
-  - elle ne touche pas aux effets directement : elle émet `PieceAnnulee` (D5), et les consommateurs produisent les **contre-effets** (mouvements inverses, contre-écritures futures) ;
+  - les contre-effets **de stock** (mouvements inverses, soldes rétablis) sont produits **dans la transaction d'annulation**, comme les effets de la validation (exception de D5, tranchée le 25/11 : les soldes font partie de la pièce). Une annulation de bon d'entrée dont la marchandise a été consommée est refusée (422 `STOCK_INSUFFISANT`) et rien n'est écrit : pas de course avec une sortie, pas d'événement en erreur ;
+  - elle émet `PieceAnnulee` (D5) pour les **autres** effets : notifications, registre, contre-écritures comptables futures ;
+  - le coût moyen (CUMP) n'est **pas** restauré à l'annulation d'un bon d'entrée (comme l'ancienne suppression définitive) : le mouvement inverse reprend le coût du mouvement annulé ; les mouvements annulés et leurs inverses sont exclus des consommations et des coûts (`MouvementsEffectifs`) ;
   - `SuppressionDefinitiveService` et `stockv2_suppressions` sont remplacés ; la collection est conservée en lecture pour l'historique.
 - **Registre des pièces** (`registre_pieces`, une ligne par pièce : type, numéro, statut, site, montant, liens `amont[]` / `aval[]`) :
-  - alimenté par les événements (D5) ;
-  - base de F009 au lot 2, et de la recherche transverse.
+  - alimenté par les événements (D5) ; un événement plus ancien que l'état enregistré est ignoré ; deux événements de la même pièce dans la même milliseconde sont départagés par l'ordre de traitement (écart accepté) ;
+  - aucune route en 1b ; base de F009 au lot 2, et de la recherche transverse.
 
 **Écarté.** Numéro au brouillon : trous inévitables ; séquence sans transaction avec numéro « réservé puis libéré » : complexe et sujet aux trous ; suppression logique par `deleted=true` : ne trace ni qui ni pourquoi, et contredit la règle 5.
 
@@ -205,7 +208,7 @@ Format : **Contexte** (avec preuves), **Décision**, **Écarté**, **Conséquenc
   - il réclame un lot par `findAndModify` (`A_TRAITER` et `prochainEssai <= now` → `EN_COURS`, bail de 5 min) ;
   - il appelle les consommateurs enregistrés pour le type ;
   - ensuite `TRAITE`, ou un nouvel essai à délai exponentiel (1 min → 1 h, 10 tentatives) puis `EN_ERREUR` ;
-  - une alerte apparaît sur l'écran d'exploitation.
+  - une alerte apparaît sur l'écran d'exploitation. En 1b, seules les routes de supervision existent (`/api/exploitation/evenements`, super-admin, relance d'un événement) ; l'écran est reporté (écart accepté).
   - Sûr en multi-instance grâce au bail, sans ShedLock.
 - **Consommateurs idempotents** : chaque consommateur insère `{consommateur, evenementId}` dans `evenements_consommes` (index unique), dans **sa propre** transaction avec ses écritures. Un doublon est ignoré.
 - **Règle 3** :
@@ -216,7 +219,7 @@ Format : **Contexte** (avec preuves), **Décision**, **Écarté**, **Conséquenc
 
 **Écarté.** Change Streams : demandent la gestion des jetons de reprise, et il n'y a pas d'événement si l'écriture n'a pas eu lieu ; registre d'événements Spring Modulith : il suppose des packages par module (ici par couche : `controllers/rh`, `services/rh`…) et ne conserve pas un journal métier interrogeable ; courtier externe (Kafka, RabbitMQ) : nouvelle infrastructure sans besoin de volume.
 
-**Conséquences.** Les effets deviennent asynchrones (délai d'environ 2 s). Exemple : la validation d'un bon de sortie rend la main avant que les soldes soient débités. **Exception voulue** : les soldes de stock restent débités **dans la transaction de validation**. Le contrôle « stock insuffisant ⇒ refus » doit être synchrone, et le stock fait partie de la pièce, pas d'un autre module. Ce point est à revoir au lot 3.
+**Conséquences.** Les effets deviennent asynchrones (délai d'environ 2 s). Exemple : la validation d'un bon de sortie rend la main avant que les soldes soient débités. **Exception voulue** : les soldes de stock restent mouvementés **dans la transaction de la pièce**, à la validation **comme à l'annulation** (tranché le 25/11). Le contrôle « stock insuffisant ⇒ refus » doit être synchrone, et le stock fait partie de la pièce, pas d'un autre module. Ce point est à revoir au lot 3.
 
 ### D6 — Journal d'audit et journal des accès
 
@@ -224,10 +227,10 @@ Format : **Contexte** (avec preuves), **Décision**, **Écarté**, **Conséquenc
 
 **Décision.**
 - **`journal_audit`**, écrit dans la transaction métier :
-  - contenu : `{le, compteId, nomInstantane, action (CREATION, MODIFICATION, SOUMISSION, VALIDATION, REFUS, ANNULATION, DESACTIVATION, IMPORT, EXPORT, PARAMETRE), objetType, objetId, numero, changements: [{champ, avant, apres}], motif, ip, correlationId}` ;
+  - contenu : `{le, compteId, nomInstantane, action (CREATION, MODIFICATION, SOUMISSION, VALIDATION, REFUS, REPRISE, ANNULATION, ABANDON, DESACTIVATION, IMPORT, EXPORT, PARAMETRE), objetType, objetId, numero, changements: [{champ, avant, apres}], motif, ip, correlationId}` ;
   - les champs `@Sensible` (D9) sont journalisés **masqués** (`"***"`) ;
   - le service `JournalAudit` calcule le différentiel à partir de l'état relu en début de transaction.
-- `AuditorAware<String>` (compte courant via `back:services/terrain/CurrentUserProvider.java`) pour `@CreatedBy` / `@LastModifiedBy` sur les référentiels.
+- `AuditorAware<String>` (compte courant via `back:services/terrain/CurrentUserProvider.java`) pour `@CreatedBy` / `@LastModifiedBy` sur les référentiels. **Mis en place en 1d/1e** avec les premiers référentiels portés (écart accepté : en 1b, aucun référentiel ne l'aurait utilisé). `REPRISE` (retour en brouillon d'une pièce refusée) et `ABANDON` ajoutés à la liste des actions en 1b.
 - **`journal_acces`** :
   - connexions réussies et échouées (écouteurs `AuthenticationSuccessEvent` / `AbstractAuthenticationFailureEvent`, plus la connexion agent de D11), refus 403, exports (D13), consultation de données sensibles (fiche de paie, salaire, RIB) ;
   - champs : `{le, identifiantSaisi (masqué partiellement), compteId?, resultat, motif, ip, userAgent}`.
@@ -529,7 +532,7 @@ Il n'existe ni annulation d'import (F015), ni export Word, ni filtrage des expor
   - il trace chaque passage dans `purges` (`{le, categorie, critere, nombre, idsAffectes (hachés)}`) et dans le journal d'audit ;
   - mode « à blanc » qui produit le rapport sans écrire, obligatoire avant le premier vrai passage ;
   - c'est la seule exception documentée à la règle 5 pour les fichiers.
-- **Sauvegardes** (actions d'exploitation, scriptées dans le dépôt sous `ops/sauvegarde/`) :
+- **Sauvegardes** (actions d'exploitation, scriptées dans le dépôt sous `ops/sauvegarde/` et mises en service par l'administrateur du serveur selon `docs/exploitation/sauvegarde.md` : pas d'accès au VPS, Q16) :
   - `mongodump --oplog --gzip` **quotidien**, chiffrement (`age` ou `gpg`, choix technique de 1l), copie **hors du serveur principal** demandée par le CDC, **non prévue** (Q16, 24/11 : aucun stockage hors serveur ; écart signalé comme risque), **conservée 30 jours** (CDC §14 « Sauvegarde ») ;
   - **test de restauration trimestriel** au minimum (CDC §14), scripté : restauration dans un conteneur jetable, puis contrôles de comptage et d'intégrité (`IndexesAttendusIT` en mode lecture), compte rendu horodaté ;
   - **archive longue durée**, distincte de la sauvegarde (CDC §14) : à la clôture de chaque exercice, un export chiffré et signé (sha256) des pièces et écritures de l'exercice, conservé 10 ans sur un support séparé, avec sa procédure de relecture ;
@@ -537,7 +540,7 @@ Il n'existe ni annulation d'import (F015), ni export Word, ni filtrage des expor
 
 **Écarté.** Suppression physique des ex-employés : elle casserait les pièces (bulletins, déclarations) à conserver légalement ; snapshot de disque du VPS seul : non testé, et pas hors site.
 
-**Conséquences.** Sans accès au VPS, la partie sauvegarde reste un livrable de scripts et de procédure (`docs/exploitation/sauvegarde.md`), non mis en service.
+**Conséquences.** Sans accès au VPS (Q16), la partie sauvegarde est un livrable de scripts testés en local et de procédure (`docs/exploitation/sauvegarde.md`). Sa mise en service revient à l'administrateur du serveur, qui renvoie les résultats attendus (premier dump, premier test de restauration).
 
 ### D16 — Multi-entreprises
 
@@ -629,9 +632,9 @@ Champs ajoutés aux collections conservées :
 
 1. **Jamais de fusion silencieuse.** Tout cas non univoque va dans `migration_rapports.rejets[]` (`{collection, id, motif, candidats[], valeursComparees}`), plus un export CSV pour la revue.
 2. **Fichier de décisions** (`migrations/decisions/<migration>.csv`, versionné) : une ligne par cas tranché par un humain (`idSource; action (LIER, CREER, IGNORER); idCible; auteur; date`). La migration le relit à chaque exécution.
-3. **Rejeu** : une migration se joue sur la copie anonymisée (§3.7) autant de fois que nécessaire, jusqu'à **0 cas non résolu**. En production, elle n'est jouée que lorsque le rapport à blanc est vide.
+3. **Rejeu** : une migration se met au point sur des **jeux de données construits dans les tests** (Testcontainers), qui reproduisent les cas attendus (doublons, ambiguïtés, formats anciens), jusqu'à **0 cas non résolu**. En production, elle n'est jouée que lorsque le rapport à blanc, produit par l'administrateur du serveur selon une procédure de `docs/exploitation/` puis renvoyé, est vide. Une copie anonymisée (§3.7) peut compléter ces jeux si l'administrateur la fournit ; aucun critère n'en dépend.
 4. **Non destructive** : les collections sources sont **renommées** en `archive_*`, jamais supprimées dans le lot. Les champs remplacés (`siteAffecte` texte, `fournisseur` texte) sont conservés dans un `*Origine`.
-5. **Vérification après migration** (test IT sur jeu de données plus script de contrôle en prod) : comptages source = cible + rejets ignorés ; aucune référence vers un id inexistant (`$lookup` de contrôle) ; unicité (index créés sans erreur) ; 20 fiches comparées champ par champ, jointes au compte rendu.
+5. **Vérification après migration** (test IT sur jeu de données, plus script de contrôle joué en prod par l'administrateur du serveur, résultats renvoyés) : comptages source = cible + rejets ignorés ; aucune référence vers un id inexistant (`$lookup` de contrôle) ; unicité (index créés sans erreur) ; 20 fiches comparées champ par champ, jointes au compte rendu.
 6. **Normalisation** partagée par toutes les migrations : minuscules, sans accents (même règle que `front:shared/text-normalize.util.ts`, reprise côté serveur), sans espaces multiples ni ponctuation ; téléphones en E.164 (`+221` si 9 chiffres commençant par 7 ou 3, **à confirmer**) ; e-mails en minuscules, sans espaces.
 
 ### 3.1 Employés : 3 collections et 2 modèles de compte
@@ -665,7 +668,7 @@ La confusion « agence / site client » (audit §4.6 Q7) est tranchée par le CD
 
 Les sites existants sans client reçoivent leur `clientId` par §3.4 (un client par `raisonSociale` validée), **avant** que `clientId` devienne obligatoire.
 
-Vérification : 0 affectation active sans `siteId` ; l'effectif par site avant (par libellé) et après (par id) est identique sur la copie.
+Vérification : 0 affectation active sans `siteId` ; l'effectif par site avant (par libellé) et après (par id) est identique, sur le jeu de test comme dans le contrôle joué en production par l'administrateur.
 
 ### 3.3 Articles : 5 listes vers le catalogue unique
 
@@ -682,7 +685,7 @@ Ordre et algorithme :
 4. **`produits_phyto`** : même algorithme sur `nomCommercial`, création si absent.
 5. **`terrain_materiel`** (Q12) : chaque unité du parc reçoit un `articleId` de famille matériel. Regroupement **proposé** par type et désignation normalisés (« Monobrosse 17" » ×4 donne un seul article, 4 unités), sans rien écrire ; validation humaine par l'Exploitation et le Stock ; puis création des articles et pose des `articleId`. Les champs du parc (numéro, date et valeur d'achat, affectation, entretiens) restent sur l'unité. Une unité sans décision fait échouer la migration (§3.0, règle 3), puisque l'`articleId` devient obligatoire.
 
-Vérification : toute matière première et tout produit phyto actifs ont un `articleId` existant ; toute unité du parc a un `articleId` de famille matériel ; aucun code d'article en double ; somme des `quantiteEnStock` chimie inchangée (non migrée) ; valeur du stock Stock v2 inchangée (`ValeurStockService` avant/après sur la copie).
+Vérification : toute matière première et tout produit phyto actifs ont un `articleId` existant ; toute unité du parc a un `articleId` de famille matériel ; aucun code d'article en double ; somme des `quantiteEnStock` chimie inchangée (non migrée) ; valeur du stock Stock v2 inchangée (`ValeurStockService` avant/après, sur le jeu de test comme dans le contrôle joué en production par l'administrateur).
 
 ### 3.4 Fournisseurs et clients en texte libre
 
@@ -719,7 +722,7 @@ Vérification : nombre de `byte[]` non vides en phase 1 = nombre de `fichiers` c
 
 ### 3.7 Copie anonymisée de la production
 
-Préalable : accès SSH au VPS (Q16, disponible). Procédure (`ops/copie-anonymisee/`, scripts versionnés, aucune donnée versionnée) :
+**Procédure facultative de l'administrateur du serveur** (pas d'accès au VPS, Q16). Elle sera écrite dans `docs/exploitation/copie-anonymisee.md` quand une migration en aura l'usage. **Aucun critère d'acceptation n'en dépend** : les migrations se testent sur des jeux construits dans les tests (§3.0). Scripts versionnés sous `ops/copie-anonymisee/`, aucune donnée versionnée :
 
 1. **Extraction** par l'exploitant, sur le serveur : `mongodump --gzip --archive` vers un fichier chiffré, transfert vers **un seul poste sécurisé** désigné. La copie n'y est jamais décompressée hors d'un conteneur.
 2. **Restauration** dans un conteneur `mongo:7.0` isolé (réseau Docker sans sortie, volume chiffré).
@@ -769,7 +772,7 @@ Chaque sous-branche est créée depuis `refonte/v3` et fusionnée dans `refonte/
   - `docker-compose up` démarre un replica set initialisé ;
   - compte rendu du spike Mongock (Q-C) joint à la sous-branche : Mongock retenu, ou repli sur l'exécuteur maison avec la raison.
 - **Taille** : M.
-- **Bloquée par** : rien (Q16 tranchée le 24/11 : accès SSH disponible pour la mise en production).
+- **Bloquée par** : rien. La mise en production est une procédure écrite pour l'administrateur du serveur, à jouer au basculement final de la V3 (pas d'accès au VPS, Q16).
 
 ### 1b — Pièces : numérotation, annulation tracée, fin des suppressions, audit, outbox
 
@@ -780,11 +783,20 @@ Chaque sous-branche est créée depuis `refonte/v3` et fusionnée dans `refonte/
   - `NumerotationIT` : 100 validations concurrentes donnent 100 numéros consécutifs sans trou ; validation en échec, numéro non consommé ; changement d'exercice au 1er janvier (heure de Dakar), repart à `0001` ; passage de `9999` à `10000` sans erreur ni troncature ;
   - `RoutesSuppressionIT` : 0 route DELETE hors liste blanche ;
   - test ArchUnit des appels `delete*` ;
-  - bons de stock (premier type porté) : annulation d'un bon EFFECTIF qui génère les mouvements inverses par événement, sans suppression ;
+  - bons de stock (premier type porté) : annulation d'un bon EFFECTIF qui génère les mouvements inverses dans sa transaction, sans suppression ; annulation concurrente d'une sortie qui consomme le même stock : une seule des deux passe, jamais de solde négatif ni d'événement en erreur (`AnnulationConcurrenteIT`) ;
   - `OutboxIT` : événement écrit seulement si la transaction est validée ; consommateur rejoué 2 fois, effet une seule fois ; échec répété, `EN_ERREUR` après 10 tentatives ;
   - `JournalAuditIT` : chaque transition de pièce a sa ligne, champs sensibles masqués.
 - **Taille** : L.
 - **Bloquée par** : aucune (Q7 tranchée par le CDC §3).
+- **Réalisé** : compte rendu `docs/refonte/1b-pieces.md` (écarts du §8 acceptés le 25/11 et reportés dans D4, D5, D6).
+- **Routes et suppressions en sursis.** Les garde-fous de 1b (`RoutesSuppressionIT`, `SuppressionsInterditesArchTest`) tolèrent une liste nommée de routes `DELETE` et de classes qui suppriment encore, chacune avec son échéance ; la liste ne peut que diminuer. Celles des sous-branches du lot 1 sont décrites dans chaque sous-branche (1c, 1d, 1e, 1f, 1g, 1i). Les pièces et paramètres des modules métier sont portés sur le modèle pièce dans le lot de leur module :
+
+  | Module | Lot | Routes `DELETE` (classes de service) |
+  | --- | --- | --- |
+  | RH | **lot 6** | `/api/developpement-rh/evaluations/{id}`, `/formations/{id}`, `/formations/sessions/{sessionId}`, `/formations/besoins/{id}`, `/sanctions/{id}` ; `/api/gestion-personnel/contrats/{id}`, `/documents/{id}` ; `/api/paie/bulletins/{id}`, `/declarations-sociales/{id}` ; `/api/temps-presences/absences/{id}`, `/conges/demandes/{id}`, `/heures-supplementaires/{id}` (12) |
+  | Exploitation terrain | **lot 2** | `/api/terrain/controles-terrain/grilles/{id}`, `/interventions/{id}`, `/phytosanitaire/applications/{id}` (3) |
+  | Stock | **lot 3** | `/api/stock/chantiers/{id}`, `/plafonds/{id}` (2) |
+  | Production chimie (Industrie) | **lot 8** | `/api/production-chimie/controle-qualite/grilles/{id}`, `/formulations/{id}` (2) |
 
 ### 1c — Paramètres datés et listes de choix
 
@@ -828,7 +840,7 @@ Chaque sous-branche est créée depuis `refonte/v3` et fusionnée dans `refonte/
 - **Lignes** : F001 (employé, site), F023.
 - **Dépendances** : 1g.
 - **Critères d'acceptation** :
-  - migrations §3.1 et §3.2 jouées sur la copie anonymisée avec 0 cas non résolu, rapport joint ;
+  - migrations §3.1 et §3.2 jouées sur des jeux de données construits dans les tests (cas univoques, ambigus, orphelins, conflits) : rejets attendus rapportés, 0 cas non résolu une fois le fichier de décisions appliqué, rejeu sans effet ; procédure du rapport à blanc en production écrite pour l'administrateur ;
   - `ReferentielEmployeIT` : un employé créé dans RH est lisible par Stock, Terrain et Chimie avec le masquage selon le profil ;
   - `ReferentielSiteIT` : un site créé est sélectionnable dans RH (affectation par `siteId`), Stock et Terrain ; création refusée sans `clientId` ; `contratObligatoire` respecté quand il est activé ;
   - index uniques `matricule`, `agentId`, `telephone`, `sites_clients.code` créés ;
@@ -842,7 +854,7 @@ Chaque sous-branche est créée depuis `refonte/v3` et fusionnée dans `refonte/
 - **Lignes** : F001 (article), F023.
 - **Dépendances** : 1d (sites pour les états de stock), 1c (listes famille, nature, unité).
 - **Critères d'acceptation** :
-  - migration §3.3 avec 0 cas non résolu sur la copie ;
+  - migration §3.3 avec 0 cas non résolu sur des jeux de données construits dans les tests ; procédure du rapport à blanc en production écrite pour l'administrateur ;
   - `ReferentielArticleIT` : un article créé une fois est visible dans Stock, dans la fiche matière première (Chimie) et dans les produits phyto ;
   - la formulation lit code, libellé et unité depuis l'article ;
   - valeur de stock et soldes chimie inchangés (tests de comparaison) ;
@@ -876,7 +888,7 @@ Chaque sous-branche est créée depuis `refonte/v3` et fusionnée dans `refonte/
   - `StockageFichiersIT` : dépôt, lecture, sha256 ;
   - accès refusé sans droit sur le propriétaire (403) ;
   - migration §3.6 phase 1 avec 0 divergence ;
-  - les routes de flux existantes renvoient le même contenu qu'avant (test octet par octet sur la copie) ;
+  - les routes de flux existantes renvoient le même contenu qu'avant (test octet par octet sur un jeu de fichiers construit dans les tests) ;
   - composant `app-pieces-jointes` avec spec, intégré à la fiche employé et à l'article.
 - **Taille** : M.
 - **Bloquée par** : aucune (Tika : décision technique).
@@ -950,7 +962,7 @@ Chaque sous-branche est créée depuis `refonte/v3` et fusionnée dans `refonte/
 - **Critères d'acceptation** :
   - `PurgeServiceIT` : mode à blanc sans écriture ; mode réel qui anonymise un ex-employé au-delà de la durée, garde ses bulletins, trace dans `purges` ;
   - scripts `ops/sauvegarde/` testés en local (dump, chiffrement, restauration dans un conteneur, contrôles) ;
-  - procédure `docs/exploitation/sauvegarde.md`.
+  - procédure `docs/exploitation/sauvegarde.md` destinée à l'administrateur du serveur, avec les résultats à renvoyer ; aucun critère ne dépend de sa mise en service (pas d'accès au VPS, Q16).
 - **Taille** : M.
 - **Bloquée par** : Q8 pour les durées encore « à fixer » (le moteur est livré, la catégorie reste inactive). Q16 tranchée : pas de stockage hors serveur, donc la copie hors site du CDC §14 n'est pas livrée (risque signalé).
 
@@ -987,11 +999,13 @@ Chaque sous-branche est créée depuis `refonte/v3` et fusionnée dans `refonte/
 
 ### 5.2 Pour vous
 
-Aucune. Q16 (accès au VPS, stockage hors serveur) est tranchée le 24/11 : accès SSH oui, aucun stockage hors serveur prévu (R.1).
+Aucune. Q16 (accès au VPS, stockage hors serveur) est tranchée le 24/11 (R.1) : **pas d'accès au VPS**, aucun stockage hors serveur prévu.
+
+**Contrainte permanente qui en découle.** Toute opération serveur (sauvegarde, détection des doublons, copie anonymisée, mise en service, fermeture du port Mongo) est livrée sous forme de procédure écrite dans `docs/exploitation/`, destinée à l'administrateur du serveur, avec les résultats attendus à vous renvoyer. Aucun critère d'acceptation ni aucune étape de développement ne dépend d'un accès au serveur ; les migrations se testent sur des jeux de données construits dans les tests.
 
 ### 5.3 Questions closes
 
-Q5, Q6, Q7, Q9, Q11, Q12, Q13, Q14, Q15 (tranchées par le CDC et vos corrections), Q-A, Q-B, Q-C, Q-D, Q16 (vos réponses). Détail et sources : « Révision du 23/11 », R.1.
+Q5, Q6, Q7, Q9, Q11, Q12, Q13, Q14, Q15 (tranchées par le CDC et vos corrections), Q-A, Q-B, Q-C, Q-D, Q16 (vos réponses ; Q16 corrigée le 24/11 : pas d'accès au VPS). Détail et sources : « Révision du 23/11 », R.1.
 
 ---
 
@@ -1005,5 +1019,5 @@ Q5, Q6, Q7, Q9, Q11, Q12, Q13, Q14, Q15 (tranchées par le CDC et vos correction
 6. Le moteur de circuits reprend le tableau du CDC §13 : Direction en dernier (toujours, au-dessus du seuil, jamais), personne ne valide sa propre demande, délégation tracée. Les congés passent à Superviseur → RH (Direction pour les responsables), les bons de stock à magasinier → Direction.
 7. Huit référentiels ont chacun le propriétaire fixé par le CDC §3. Le site est le « local » du CDC, rattaché à un client et à un contrat client ; les magasins forment un référentiel à part ; l'article a 6 familles, matériel compris, et le parc porte toujours un `articleId`.
 8. L'agent active son compte par un code reçu par SMS, choisit son code à 4 chiffres, et son compte est lié à son téléphone par une clé non extractible : c'est ce qui permettra au lot 2 de remplacer le PIN de kiosque par le pointage QR.
-9. Chaque fusion (employés, sites par nom, articles et parc, tiers en texte libre, champs de paie de la grille, fichiers) produit un rapport de rejet et se pilote par fichier de décisions, sans jamais fusionner en silence, sur une copie de production pseudonymisée.
-10. 13 sous-branches. Blocages Direction restants : 1c (Q2, Q4), 1g (Q2), 1d (Q10) ; 1l livre son moteur et attend Q8 pour les durées manquantes ; Q3 ne bloque que la production de 1k et 1m. 1a n'attend aucune question (Q16 tranchée le 24/11). Il reste 6 questions pour la Direction, aucune pour vous. Conception validée le 24/11 : 1a est lancée.
+9. Chaque fusion (employés, sites par nom, articles et parc, tiers en texte libre, champs de paie de la grille, fichiers) produit un rapport de rejet et se pilote par fichier de décisions, sans jamais fusionner en silence. Elle se met au point sur des jeux de données construits dans les tests, puis se joue en production selon une procédure écrite pour l'administrateur du serveur.
+10. 13 sous-branches. Blocages Direction restants : 1c (Q2, Q4), 1g (Q2), 1d (Q10) ; 1l livre son moteur et attend Q8 pour les durées manquantes ; Q3 ne bloque que la production de 1k et 1m. 1a n'attend aucune question (Q16 tranchée le 24/11 : pas d'accès au VPS ; toute opération serveur est une procédure pour l'administrateur, dans `docs/exploitation/`). Il reste 6 questions pour la Direction, aucune pour vous. Conception validée le 24/11 : 1a est lancée.

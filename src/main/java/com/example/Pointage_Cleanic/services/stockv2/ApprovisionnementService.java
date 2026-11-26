@@ -47,6 +47,7 @@ public class ApprovisionnementService {
         // Sorties par produit sur la fenêtre [debut, aujourd'hui]
         Query query = new Query(Criteria.where("date").gte(debut)
                 .and("produitId").in(produits.stream().map(ProduitStock::getId).toList()));
+        MouvementsEffectifs.exclureAnnulations(query); // lot 1 / 1b : pièces annulées
         List<MouvementStock> mouvements = mongoTemplate.find(query, MouvementStock.class);
         Map<String, Double> sortiesParProduit = mouvements.stream()
                 .collect(Collectors.groupingBy(MouvementStock::getProduitId,

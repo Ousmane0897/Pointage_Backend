@@ -1,6 +1,10 @@
 package com.example.Pointage_Cleanic.migrations.index;
 
 import com.example.Pointage_Cleanic.entities.EmployeComplet;
+import com.example.Pointage_Cleanic.entities.audit.EntreeAudit;
+import com.example.Pointage_Cleanic.entities.evenements.EvenementConsomme;
+import com.example.Pointage_Cleanic.entities.evenements.EvenementDomaine;
+import com.example.Pointage_Cleanic.entities.pieces.LignePieceRegistre;
 import com.example.Pointage_Cleanic.entities.Pointage;
 import com.example.Pointage_Cleanic.entities.productionchimie.ControleQualite;
 import com.example.Pointage_Cleanic.entities.productionchimie.FicheFormulation;
@@ -75,6 +79,9 @@ public final class IndexesAttendus {
     public static final String STOCK = "stock";
     public static final String TERRAIN = "terrain";
     public static final String PRODUCTION_CHIMIE = "production-chimie";
+    public static final String OUTBOX = "outbox";
+    public static final String AUDIT = "audit";
+    public static final String REGISTRE = "registre";
 
     private static final List<IndexAttendu> TOUS = construire();
 
@@ -189,6 +196,25 @@ public final class IndexesAttendus {
         l.add(simple(PRODUCTION_CHIMIE, ControleQualite.class, "decision", cles("decision", 1)));
         l.add(unique(PRODUCTION_CHIMIE, FormatConditionnement.class, "code_unique", cles("code", 1), null));
         l.add(simple(PRODUCTION_CHIMIE, FormatConditionnement.class, "actif", cles("actif", 1)));
+
+        // ---- Outbox des événements de domaine (lot 1 / 1b, D5) : ChangeUnit 0107 --------------
+        // Réclamation par le dispatcher : (statut, prochainEssai) et bail expiré (statut, bailJusquA).
+        l.add(simple(OUTBOX, EvenementDomaine.class, "statut_prochainEssai", cles("statut", 1, "prochainEssai", 1)));
+        l.add(simple(OUTBOX, EvenementDomaine.class, "statut_bail", cles("statut", 1, "bailJusquA", 1)));
+        l.add(simple(OUTBOX, EvenementDomaine.class, "agregat", cles("agregatType", 1, "agregatId", 1)));
+        l.add(unique(OUTBOX, EvenementConsomme.class, "consommateur_evenement_unique",
+                cles("consommateur", 1, "evenementId", 1), null));
+
+        // ---- Journal d'audit (lot 1 / 1b, D6) : ChangeUnit 0108 --------------------------------
+        l.add(simple(AUDIT, EntreeAudit.class, "objet_le", cles("objetType", 1, "objetId", 1, "le", -1)));
+        l.add(simple(AUDIT, EntreeAudit.class, "compte_le", cles("compteId", 1, "le", -1)));
+        l.add(simple(AUDIT, EntreeAudit.class, "le", cles("le", -1)));
+
+        // ---- Registre des pièces (lot 1 / 1b, D4) : ChangeUnit 0109 ----------------------------
+        l.add(unique(REGISTRE, LignePieceRegistre.class, "type_piece_unique", cles("type", 1, "pieceId", 1), null));
+        l.add(unique(REGISTRE, LignePieceRegistre.class, "type_numero_unique", cles("type", 1, "numero", 1),
+                new Document("numero", new Document("$type", "string"))));
+        l.add(simple(REGISTRE, LignePieceRegistre.class, "site_statut", cles("siteId", 1, "statut", 1)));
 
         return List.copyOf(l);
     }

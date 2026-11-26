@@ -159,6 +159,15 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(body);
     }
 
+    /** Transition d'état refusée sur un objet du socle (lot 1 / 1b). */
+    @ExceptionHandler(TransitionInterditeException.class)
+    public ResponseEntity<Map<String, Object>> handleTransitionInterdite(TransitionInterditeException ex) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("error", "TRANSITION_INTERDITE");
+        body.put("message", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(body);
+    }
+
     /**
      * Violation d'un index unique (index réellement créés depuis 1a, D3). Le message du pilote
      * (nom d'index, valeur en double) n'est pas renvoyé au client.

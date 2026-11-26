@@ -88,6 +88,7 @@ public class TableauBordStockService {
 
             double sortiesPeriode = mvts.stream()
                     .filter(m -> dansPeriode(m.getDate(), debut, fin))
+                    .filter(MouvementsEffectifs::compte) // lot 1 / 1b : pièces annulées hors consommation
                     .mapToDouble(m -> StockImpactCalculator.sortie(m, site))
                     .sum();
             if (stockActuel > 0) {

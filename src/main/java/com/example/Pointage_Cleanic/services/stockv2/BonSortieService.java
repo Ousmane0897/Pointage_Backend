@@ -4,12 +4,15 @@ import com.example.Pointage_Cleanic.Dto.stockv2.BonSortieDto;
 import com.example.Pointage_Cleanic.Dto.stockv2.BonSortiePayload;
 import com.example.Pointage_Cleanic.Dto.stockv2.DecisionPayload;
 import com.example.Pointage_Cleanic.Dto.stockv2.DestinatairePayload;
-import com.example.Pointage_Cleanic.Dto.stockv2.NotificationStockDto;
+import com.example.Pointage_Cleanic.Enum.audit.ActionAudit;
+import com.example.Pointage_Cleanic.Enum.pieces.TypePiece;
 import com.example.Pointage_Cleanic.Enum.stockv2.ActionWorkflow;
 import com.example.Pointage_Cleanic.Enum.stockv2.StatutBon;
 import com.example.Pointage_Cleanic.Enum.stockv2.StatutChantier;
 import com.example.Pointage_Cleanic.Enum.stockv2.TypeSortie;
 import com.example.Pointage_Cleanic.Mapper.stockv2.BonSortieMapper;
+import com.example.Pointage_Cleanic.entities.pieces.Abandon;
+import com.example.Pointage_Cleanic.entities.pieces.PieceBase;
 import com.example.Pointage_Cleanic.entities.stockv2.BonSortie;
 import com.example.Pointage_Cleanic.entities.stockv2.Chantier;
 import com.example.Pointage_Cleanic.entities.stockv2.DestinataireBon;
@@ -19,6 +22,9 @@ import com.example.Pointage_Cleanic.exception.StockAccesRefuseException;
 import com.example.Pointage_Cleanic.exception.StockConflitException;
 import com.example.Pointage_Cleanic.repositories.stockv2.BonSortieRepository;
 import com.example.Pointage_Cleanic.repositories.stockv2.ChantierRepository;
+import com.example.Pointage_Cleanic.services.evenements.TypesEvenement;
+import com.example.Pointage_Cleanic.services.pieces.NumerotationService;
+import com.example.Pointage_Cleanic.services.pieces.TraceurPieces;
 import com.example.Pointage_Cleanic.services.stockv2.BonSupportService.DemandeurRef;
 
 import com.example.Pointage_Cleanic.util.PageResponse;
@@ -35,8 +41,15 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.regex.Pattern;
 
+/**
+ * Bons de sortie (7.4, 7.5), pièces de type {@code BS} depuis le lot 1 / 1b (D4, D5, D6) : chaque
+ * transition s'exécute en transaction et y écrit sa ligne d'audit et son événement de domaine ;
+ * le numéro n'est attribué qu'à la validation ; un brouillon s'abandonne, il ne se supprime plus.
+ * Les notifications (WebSocket, e-mail) partent des consommateurs des événements.
+ */
 @Service
 @RequiredArgsConstructor
 public class BonSortieService {
@@ -47,13 +60,14 @@ public class BonSortieService {
     private final ReferentielSiteService referentielSite;
     private final ReferentielEmployeStockService referentielEmploye;
     private final MouvementBonGenerator mouvementGenerator;
-    private final StockNotificationService notificationService;
     private final ExecuteurTransactionnel executeur;
-    private final BonMailNotificationService mailNotificationService;
-    private final CompteurStockService compteurService;
+    private final NumerotationService numerotation;
+    private final TraceurPieces traceur;
+    private final PiecesBon piecesBon;
     private final ChantierRepository chantierRepository;
     private final MongoTemplate mongoTemplate;
     private final HabilitationStock habilitation;
+    private final ContrePassementStockService contrePassement;
 
     public PageResponse<BonSortieDto> list(int page, int size, String q, StatutBon statut, TypeSortie type,
                                            String siteId, LocalDate dateDebut, LocalDate dateFin) {
@@ -100,77 +114,99 @@ public class BonSortieService {
         DemandeurRef demandeur = support.resoudreDemandeur(payload.getDemandeurId());
         SpecificiteSortie spec = resoudreSpecificite(payload);
 
-        LocalDateTime now = LocalDateTime.now();
-        BonSortie bon = BonSortie.builder()
-                .reference(compteurService.genererReference("BS"))
-                .type(payload.getType())
-                .date(payload.getDate() != null ? payload.getDate() : LocalDate.now())
-                .siteSourceId(site.id())
-                .siteSourceNom(site.nom())
-                .destinataire(destinataire)
-                .motif(payload.getMotif())
-                .natureDon(spec.natureDon())
-                .beneficiaireDon(spec.beneficiaireDon())
-                .chantierId(spec.chantierId())
-                .chantierReference(spec.chantierReference())
-                .lignes(lignes)
-                .statut(StatutBon.BROUILLON)
-                .demandeurId(demandeur.id())
-                .demandeurNom(demandeur.nom())
-                // Auteur déduit du JWT, jamais accepté du client : c'est lui qui gouverne les
-                // habilitations, contrairement au demandeur choisi dans le formulaire.
-                .creeParId(support.currentUserId())
-                .creeParEmail(support.currentUserEmail())
-                .creeParNom(support.currentUserNom())
-                .commentaire(payload.getCommentaire())
-                .montantTotal(support.montantTotal(lignes))
-                .createdAt(now)
-                .updatedAt(now)
-                .build();
-        bon.getHistorique().add(support.historique(ActionWorkflow.CREATION, null));
-        BonSortie saved = repository.save(bon);
-        mailNotificationService.notifierCreationSortie(saved);
-        return mapper.toDto(saved);
+        return executeur.executer(() -> {
+            LocalDateTime now = LocalDateTime.now();
+            BonSortie bon = BonSortie.builder()
+                    .piece(piecesBon.nouvelle(TypePiece.BS, now))
+                    .type(payload.getType())
+                    .date(payload.getDate() != null ? payload.getDate() : LocalDate.now())
+                    .siteSourceId(site.id())
+                    .siteSourceNom(site.nom())
+                    .destinataire(destinataire)
+                    .motif(payload.getMotif())
+                    .natureDon(spec.natureDon())
+                    .beneficiaireDon(spec.beneficiaireDon())
+                    .chantierId(spec.chantierId())
+                    .chantierReference(spec.chantierReference())
+                    .lignes(lignes)
+                    .statut(StatutBon.BROUILLON)
+                    .demandeurId(demandeur.id())
+                    .demandeurNom(demandeur.nom())
+                    // Auteur déduit du JWT, jamais accepté du client : c'est lui qui gouverne les
+                    // habilitations, contrairement au demandeur choisi dans le formulaire.
+                    .creeParId(support.currentUserId())
+                    .creeParEmail(support.currentUserEmail())
+                    .creeParNom(support.currentUserNom())
+                    .commentaire(payload.getCommentaire())
+                    .montantTotal(support.montantTotal(lignes))
+                    .createdAt(now)
+                    .updatedAt(now)
+                    .build();
+            bon.getHistorique().add(support.historique(ActionWorkflow.CREATION, null));
+            BonSortie saved = repository.save(bon);
+            tracer(TypesEvenement.PIECE_CREEE, ActionAudit.CREATION, null, saved, null);
+            return mapper.toDto(saved);
+        });
     }
 
     public BonSortieDto modifier(String id, BonSortiePayload payload) {
-        BonSortie bon = loadOrThrow(id);
-        exigerBrouillon(bon, "modifié");
-        habilitation.exigerCreateurOuControleur(bon.getCreeParEmail(), "Cette action");
         if (payload.getType() == null) {
             throw new IllegalArgumentException("Le type de sortie est obligatoire");
         }
-        SiteSource site = resoudreSiteSource(payload);
-        DestinataireBon destinataire = resoudreDestinataire(payload.getDestinataire());
-        List<LigneBon> lignes = support.denormaliserLignes(payload.getLignes());
-        DemandeurRef demandeur = support.resoudreDemandeur(payload.getDemandeurId());
-        SpecificiteSortie spec = resoudreSpecificite(payload);
+        return executeur.executer(() -> {
+            BonSortie bon = loadOrThrow(id);
+            exigerBrouillon(bon, "modifié");
+            habilitation.exigerCreateurOuControleur(bon.getCreeParEmail(), "Cette action");
+            Map<String, Object> avant = piecesBon.instantane(bon);
+            piecesBon.assurer(bon);
+            SiteSource site = resoudreSiteSource(payload);
+            DestinataireBon destinataire = resoudreDestinataire(payload.getDestinataire());
+            List<LigneBon> lignes = support.denormaliserLignes(payload.getLignes());
+            DemandeurRef demandeur = support.resoudreDemandeur(payload.getDemandeurId());
+            SpecificiteSortie spec = resoudreSpecificite(payload);
 
-        bon.setType(payload.getType());
-        bon.setDate(payload.getDate() != null ? payload.getDate() : bon.getDate());
-        bon.setSiteSourceId(site.id());
-        bon.setSiteSourceNom(site.nom());
-        bon.setDestinataire(destinataire);
-        bon.setMotif(payload.getMotif());
-        bon.setNatureDon(spec.natureDon());
-        bon.setBeneficiaireDon(spec.beneficiaireDon());
-        bon.setChantierId(spec.chantierId());
-        bon.setChantierReference(spec.chantierReference());
-        bon.setLignes(lignes);
-        bon.setDemandeurId(demandeur.id());
-        bon.setDemandeurNom(demandeur.nom());
-        bon.setCommentaire(payload.getCommentaire());
-        bon.setMontantTotal(support.montantTotal(lignes));
-        bon.setUpdatedAt(LocalDateTime.now());
-        bon.getHistorique().add(support.historique(ActionWorkflow.MODIFICATION, null));
-        return mapper.toDto(repository.save(bon));
+            bon.setType(payload.getType());
+            bon.setDate(payload.getDate() != null ? payload.getDate() : bon.getDate());
+            bon.setSiteSourceId(site.id());
+            bon.setSiteSourceNom(site.nom());
+            bon.setDestinataire(destinataire);
+            bon.setMotif(payload.getMotif());
+            bon.setNatureDon(spec.natureDon());
+            bon.setBeneficiaireDon(spec.beneficiaireDon());
+            bon.setChantierId(spec.chantierId());
+            bon.setChantierReference(spec.chantierReference());
+            bon.setLignes(lignes);
+            bon.setDemandeurId(demandeur.id());
+            bon.setDemandeurNom(demandeur.nom());
+            bon.setCommentaire(payload.getCommentaire());
+            bon.setMontantTotal(support.montantTotal(lignes));
+            bon.setUpdatedAt(LocalDateTime.now());
+            bon.getHistorique().add(support.historique(ActionWorkflow.MODIFICATION, null));
+            BonSortie saved = repository.save(bon);
+            tracer(TypesEvenement.PIECE_MODIFIEE, ActionAudit.MODIFICATION, avant, saved, null);
+            return mapper.toDto(saved);
+        });
     }
 
-    public void supprimer(String id) {
-        BonSortie bon = loadOrThrow(id);
-        exigerBrouillon(bon, "supprimé");
-        habilitation.exigerCreateurOuControleur(bon.getCreeParEmail(), "Cette action");
-        repository.deleteById(id);
+    /**
+     * Abandon d'un brouillon (lot 1 / 1b, D4) : remplace la suppression. Le bon est conservé en
+     * statut ABANDONNE, avec l'auteur et la date. Mêmes droits que l'ancienne suppression.
+     */
+    public BonSortieDto abandonner(String id) {
+        return executeur.executer(() -> {
+            BonSortie bon = loadOrThrow(id);
+            exigerBrouillon(bon, "abandonné");
+            habilitation.exigerCreateurOuControleur(bon.getCreeParEmail(), "Cette action");
+            Map<String, Object> avant = piecesBon.instantane(bon);
+            LocalDateTime now = LocalDateTime.now();
+            piecesBon.assurer(bon).setAbandon(Abandon.builder().par(piecesBon.auteurCourant()).le(now).build());
+            bon.setStatut(StatutBon.ABANDONNE);
+            bon.setUpdatedAt(now);
+            bon.getHistorique().add(support.historique(ActionWorkflow.ABANDON, null));
+            BonSortie saved = repository.save(bon);
+            tracer(TypesEvenement.PIECE_ABANDONNEE, ActionAudit.ABANDON, avant, saved, null);
+            return mapper.toDto(saved);
+        });
     }
 
     /** Transition transactionnelle (lot 1 / 1a, D1) : voir {@link #soumettreDansTransaction}. */
@@ -186,12 +222,16 @@ public class BonSortieService {
         // Le créateur soumet ses propres bons : sans cela, il corrigerait un bon repris après refus
         // sans pouvoir le renvoyer dans le circuit.
         habilitation.exigerCreateurOuControleur(bon.getCreeParEmail(), "Cette action");
+        Map<String, Object> avant = piecesBon.instantane(bon);
+        LocalDateTime now = LocalDateTime.now();
+        PieceBase piece = piecesBon.assurer(bon);
+        piece.setSoumisePar(piecesBon.auteurCourant());
+        piece.setSoumiseLe(now);
         bon.setStatut(StatutBon.SOUMIS);
-        bon.setUpdatedAt(LocalDateTime.now());
+        bon.setUpdatedAt(now);
         bon.getHistorique().add(support.historique(ActionWorkflow.SOUMISSION, null));
         BonSortie saved = repository.save(bon);
-        diffuserEtCiblerApresCommit(
-                notification("BON_SOUMIS", saved, "Bon de sortie soumis", "Le bon " + saved.getReference() + " attend validation."));
+        tracer(TypesEvenement.PIECE_SOUMISE, ActionAudit.SOUMISSION, avant, saved, null);
         return mapper.toDto(saved);
     }
 
@@ -219,21 +259,26 @@ public class BonSortieService {
             }
         }
 
+        Map<String, Object> avant = piecesBon.instantane(bon);
+        LocalDateTime now = LocalDateTime.now();
+        // Numéro attribué dans la transaction (lot 1 / 1b, D4) : un échec (422, 409) l'annule aussi.
+        PieceBase piece = piecesBon.assurer(bon);
+        bon.setReference(numerotation.numeroter(piece));
+        piece.setValideePar(piecesBon.auteurCourant());
+        piece.setValideeLe(now);
+
         // Mouvements et débits gardés dans la même transaction : 422 (stock insuffisant) annule tout.
+        // Les mouvements recopient la référence : elle est attribuée avant.
         mouvementGenerator.genererPourSortie(bon);
 
         bon.setValidateurId(support.currentUserId());
         bon.setValidateurNom(support.currentUserNom());
         bon.setStatut(StatutBon.EFFECTIF);
-        bon.setUpdatedAt(LocalDateTime.now());
+        bon.setUpdatedAt(now);
         bon.getHistorique().add(support.historique(ActionWorkflow.VALIDATION, commentaire));
         bon.getHistorique().add(support.historique(ActionWorkflow.EFFECTIF, null));
         BonSortie saved = repository.save(bon);
-
-        diffuserApresCommit(notification("BON_VALIDE", saved, "Bon de sortie validé",
-                "Le bon " + saved.getReference() + " a été validé."));
-        diffuserApresCommit(notification("BON_EFFECTIF", saved, "Stock mis à jour",
-                "Le bon " + saved.getReference() + " est effectif : stock mouvementé."));
+        tracer(TypesEvenement.PIECE_VALIDEE, ActionAudit.VALIDATION, avant, saved, commentaire);
         return mapper.toDto(saved);
     }
 
@@ -252,6 +297,8 @@ public class BonSortieService {
             throw new IllegalArgumentException("Le commentaire de refus est obligatoire");
         }
         String motif = decision.getCommentaire().trim();
+        Map<String, Object> avant = piecesBon.instantane(bon);
+        piecesBon.assurer(bon);
         bon.setStatut(StatutBon.REFUSE);
         bon.setMotifRefus(motif);
         bon.setValidateurId(support.currentUserId());
@@ -259,8 +306,7 @@ public class BonSortieService {
         bon.setUpdatedAt(LocalDateTime.now());
         bon.getHistorique().add(support.historique(ActionWorkflow.REFUS, motif));
         BonSortie saved = repository.save(bon);
-        diffuserApresCommit(notification("BON_REFUSE", saved, "Bon de sortie refusé",
-                "Le bon " + saved.getReference() + " a été refusé : " + motif));
+        tracer(TypesEvenement.PIECE_REFUSEE, ActionAudit.REFUS, avant, saved, motif);
         return mapper.toDto(saved);
     }
 
@@ -288,12 +334,13 @@ public class BonSortieService {
         }
         habilitation.exigerCreateurOuControleur(bon.getCreeParEmail(), "Cette action");
 
+        Map<String, Object> avant = piecesBon.instantane(bon);
+        piecesBon.assurer(bon);
         bon.setStatut(StatutBon.BROUILLON);
         bon.setUpdatedAt(LocalDateTime.now());
         bon.getHistorique().add(support.historique(ActionWorkflow.REPRISE, null));
         BonSortie saved = repository.save(bon);
-        diffuserApresCommit(notification("BON_REPRIS", saved, "Bon de sortie repris",
-                "Le bon " + saved.getReference() + " est repassé en brouillon pour correction."));
+        tracer(TypesEvenement.PIECE_REPRISE, ActionAudit.REPRISE, avant, saved, null);
         return mapper.toDto(saved);
     }
 
@@ -413,24 +460,37 @@ public class BonSortieService {
         }
     }
 
-    private NotificationStockDto notification(String type, BonSortie bon, String titre, String message) {
-        return NotificationStockDto.builder()
-                .type(type)
-                .sens("SORTIE")
-                .bonId(bon.getId())
-                .reference(bon.getReference())
-                .titre(titre)
-                .message(message)
-                .dateEmission(LocalDateTime.now().toString())
-                .build();
+    /**
+     * Annulation d'un bon EFFECTIF (lot 1 / 1b, D4) : remplace la suppression définitive. Le bon
+     * reste en base (statut ANNULE, qui, quand, motif) ; ses mouvements sont contre-passés et le
+     * stock recrédité <b>dans la même transaction</b> (D5 : les soldes font partie de la pièce).
+     * L'événement {@code PIECE_ANNULEE} ne porte plus que les effets secondaires.
+     * Super-administrateur seul, motif de 10 caractères minimum (400), autre statut 409.
+     */
+    public BonSortieDto annuler(String id, String motif) {
+        String motifNet = PiecesBon.exigerMotifAnnulation(motif);
+        return executeur.executer(() -> {
+            BonSortie bon = loadOrThrow(id);
+            if (bon.getStatut() != StatutBon.EFFECTIF) {
+                throw new StockConflitException("Seul un bon EFFECTIF peut être annulé (statut actuel : " + bon.getStatut() + ")");
+            }
+            habilitation.exigerSuperAdmin("Annulation");
+            Map<String, Object> avant = piecesBon.instantane(bon);
+            LocalDateTime now = LocalDateTime.now();
+            piecesBon.assurer(bon).setAnnulation(piecesBon.annulation(motifNet, now));
+            bon.setStatut(StatutBon.ANNULE);
+            bon.setUpdatedAt(now);
+            bon.getHistorique().add(support.historique(ActionWorkflow.ANNULATION, motifNet));
+            BonSortie saved = repository.save(bon);
+            contrePassement.contrePasserBon(saved.getId(), motifNet, piecesBon.auteurCourant().getNom());
+            tracer(TypesEvenement.PIECE_ANNULEE, ActionAudit.ANNULATION, avant, saved, motifNet);
+            return mapper.toDto(saved);
+        });
     }
 
-    /** Notification WebSocket envoyée seulement si la transaction est validée (jamais sur annulation). */
-    private void diffuserApresCommit(NotificationStockDto notification) {
-        ExecuteurTransactionnel.apresCommit(() -> notificationService.diffuser(notification));
-    }
-
-    private void diffuserEtCiblerApresCommit(NotificationStockDto notification) {
-        ExecuteurTransactionnel.apresCommit(() -> notificationService.diffuserEtCiblerResponsableAchats(notification));
+    /** Audit + événement de la transition, dans la transaction courante. */
+    private void tracer(String evenement, ActionAudit action, Map<String, Object> avant, BonSortie apres,
+                        String motif) {
+        traceur.tracer(evenement, action, avant, apres, apres.getStatut().name(), motif, null);
     }
 }

@@ -3,19 +3,25 @@ package com.example.Pointage_Cleanic.services.stockv2;
 import com.example.Pointage_Cleanic.Dto.stockv2.BonEntreeDto;
 import com.example.Pointage_Cleanic.Dto.stockv2.BonEntreePayload;
 import com.example.Pointage_Cleanic.Dto.stockv2.DecisionPayload;
-import com.example.Pointage_Cleanic.Dto.stockv2.NotificationStockDto;
+import com.example.Pointage_Cleanic.Enum.audit.ActionAudit;
+import com.example.Pointage_Cleanic.Enum.pieces.TypePiece;
 import com.example.Pointage_Cleanic.Enum.stockv2.ActionWorkflow;
 import com.example.Pointage_Cleanic.Enum.stockv2.StatutBon;
 import com.example.Pointage_Cleanic.Enum.stockv2.TypeEntree;
 import com.example.Pointage_Cleanic.Mapper.stockv2.BonEntreeMapper;
+import com.example.Pointage_Cleanic.configurations.ExecuteurTransactionnel;
+import com.example.Pointage_Cleanic.entities.pieces.Abandon;
+import com.example.Pointage_Cleanic.entities.pieces.PieceBase;
 import com.example.Pointage_Cleanic.entities.stockv2.BonEntree;
 import com.example.Pointage_Cleanic.entities.stockv2.LigneBon;
 import com.example.Pointage_Cleanic.exception.ResourceNotFoundException;
 import com.example.Pointage_Cleanic.exception.StockConflitException;
 import com.example.Pointage_Cleanic.repositories.stockv2.BonEntreeRepository;
+import com.example.Pointage_Cleanic.services.evenements.TypesEvenement;
+import com.example.Pointage_Cleanic.services.pieces.NumerotationService;
+import com.example.Pointage_Cleanic.services.pieces.TraceurPieces;
 import com.example.Pointage_Cleanic.services.stockv2.BonSupportService.DemandeurRef;
 import com.example.Pointage_Cleanic.util.PageResponse;
-import com.example.Pointage_Cleanic.configurations.ExecuteurTransactionnel;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -28,8 +34,15 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.regex.Pattern;
 
+/**
+ * Bons d'entrée (7.4), pièces de type {@code BE} depuis le lot 1 / 1b (D4, D5, D6) : chaque
+ * transition s'exécute en transaction et y écrit sa ligne d'audit et son événement de domaine ;
+ * le numéro n'est attribué qu'à la validation ; un brouillon s'abandonne, il ne se supprime plus.
+ * Les notifications (WebSocket, e-mail) partent des consommateurs des événements.
+ */
 @Service
 @RequiredArgsConstructor
 public class BonEntreeService {
@@ -39,10 +52,11 @@ public class BonEntreeService {
     private final BonSupportService support;
     private final ReferentielSiteService referentielSite;
     private final MouvementBonGenerator mouvementGenerator;
-    private final StockNotificationService notificationService;
     private final ExecuteurTransactionnel executeur;
-    private final BonMailNotificationService mailNotificationService;
-    private final CompteurStockService compteurService;
+    private final NumerotationService numerotation;
+    private final TraceurPieces traceur;
+    private final PiecesBon piecesBon;
+    private final ContrePassementStockService contrePassement;
     private final HabilitationStock habilitation;
     private final MongoTemplate mongoTemplate;
 
@@ -77,6 +91,11 @@ public class BonEntreeService {
         return mapper.toDto(loadOrThrow(id));
     }
 
+    /**
+     * Création en transaction : le bon, sa ligne d'audit et l'événement {@code PIECE_CREEE}
+     * ensemble. Pas de numéro en brouillon (D4) ; l'e-mail de création part du consommateur de
+     * l'événement, après validation de la transaction.
+     */
     public BonEntreeDto creer(BonEntreePayload payload) {
         if (payload.getType() == null) {
             throw new IllegalArgumentException("Le type d'entrée est obligatoire");
@@ -85,66 +104,88 @@ public class BonEntreeService {
         List<LigneBon> lignes = support.denormaliserLignes(payload.getLignes());
         DemandeurRef demandeur = support.resoudreDemandeur(payload.getDemandeurId());
 
-        LocalDateTime now = LocalDateTime.now();
-        BonEntree bon = BonEntree.builder()
-                .reference(compteurService.genererReference("BE"))
-                .type(payload.getType())
-                .date(payload.getDate() != null ? payload.getDate() : LocalDate.now())
-                .siteDestinationId(payload.getSiteDestinationId())
-                .siteDestinationNom(siteNom)
-                .fournisseur(payload.getFournisseur())
-                .referenceCommande(payload.getReferenceCommande())
-                .lignes(lignes)
-                .statut(StatutBon.BROUILLON)
-                .demandeurId(demandeur.id())
-                .demandeurNom(demandeur.nom())
-                // Auteur déduit du JWT, jamais accepté du client.
-                .creeParId(support.currentUserId())
-                .creeParEmail(support.currentUserEmail())
-                .creeParNom(support.currentUserNom())
-                .commentaire(payload.getCommentaire())
-                .montantTotal(support.montantTotal(lignes))
-                .createdAt(now)
-                .updatedAt(now)
-                .build();
-        bon.getHistorique().add(support.historique(ActionWorkflow.CREATION, null));
-        BonEntree saved = repository.save(bon);
-        mailNotificationService.notifierCreationEntree(saved);
-        return mapper.toDto(saved);
+        return executeur.executer(() -> {
+            LocalDateTime now = LocalDateTime.now();
+            BonEntree bon = BonEntree.builder()
+                    .piece(piecesBon.nouvelle(TypePiece.BE, now))
+                    .type(payload.getType())
+                    .date(payload.getDate() != null ? payload.getDate() : LocalDate.now())
+                    .siteDestinationId(payload.getSiteDestinationId())
+                    .siteDestinationNom(siteNom)
+                    .fournisseur(payload.getFournisseur())
+                    .referenceCommande(payload.getReferenceCommande())
+                    .lignes(lignes)
+                    .statut(StatutBon.BROUILLON)
+                    .demandeurId(demandeur.id())
+                    .demandeurNom(demandeur.nom())
+                    // Auteur déduit du JWT, jamais accepté du client.
+                    .creeParId(support.currentUserId())
+                    .creeParEmail(support.currentUserEmail())
+                    .creeParNom(support.currentUserNom())
+                    .commentaire(payload.getCommentaire())
+                    .montantTotal(support.montantTotal(lignes))
+                    .createdAt(now)
+                    .updatedAt(now)
+                    .build();
+            bon.getHistorique().add(support.historique(ActionWorkflow.CREATION, null));
+            BonEntree saved = repository.save(bon);
+            tracer(TypesEvenement.PIECE_CREEE, ActionAudit.CREATION, null, saved, null);
+            return mapper.toDto(saved);
+        });
     }
 
     public BonEntreeDto modifier(String id, BonEntreePayload payload) {
-        BonEntree bon = loadOrThrow(id);
-        exigerBrouillon(bon, "modifié");
-        habilitation.exigerCreateurOuControleur(bon.getCreeParEmail(), "Cette action");
         if (payload.getType() == null) {
             throw new IllegalArgumentException("Le type d'entrée est obligatoire");
         }
-        String siteNom = referentielSite.valideEtCharge(payload.getSiteDestinationId()).getNom();
-        List<LigneBon> lignes = support.denormaliserLignes(payload.getLignes());
-        DemandeurRef demandeur = support.resoudreDemandeur(payload.getDemandeurId());
+        return executeur.executer(() -> {
+            BonEntree bon = loadOrThrow(id);
+            exigerBrouillon(bon, "modifié");
+            habilitation.exigerCreateurOuControleur(bon.getCreeParEmail(), "Cette action");
+            String siteNom = referentielSite.valideEtCharge(payload.getSiteDestinationId()).getNom();
+            List<LigneBon> lignes = support.denormaliserLignes(payload.getLignes());
+            DemandeurRef demandeur = support.resoudreDemandeur(payload.getDemandeurId());
+            Map<String, Object> avant = piecesBon.instantane(bon);
 
-        bon.setType(payload.getType());
-        bon.setDate(payload.getDate() != null ? payload.getDate() : bon.getDate());
-        bon.setSiteDestinationId(payload.getSiteDestinationId());
-        bon.setSiteDestinationNom(siteNom);
-        bon.setFournisseur(payload.getFournisseur());
-        bon.setReferenceCommande(payload.getReferenceCommande());
-        bon.setLignes(lignes);
-        bon.setDemandeurId(demandeur.id());
-        bon.setDemandeurNom(demandeur.nom());
-        bon.setCommentaire(payload.getCommentaire());
-        bon.setMontantTotal(support.montantTotal(lignes));
-        bon.setUpdatedAt(LocalDateTime.now());
-        bon.getHistorique().add(support.historique(ActionWorkflow.MODIFICATION, null));
-        return mapper.toDto(repository.save(bon));
+            piecesBon.assurer(bon);
+            bon.setType(payload.getType());
+            bon.setDate(payload.getDate() != null ? payload.getDate() : bon.getDate());
+            bon.setSiteDestinationId(payload.getSiteDestinationId());
+            bon.setSiteDestinationNom(siteNom);
+            bon.setFournisseur(payload.getFournisseur());
+            bon.setReferenceCommande(payload.getReferenceCommande());
+            bon.setLignes(lignes);
+            bon.setDemandeurId(demandeur.id());
+            bon.setDemandeurNom(demandeur.nom());
+            bon.setCommentaire(payload.getCommentaire());
+            bon.setMontantTotal(support.montantTotal(lignes));
+            bon.setUpdatedAt(LocalDateTime.now());
+            bon.getHistorique().add(support.historique(ActionWorkflow.MODIFICATION, null));
+            BonEntree saved = repository.save(bon);
+            tracer(TypesEvenement.PIECE_MODIFIEE, ActionAudit.MODIFICATION, avant, saved, null);
+            return mapper.toDto(saved);
+        });
     }
 
-    public void supprimer(String id) {
-        BonEntree bon = loadOrThrow(id);
-        exigerBrouillon(bon, "supprimé");
-        habilitation.exigerCreateurOuControleur(bon.getCreeParEmail(), "Cette action");
-        repository.deleteById(id);
+    /**
+     * Abandon d'un brouillon (lot 1 / 1b, D4) : remplace la suppression. Le bon est conservé en
+     * statut ABANDONNE, avec l'auteur et la date. Mêmes droits que l'ancienne suppression.
+     */
+    public BonEntreeDto abandonner(String id) {
+        return executeur.executer(() -> {
+            BonEntree bon = loadOrThrow(id);
+            exigerBrouillon(bon, "abandonné");
+            habilitation.exigerCreateurOuControleur(bon.getCreeParEmail(), "Cette action");
+            Map<String, Object> avant = piecesBon.instantane(bon);
+            LocalDateTime now = LocalDateTime.now();
+            piecesBon.assurer(bon).setAbandon(Abandon.builder().par(piecesBon.auteurCourant()).le(now).build());
+            bon.setStatut(StatutBon.ABANDONNE);
+            bon.setUpdatedAt(now);
+            bon.getHistorique().add(support.historique(ActionWorkflow.ABANDON, null));
+            BonEntree saved = repository.save(bon);
+            tracer(TypesEvenement.PIECE_ABANDONNEE, ActionAudit.ABANDON, avant, saved, null);
+            return mapper.toDto(saved);
+        });
     }
 
     /** Transition transactionnelle (lot 1 / 1a, D1) : voir {@link #soumettreDansTransaction}. */
@@ -158,12 +199,16 @@ public class BonEntreeService {
             throw new StockConflitException("Seul un bon en BROUILLON peut être soumis (statut actuel : " + bon.getStatut() + ")");
         }
         habilitation.exigerCreateurOuControleur(bon.getCreeParEmail(), "Cette action");
+        Map<String, Object> avant = piecesBon.instantane(bon);
+        LocalDateTime now = LocalDateTime.now();
+        PieceBase piece = piecesBon.assurer(bon);
+        piece.setSoumisePar(piecesBon.auteurCourant());
+        piece.setSoumiseLe(now);
         bon.setStatut(StatutBon.SOUMIS);
-        bon.setUpdatedAt(LocalDateTime.now());
+        bon.setUpdatedAt(now);
         bon.getHistorique().add(support.historique(ActionWorkflow.SOUMISSION, null));
         BonEntree saved = repository.save(bon);
-        diffuserEtCiblerApresCommit(
-                notification("BON_SOUMIS", saved, "Bon d'entrée soumis", "Le bon " + saved.getReference() + " attend validation."));
+        tracer(TypesEvenement.PIECE_SOUMISE, ActionAudit.SOUMISSION, avant, saved, null);
         return mapper.toDto(saved);
     }
 
@@ -172,6 +217,10 @@ public class BonEntreeService {
         return executeur.executer(() -> validerDansTransaction(id, decision));
     }
 
+    /**
+     * Validation : numéro attribué (lot 1 / 1b, D4) puis mouvements, soldes et coût, le tout dans
+     * la transaction du passage en EFFECTIF. Un échec annule aussi le numéro : ni trou ni doublon.
+     */
     private BonEntreeDto validerDansTransaction(String id, DecisionPayload decision) {
         BonEntree bon = loadOrThrow(id);
         if (bon.getStatut() != StatutBon.SOUMIS) {
@@ -180,22 +229,25 @@ public class BonEntreeService {
         // Décision qui engage le stock : super-administrateur seul, comme pour les sorties.
         habilitation.exigerSuperAdmin("Validation");
         String commentaire = decision == null ? null : decision.getCommentaire();
+        Map<String, Object> avant = piecesBon.instantane(bon);
 
-        // Mouvements, soldes et coût dans la même transaction que le passage en EFFECTIF.
+        LocalDateTime now = LocalDateTime.now();
+        PieceBase piece = piecesBon.assurer(bon);
+        bon.setReference(numerotation.numeroter(piece));
+        piece.setValideePar(piecesBon.auteurCourant());
+        piece.setValideeLe(now);
+
+        // Les mouvements recopient la référence : elle est attribuée avant.
         mouvementGenerator.genererPourEntree(bon);
 
         bon.setValidateurId(support.currentUserId());
         bon.setValidateurNom(support.currentUserNom());
         bon.setStatut(StatutBon.EFFECTIF);
-        bon.setUpdatedAt(LocalDateTime.now());
+        bon.setUpdatedAt(now);
         bon.getHistorique().add(support.historique(ActionWorkflow.VALIDATION, commentaire));
         bon.getHistorique().add(support.historique(ActionWorkflow.EFFECTIF, null));
         BonEntree saved = repository.save(bon);
-
-        diffuserApresCommit(notification("BON_VALIDE", saved, "Bon d'entrée validé",
-                "Le bon " + saved.getReference() + " a été validé."));
-        diffuserApresCommit(notification("BON_EFFECTIF", saved, "Stock mis à jour",
-                "Le bon " + saved.getReference() + " est effectif : stock mouvementé."));
+        tracer(TypesEvenement.PIECE_VALIDEE, ActionAudit.VALIDATION, avant, saved, commentaire);
         return mapper.toDto(saved);
     }
 
@@ -214,6 +266,8 @@ public class BonEntreeService {
             throw new IllegalArgumentException("Le commentaire de refus est obligatoire");
         }
         String motif = decision.getCommentaire().trim();
+        Map<String, Object> avant = piecesBon.instantane(bon);
+        piecesBon.assurer(bon);
         bon.setStatut(StatutBon.REFUSE);
         bon.setMotifRefus(motif);
         bon.setValidateurId(support.currentUserId());
@@ -221,9 +275,45 @@ public class BonEntreeService {
         bon.setUpdatedAt(LocalDateTime.now());
         bon.getHistorique().add(support.historique(ActionWorkflow.REFUS, motif));
         BonEntree saved = repository.save(bon);
-        diffuserApresCommit(notification("BON_REFUSE", saved, "Bon d'entrée refusé",
-                "Le bon " + saved.getReference() + " a été refusé : " + motif));
+        tracer(TypesEvenement.PIECE_REFUSEE, ActionAudit.REFUS, avant, saved, motif);
         return mapper.toDto(saved);
+    }
+
+    /**
+     * Annulation d'un bon EFFECTIF (lot 1 / 1b, D4) : remplace la suppression définitive. Le bon
+     * reste en base (statut ANNULE, qui, quand, motif) ; ses mouvements sont contre-passés <b>dans
+     * la même transaction</b> (D5 : les soldes font partie de la pièce, comme à la validation) : la
+     * marchandise reçue est retirée de l'entrepôt par débit gardé, 422 {@code STOCK_INSUFFISANT}
+     * si elle a été consommée, et rien n'est écrit. L'événement {@code PIECE_ANNULEE} ne porte plus
+     * que les effets secondaires (notification, registre). Super-administrateur seul, motif de 10
+     * caractères minimum (400), autre statut 409.
+     */
+    public BonEntreeDto annuler(String id, String motif) {
+        String motifNet = PiecesBon.exigerMotifAnnulation(motif);
+        return executeur.executer(() -> {
+            BonEntree bon = loadOrThrow(id);
+            if (bon.getStatut() != StatutBon.EFFECTIF) {
+                throw new StockConflitException("Seul un bon EFFECTIF peut être annulé (statut actuel : " + bon.getStatut() + ")");
+            }
+            habilitation.exigerSuperAdmin("Annulation");
+            contrePassement.verifierRetraitPossible(bon.getId());
+            Map<String, Object> avant = piecesBon.instantane(bon);
+            LocalDateTime now = LocalDateTime.now();
+            piecesBon.assurer(bon).setAnnulation(piecesBon.annulation(motifNet, now));
+            bon.setStatut(StatutBon.ANNULE);
+            bon.setUpdatedAt(now);
+            bon.getHistorique().add(support.historique(ActionWorkflow.ANNULATION, motifNet));
+            BonEntree saved = repository.save(bon);
+            contrePassement.contrePasserBon(saved.getId(), motifNet, piecesBon.auteurCourant().getNom());
+            tracer(TypesEvenement.PIECE_ANNULEE, ActionAudit.ANNULATION, avant, saved, motifNet);
+            return mapper.toDto(saved);
+        });
+    }
+
+    /** Audit + événement de la transition, dans la transaction courante. */
+    private void tracer(String evenement, ActionAudit action, Map<String, Object> avant, BonEntree apres,
+                        String motif) {
+        traceur.tracer(evenement, action, avant, apres, apres.getStatut().name(), motif, null);
     }
 
     private BonEntree loadOrThrow(String id) {
@@ -245,26 +335,5 @@ public class BonEntreeService {
         } else if (dateFin != null) {
             query.addCriteria(Criteria.where("date").lte(dateFin));
         }
-    }
-
-    private NotificationStockDto notification(String type, BonEntree bon, String titre, String message) {
-        return NotificationStockDto.builder()
-                .type(type)
-                .sens("ENTREE")
-                .bonId(bon.getId())
-                .reference(bon.getReference())
-                .titre(titre)
-                .message(message)
-                .dateEmission(LocalDateTime.now().toString())
-                .build();
-    }
-
-    /** Notification WebSocket envoyée seulement si la transaction est validée (jamais sur annulation). */
-    private void diffuserApresCommit(NotificationStockDto notification) {
-        ExecuteurTransactionnel.apresCommit(() -> notificationService.diffuser(notification));
-    }
-
-    private void diffuserEtCiblerApresCommit(NotificationStockDto notification) {
-        ExecuteurTransactionnel.apresCommit(() -> notificationService.diffuserEtCiblerResponsableAchats(notification));
     }
 }

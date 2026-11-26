@@ -5,11 +5,15 @@ import com.example.Pointage_Cleanic.Dto.stockv2.LigneInventaireDto;
 import com.example.Pointage_Cleanic.entities.stockv2.Inventaire;
 import com.example.Pointage_Cleanic.entities.stockv2.LigneInventaire;
 import org.mapstruct.Mapper;
+import org.mapstruct.Mapping;
 
 import java.util.List;
 
 @Mapper
 public interface InventaireMapper {
+    @Mapping(target = "libelleNumero", expression = "java(entity.libelleNumero())")
+    @Mapping(target = "annulation", expression = "java(entity.getPiece() == null ? null : entity.getPiece().getAnnulation())")
+    @Mapping(target = "abandon", expression = "java(entity.getPiece() == null ? null : entity.getPiece().getAbandon())")
     InventaireDto toDto(Inventaire entity);
     LigneInventaireDto toDto(LigneInventaire ligne);
     List<LigneInventaireDto> toLigneDtos(List<LigneInventaire> lignes);

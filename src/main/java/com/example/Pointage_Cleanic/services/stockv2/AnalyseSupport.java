@@ -54,6 +54,7 @@ public class AnalyseSupport {
         if (typeSortie != null) {
             query.addCriteria(Criteria.where("categorieSortie").is(typeSortie));
         }
+        MouvementsEffectifs.exclureContrePasses(query); // lot 1 / 1b : pièces annulées
         List<MouvementStock> mouvements = mongoTemplate.find(query, MouvementStock.class);
         Map<String, ProduitStock> produits = produitsByIds(mouvements);
         if (notBlank(categorieId)) {

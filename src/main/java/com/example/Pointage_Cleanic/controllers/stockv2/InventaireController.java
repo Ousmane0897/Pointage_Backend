@@ -8,12 +8,10 @@ import com.example.Pointage_Cleanic.Dto.stockv2.InventairePlanifPayload;
 import com.example.Pointage_Cleanic.Enum.stockv2.StatutInventaire;
 import com.example.Pointage_Cleanic.Dto.stockv2.MotifPayload;
 import com.example.Pointage_Cleanic.services.stockv2.InventaireService;
-import com.example.Pointage_Cleanic.services.stockv2.SuppressionDefinitiveService;
 import com.example.Pointage_Cleanic.util.PageResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -32,7 +30,6 @@ import java.time.LocalDate;
 public class InventaireController {
 
     private final InventaireService service;
-    private final SuppressionDefinitiveService suppressionService;
 
     @GetMapping
     public ResponseEntity<PageResponse<InventaireDto>> list(
@@ -62,22 +59,20 @@ public class InventaireController {
         return ResponseEntity.ok(service.update(id, payload));
     }
 
-    @DeleteMapping("/{id}")
-    public ResponseEntity<Void> delete(@PathVariable String id) {
-        service.delete(id);
-        return ResponseEntity.noContent().build();
+    /** Abandon d'un brouillon (lot 1 / 1b, D4) : remplace l'ancien DELETE, l'inventaire est conservé. */
+    @PostMapping("/{id}/abandonner")
+    public InventaireDto abandonner(@PathVariable String id) {
+        return service.abandonner(id);
     }
 
     /**
-     * Suppression d'un inventaire quel que soit son statut, <b>super-administrateur uniquement</b> :
-     * les écarts appliqués à la clôture sont contre-passés et l'opération est journalisée.
-     * POST (et non DELETE) car un corps de requête est requis (motif).
+     * Annulation d'un inventaire clôturé (lot 1 / 1b, D4) : remplace la suppression définitive.
+     * L'inventaire est conservé (statut ANNULE, motif tracé) et ses ajustements sont contre-passés.
+     * Super-administrateur, motif de 10 caractères minimum.
      */
-    @PostMapping("/{id}/suppression-definitive")
-    public ResponseEntity<Void> supprimerDefinitivement(@PathVariable String id,
-                                                        @RequestBody(required = false) MotifPayload payload) {
-        suppressionService.supprimerInventaire(id, payload == null ? null : payload.getMotif());
-        return ResponseEntity.noContent().build();
+    @PostMapping("/{id}/annuler")
+    public InventaireDto annuler(@PathVariable String id, @RequestBody(required = false) MotifPayload payload) {
+        return service.annuler(id, payload == null ? null : payload.getMotif());
     }
 
     @PostMapping("/{id}/comptage")

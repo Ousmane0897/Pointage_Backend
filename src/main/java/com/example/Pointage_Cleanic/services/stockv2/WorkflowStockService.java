@@ -42,7 +42,7 @@ public class WorkflowStockService {
     }
 
     private boolean correspond(BonWorkflowDto c, String filtre) {
-        return contient(c.getReference(), filtre)
+        return contient(c.getLibelleNumero(), filtre)
                 || contient(c.getSiteNom(), filtre)
                 || contient(c.getDestinataireNom(), filtre)
                 || contient(c.getLibelleType(), filtre)
@@ -57,6 +57,7 @@ public class WorkflowStockService {
         return BonWorkflowDto.builder()
                 .id(b.getId())
                 .reference(b.getReference())
+                .libelleNumero(b.libelleNumero())
                 .sens(SensBon.ENTREE)
                 .statut(b.getStatut())
                 .date(b.getDate())
@@ -74,6 +75,7 @@ public class WorkflowStockService {
         return BonWorkflowDto.builder()
                 .id(b.getId())
                 .reference(b.getReference())
+                .libelleNumero(b.libelleNumero())
                 .sens(SensBon.SORTIE)
                 .statut(b.getStatut())
                 .date(b.getDate())

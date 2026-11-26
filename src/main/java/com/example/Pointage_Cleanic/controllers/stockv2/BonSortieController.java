@@ -9,13 +9,11 @@ import com.example.Pointage_Cleanic.Enum.stockv2.StatutBon;
 import com.example.Pointage_Cleanic.Enum.stockv2.TypeSortie;
 import com.example.Pointage_Cleanic.Dto.stockv2.MotifPayload;
 import com.example.Pointage_Cleanic.services.stockv2.BonSortieService;
-import com.example.Pointage_Cleanic.services.stockv2.SuppressionDefinitiveService;
 import com.example.Pointage_Cleanic.util.PageResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -34,7 +32,6 @@ import java.time.LocalDate;
 public class BonSortieController {
 
     private final BonSortieService service;
-    private final SuppressionDefinitiveService suppressionService;
 
     @GetMapping
     public ResponseEntity<PageResponse<BonSortieDto>> list(
@@ -64,22 +61,20 @@ public class BonSortieController {
         return ResponseEntity.ok(service.modifier(id, payload));
     }
 
-    @DeleteMapping("/{id}")
-    public ResponseEntity<Void> supprimer(@PathVariable String id) {
-        service.supprimer(id);
-        return ResponseEntity.noContent().build();
+    /** Abandon d'un brouillon (lot 1 / 1b, D4) : remplace l'ancien DELETE, le bon est conservé. */
+    @PostMapping("/{id}/abandonner")
+    public BonSortieDto abandonner(@PathVariable String id) {
+        return service.abandonner(id);
     }
 
     /**
-     * Suppression d'un bon quel que soit son statut, <b>super-administrateur uniquement</b> : les
-     * mouvements de sortie générés à la validation sont contre-passés (stock recrédité) et
-     * l'opération est journalisée.
+     * Annulation d'un bon EFFECTIF (lot 1 / 1b, D4) : remplace la suppression définitive. Le bon
+     * est conservé (statut ANNULE, motif tracé) et ses mouvements sont contre-passés par des
+     * mouvements inverses. Super-administrateur, motif de 10 caractères minimum.
      */
-    @PostMapping("/{id}/suppression-definitive")
-    public ResponseEntity<Void> supprimerDefinitivement(@PathVariable String id,
-                                                        @RequestBody(required = false) MotifPayload payload) {
-        suppressionService.supprimerBonSortie(id, payload == null ? null : payload.getMotif());
-        return ResponseEntity.noContent().build();
+    @PostMapping("/{id}/annuler")
+    public BonSortieDto annuler(@PathVariable String id, @RequestBody(required = false) MotifPayload payload) {
+        return service.annuler(id, payload == null ? null : payload.getMotif());
     }
 
     @PostMapping("/{id}/soumettre")

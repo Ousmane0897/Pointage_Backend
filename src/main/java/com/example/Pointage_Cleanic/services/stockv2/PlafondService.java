@@ -172,6 +172,7 @@ public class PlafondService {
         if (siteId != null && !siteId.isBlank()) {
             query.addCriteria(Criteria.where("siteSourceId").is(siteId));
         }
+        MouvementsEffectifs.exclureAnnulations(query); // lot 1 / 1b : pièces annulées
         return mongoTemplate.find(query, MouvementStock.class);
     }
 

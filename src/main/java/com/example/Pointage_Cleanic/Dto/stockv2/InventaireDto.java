@@ -23,7 +23,14 @@ import java.util.List;
 public class InventaireDto {
 
     private String id;
+    /** Nul en brouillon depuis le lot 1 / 1b (D4) : le numéro est attribué à la clôture. */
     private String reference;
+    /** Numéro à afficher : la référence, sinon {@code BROUILLON-<6 derniers caractères de l'id>}. */
+    private String libelleNumero;
+    /** Annulation d'un inventaire clôturé (qui, quand, motif) ; nul sinon. */
+    private com.example.Pointage_Cleanic.entities.pieces.Annulation annulation;
+    /** Abandon d'un brouillon (qui, quand) ; nul sinon. */
+    private com.example.Pointage_Cleanic.entities.pieces.Abandon abandon;
     private String libelle;
 
     @JsonFormat(pattern = "yyyy-MM-dd")

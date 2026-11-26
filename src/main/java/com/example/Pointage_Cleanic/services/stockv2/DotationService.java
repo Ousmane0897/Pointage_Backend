@@ -118,6 +118,7 @@ public class DotationService {
         if (produitId != null && !produitId.isBlank()) {
             query.addCriteria(Criteria.where("produitId").is(produitId));
         }
+        MouvementsEffectifs.exclureAnnulations(query); // lot 1 / 1b : pièces annulées
         return mongoTemplate.find(query, MouvementStock.class);
     }
 

@@ -4,7 +4,6 @@ import com.example.Pointage_Cleanic.exception.ConflitConcurrentException;
 import com.mongodb.MongoException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -25,8 +24,8 @@ import java.util.function.Supplier;
  * <p>Conventions :
  * <ul>
  *   <li>le traitement ne fait <b>aucun appel externe</b> (SMTP, SMS, WebSocket, Google) : il est
- *       rejouable et peut être annulé ; ces appels passent par {@link #apresCommit(Runnable)}
- *       en attendant l'outbox (1b) ;</li>
+ *       rejouable et peut être annulé ; ces appels partent des consommateurs d'événements de
+ *       l'outbox ({@code services.evenements}, lot 1 / 1b) ;</li>
  *   <li>appelé alors qu'une transaction est déjà ouverte, il s'y joint sans rejouer : c'est la
  *       transaction englobante qui décide ;</li>
  *   <li>l'étiquette {@code UnknownTransactionCommitResult} n'est <b>pas</b> rejouée : le commit
@@ -71,28 +70,6 @@ public class ExecuteurTransactionnel {
         executer(() -> {
             traitement.run();
             return null;
-        });
-    }
-
-    /**
-     * Exécute {@code action} après la validation de la transaction courante, et jamais si elle
-     * est annulée. Hors transaction, l'action est exécutée tout de suite. Une erreur de l'action
-     * est journalisée sans être propagée : la transaction est déjà validée.
-     */
-    public static void apresCommit(Runnable action) {
-        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
-            action.run();
-            return;
-        }
-        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-            @Override
-            public void afterCommit() {
-                try {
-                    action.run();
-                } catch (RuntimeException e) {
-                    log.warn("Action après validation en échec : {}", e.getMessage());
-                }
-            }
         });
     }
 

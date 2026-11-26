@@ -130,6 +130,7 @@ public class ConsommationStockService {
         if (produitId != null && !produitId.isBlank()) {
             query.addCriteria(Criteria.where("produitId").is(produitId));
         }
+        MouvementsEffectifs.exclureAnnulations(query); // lot 1 / 1b : pièces annulées
         List<MouvementStock> mouvements = mongoTemplate.find(query, MouvementStock.class);
 
         Map<String, ProduitStock> produits = produits(mouvements);

@@ -81,6 +81,7 @@ public class CategorisationStockService {
         } else if (dateFin != null) {
             query.addCriteria(Criteria.where("date").lte(dateFin));
         }
+        MouvementsEffectifs.exclureContrePasses(query); // lot 1 / 1b : pièces annulées
         return mongoTemplate.find(query, MouvementStock.class);
     }
 

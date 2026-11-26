@@ -7,6 +7,7 @@ import com.example.Pointage_Cleanic.Dto.stockv2.BonSortiePayload;
 import com.example.Pointage_Cleanic.Dto.stockv2.DecisionPayload;
 import com.example.Pointage_Cleanic.Dto.stockv2.DestinatairePayload;
 import com.example.Pointage_Cleanic.Dto.stockv2.LignePayload;
+import com.example.Pointage_Cleanic.Enum.audit.ActionAudit;
 import com.example.Pointage_Cleanic.Enum.stockv2.ActionWorkflow;
 import com.example.Pointage_Cleanic.Enum.stockv2.StatutBon;
 import com.example.Pointage_Cleanic.Enum.stockv2.TypeDestinataire;
@@ -17,6 +18,9 @@ import com.example.Pointage_Cleanic.Enum.stockv2.TypeSortie;
 import com.example.Pointage_Cleanic.Enum.stockv2.UniteStock;
 import com.example.Pointage_Cleanic.config.AuthentificationTest;
 import com.example.Pointage_Cleanic.config.MongoTestContainer;
+import com.example.Pointage_Cleanic.entities.audit.EntreeAudit;
+import com.example.Pointage_Cleanic.entities.evenements.EvenementDomaine;
+import com.example.Pointage_Cleanic.entities.pieces.CompteurPiece;
 import com.example.Pointage_Cleanic.entities.stockv2.BonEntree;
 import com.example.Pointage_Cleanic.entities.stockv2.BonSortie;
 import com.example.Pointage_Cleanic.entities.stockv2.MouvementStock;
@@ -33,6 +37,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
 
 import java.util.List;
@@ -66,6 +71,9 @@ class BonWorkflowServiceIT extends MongoTestContainer {
         mongoTemplate.remove(new Query(), StockParSite.class);
         mongoTemplate.remove(new Query(), ProduitStock.class);
         mongoTemplate.remove(new Query(), SiteClient.class);
+        mongoTemplate.remove(new Query(), CompteurPiece.class);
+        mongoTemplate.remove(new Query(), EvenementDomaine.class);
+        mongoTemplate.remove(new Query(), EntreeAudit.class);
 
         mongoTemplate.save(SiteClient.builder().id(SITE_A).code("A").nom("Dakar Plateau").ville("Dakar").actif(true).build());
         produitId = produitRepository.save(ProduitStock.builder()
@@ -103,7 +111,9 @@ class BonWorkflowServiceIT extends MongoTestContainer {
     @Test
     void cycle_complet_bon_entree_genere_mouvement_et_credite_stock() {
         BonEntreeDto cree = bonEntreeService.creer(entreePayload(20));
-        assertThat(cree.getReference()).startsWith("BE-");
+        // Lot 1 / 1b (D4) : pas de numéro en brouillon, un libellé provisoire.
+        assertThat(cree.getReference()).isNull();
+        assertThat(cree.getLibelleNumero()).isEqualTo("BROUILLON-" + cree.getId().substring(cree.getId().length() - 6));
         assertThat(cree.getStatut()).isEqualTo(StatutBon.BROUILLON);
         assertThat(cree.getMontantTotal()).isEqualTo(20_000L);
         assertThat(cree.getLignes().get(0).getProduitCode()).isEqualTo("P1");
@@ -112,6 +122,8 @@ class BonWorkflowServiceIT extends MongoTestContainer {
         BonEntreeDto valide = bonEntreeService.valider(cree.getId(), null);
 
         assertThat(valide.getStatut()).isEqualTo(StatutBon.EFFECTIF);
+        assertThat(valide.getReference()).matches("BE-\\d{4}-0001");
+        assertThat(valide.getLibelleNumero()).isEqualTo(valide.getReference());
         assertThat(balanceService.quantite(produitId, ENTREPOT)).isEqualTo(20.0);
 
         List<MouvementStock> mvts = mouvementRepository.findByProduitIdOrderByDateDesc(produitId);
@@ -129,11 +141,12 @@ class BonWorkflowServiceIT extends MongoTestContainer {
         bonEntreeService.valider(entree.getId(), null);
 
         BonSortieDto sortie = bonSortieService.creer(sortiePayload(8));
-        assertThat(sortie.getReference()).startsWith("BS-");
+        assertThat(sortie.getReference()).isNull();
         bonSortieService.soumettre(sortie.getId());
         BonSortieDto valide = bonSortieService.valider(sortie.getId(), null);
 
         assertThat(valide.getStatut()).isEqualTo(StatutBon.EFFECTIF);
+        assertThat(valide.getReference()).matches("BS-\\d{4}-0001");
         assertThat(balanceService.quantite(produitId, ENTREPOT)).isEqualTo(12.0);
     }
 
@@ -163,8 +176,11 @@ class BonWorkflowServiceIT extends MongoTestContainer {
         assertThatThrownBy(() -> bonSortieService.valider(sortie.getId(), null))
                 .isInstanceOf(StockOperationException.class);
 
-        // Rien validé : statut inchangé, aucun mouvement, solde nul.
+        // Rien validé : statut inchangé, aucun mouvement, solde nul, aucun numéro consommé.
         assertThat(bonSortieService.getById(sortie.getId()).getStatut()).isEqualTo(StatutBon.SOUMIS);
+        assertThat(bonSortieService.getById(sortie.getId()).getReference()).isNull();
+        assertThat(mongoTemplate.count(new Query(), CompteurPiece.class)).isZero();
+        assertThat(evenements("PIECE_VALIDEE")).isZero();
         assertThat(mouvementRepository.findByProduitIdOrderByDateDesc(produitId)).isEmpty();
         assertThat(balanceService.quantite(produitId, ENTREPOT)).isZero();
     }
@@ -256,16 +272,16 @@ class BonWorkflowServiceIT extends MongoTestContainer {
         assertThat(balanceService.quantite(produitId, ENTREPOT)).isEqualTo(20.0);
     }
 
-    /** Modifier, supprimer et soumettre restent au créateur (ou au contrôleur / super-admin). */
+    /** Modifier, abandonner et soumettre restent au créateur (ou au contrôleur / super-admin). */
     @Test
-    void brouillon_d_un_autre_utilisateur_403_en_modification_suppression_et_soumission() {
+    void brouillon_d_un_autre_utilisateur_403_en_modification_abandon_et_soumission() {
         BonSortieDto sortie = bonSortieService.creer(sortiePayload(3));
 
         AuthentificationTest.connecter(mongoTemplate, "tiers@cleanic.sn", "MAGASINIER");
 
         assertThatThrownBy(() -> bonSortieService.modifier(sortie.getId(), sortiePayload(4)))
                 .isInstanceOf(StockAccesRefuseException.class);
-        assertThatThrownBy(() -> bonSortieService.supprimer(sortie.getId()))
+        assertThatThrownBy(() -> bonSortieService.abandonner(sortie.getId()))
                 .isInstanceOf(StockAccesRefuseException.class);
         assertThatThrownBy(() -> bonSortieService.soumettre(sortie.getId()))
                 .isInstanceOf(StockAccesRefuseException.class);
@@ -313,8 +329,83 @@ class BonWorkflowServiceIT extends MongoTestContainer {
         bonEntreeService.soumettre(cree.getId());
         assertThatThrownBy(() -> bonEntreeService.modifier(cree.getId(), entreePayload(5)))
                 .isInstanceOf(StockConflitException.class);
-        // supprimer après soumission
-        assertThatThrownBy(() -> bonEntreeService.supprimer(cree.getId()))
+        // abandonner après soumission
+        assertThatThrownBy(() -> bonEntreeService.abandonner(cree.getId()))
                 .isInstanceOf(StockConflitException.class);
+    }
+
+    // --- Lot 1 / 1b : abandon, audit, événements ---------------------------------
+
+    @Test
+    void abandon_d_un_brouillon_le_conserve_trace_et_definitif() {
+        BonSortieDto sortie = bonSortieService.creer(sortiePayload(3));
+
+        BonSortieDto abandonne = bonSortieService.abandonner(sortie.getId());
+
+        assertThat(abandonne.getStatut()).isEqualTo(StatutBon.ABANDONNE);
+        assertThat(abandonne.getAbandon()).isNotNull();
+        assertThat(abandonne.getAbandon().getLe()).isNotNull();
+        assertThat(abandonne.getAbandon().getPar().getNom()).isNotBlank();
+        assertThat(abandonne.getHistorique()).anyMatch(h -> h.getAction() == ActionWorkflow.ABANDON);
+        // Conservé en base, jamais supprimé.
+        assertThat(mongoTemplate.count(new Query(), BonSortie.class)).isEqualTo(1);
+        // Rejouer, soumettre ou modifier un bon abandonné : 409.
+        assertThatThrownBy(() -> bonSortieService.abandonner(sortie.getId())).isInstanceOf(StockConflitException.class);
+        assertThatThrownBy(() -> bonSortieService.soumettre(sortie.getId())).isInstanceOf(StockConflitException.class);
+        assertThatThrownBy(() -> bonSortieService.modifier(sortie.getId(), sortiePayload(2)))
+                .isInstanceOf(StockConflitException.class);
+    }
+
+    @Test
+    void chaque_transition_a_sa_ligne_d_audit_et_son_evenement() {
+        BonEntreeDto cree = bonEntreeService.creer(entreePayload(10));
+        bonEntreeService.modifier(cree.getId(), entreePayload(12));
+        bonEntreeService.soumettre(cree.getId());
+        BonEntreeDto valide = bonEntreeService.valider(cree.getId(), null);
+
+        List<EntreeAudit> audit = mongoTemplate.find(Query.query(Criteria.where("objetId").is(cree.getId())),
+                EntreeAudit.class);
+        assertThat(audit).extracting(EntreeAudit::getAction).containsExactlyInAnyOrder(
+                ActionAudit.CREATION, ActionAudit.MODIFICATION, ActionAudit.SOUMISSION, ActionAudit.VALIDATION);
+        assertThat(audit).allSatisfy(a -> {
+            assertThat(a.getObjetType()).isEqualTo("BonEntree");
+            assertThat(a.getCompteId()).isNotBlank();
+        });
+        assertThat(audit).filteredOn(a -> a.getAction() == ActionAudit.VALIDATION).singleElement()
+                .satisfies(a -> {
+                    assertThat(a.getNumero()).isEqualTo(valide.getReference());
+                    assertThat(a.getChangements()).anyMatch(c -> c.getChamp().equals("statut")
+                            && "SOUMIS".equals(c.getAvant()) && "EFFECTIF".equals(c.getApres()));
+                    assertThat(a.getChangements()).anyMatch(c -> c.getChamp().equals("reference"));
+                });
+
+        List<EvenementDomaine> evts = mongoTemplate.find(Query.query(Criteria.where("agregatId").is(cree.getId())),
+                EvenementDomaine.class);
+        assertThat(evts).extracting(EvenementDomaine::getType).containsExactlyInAnyOrder(
+                "PIECE_CREEE", "PIECE_MODIFIEE", "PIECE_SOUMISE", "PIECE_VALIDEE");
+        assertThat(evts).allSatisfy(e -> assertThat(e.getAgregatType()).isEqualTo("BE"));
+        assertThat(evts).filteredOn(e -> e.getType().equals("PIECE_VALIDEE")).singleElement()
+                .satisfies(e -> assertThat(e.getPayload()).containsEntry("numero", valide.getReference()));
+    }
+
+    @Test
+    void un_ancien_brouillon_garde_sa_reference_a_la_validation() {
+        // Bon antérieur à 1b : référence prise à la création, pas de bloc pièce.
+        BonEntreeDto cree = bonEntreeService.creer(entreePayload(5));
+        mongoTemplate.updateFirst(Query.query(Criteria.where("_id").is(cree.getId())),
+                new org.springframework.data.mongodb.core.query.Update().set("reference", "BE-20260617-001")
+                        .unset("piece"), BonEntree.class);
+
+        bonEntreeService.soumettre(cree.getId());
+        BonEntreeDto valide = bonEntreeService.valider(cree.getId(), null);
+
+        assertThat(valide.getReference()).isEqualTo("BE-20260617-001");
+        assertThat(mongoTemplate.count(new Query(), CompteurPiece.class)).isZero();
+        assertThat(mouvementRepository.findByProduitIdOrderByDateDesc(produitId).get(0).getBonReference())
+                .isEqualTo("BE-20260617-001");
+    }
+
+    private long evenements(String type) {
+        return mongoTemplate.count(Query.query(Criteria.where("type").is(type)), EvenementDomaine.class);
     }
 }

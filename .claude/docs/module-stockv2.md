@@ -66,11 +66,11 @@ Solde consolidé d'un produit = somme des `StockParSite` sur tous les sites (buc
 Workflow `BROUILLON → COMPTAGE → VALIDATION → CLOTURE` :
 - `GET ?page&size&q&statut&siteId&dateDebut&dateFin`, `GET /{id}`.
 - `POST` (planif) → `BROUILLON`. Construit `lignes` selon `perimetre` (TOUS = tous produits ; CATEGORIE = `categorieId` ; SELECTION = `produitIds`). `qteTheorique` = 0 à ce stade.
-- `PUT /{id}` / `DELETE /{id}` : **uniquement si BROUILLON** sinon **409**.
+- `PUT /{id}` : **uniquement si BROUILLON** sinon **409**. `DELETE /{id}` supprimé en 1b : `POST /{id}/abandonner` (BROUILLON → ABANDONNE, conservé) ; `POST /{id}/annuler {motif}` (CLOTURE → ANNULE, super-admin, ajustements contre-passés dans la transaction).
 - `POST /{id}/comptage` : `BROUILLON→COMPTAGE`, **fige** `qteTheorique` = stock système courant (par site si `siteId`, sinon consolidé).
 - `PUT /{id}/comptage` (payload `{lignes:[{produitId, qtePhysique, justification?}]}`) : enregistre, recalcule `ecart = qtePhysique − qteTheorique` ; reste COMPTAGE.
 - `POST /{id}/validation` : `COMPTAGE→VALIDATION`, **422** si une ligne `|ecart| > seuilEcartJustification` sans justification.
-- `POST /{id}/cloture` : `VALIDATION→CLOTURE`, applique les écarts via mouvements `AJUSTEMENT` (compensation manuelle), `dateCloture` renseignée.
+- `POST /{id}/cloture` : `VALIDATION→CLOTURE`, applique les écarts via mouvements `AJUSTEMENT` **en transaction** (1b ; compensation retirée), attribue le numéro `INV-2026-0001`, `dateCloture` renseignée.
 
 ### 6. Synthèse mensuelle — `/api/stock/synthese-mensuelle` (`SyntheseMensuelleController`)
 - `GET ?mois=yyyy-MM&siteId&categorieId` → `SyntheseMensuelleDto`. **Calcul depuis l'historique des mouvements** : `stockInitial` = somme des impacts strictement avant le 1er du mois ; `entrees`/`sorties` = impacts du mois ; `stockFinal = initial + entrées − sorties` ; `valeurFinale = stockFinal × prixUnitaire`. En consolidé (`siteId` absent), un TRANSFERT est neutre.
@@ -164,7 +164,7 @@ Le `MouvementStock` 7.3 reste l'**effet instantané** en stock. Un `Bon` (entré
 - `GET /{id}`.
 - `POST` (`BonEntreePayload`) → **201**, statut `BROUILLON`, `reference` attribuée, `historique[CREATION]`, **mail de notification** (voir « Notification e-mail à la création » ci-dessous).
 - `PUT /{id}` → **409** si statut ≠ BROUILLON ; sinon re-dénormalise + `historique[MODIFICATION]`.
-- `DELETE /{id}` → **204** ; **409** si ≠ BROUILLON.
+- ~~`DELETE /{id}`~~ supprimé en 1b → `POST /{id}/abandonner` (BROUILLON seulement, sinon **409**), bon conservé en `ABANDONNE`. `POST /{id}/annuler {motif ≥ 10}` : EFFECTIF seulement (409 sinon), super-admin ; mouvements inverses et soldes dans la transaction d'annulation ; bon d'entrée consommé → **422** `STOCK_INSUFFISANT`, rien n'est écrit. `reference` nulle en brouillon (numéro à la validation), `libelleNumero`, `annulation`, `abandon` dans le DTO.
 - `POST /{id}/soumettre` → `BROUILLON→SOUMIS` (sinon **409**), `historique[SOUMISSION]`, WS `BON_SOUMIS`.
 - `POST /{id}/valider` (body `{}` ou `{commentaire?}`) → `SOUMIS→VALIDE→EFFECTIF` (sinon **409**) : **génère les mouvements ENTREE** créditant le site destination, `historique[VALIDATION]`+`[EFFECTIF]`, WS `BON_VALIDE` puis `BON_EFFECTIF`.
 - `POST /{id}/refuser` (body `{commentaire}` **requis** sinon **400**) → `SOUMIS→REFUSE`, `motifRefus`, `historique[REFUS]`, WS `BON_REFUSE`.
@@ -246,7 +246,7 @@ Déclenchée **uniquement** par le `POST` des deux contrôleurs de bons (jamais 
 
 ## Transactionnalité 7.4 (transaction MongoDB depuis le lot 1 / 1a)
 
-`soumettre` / `valider` / `refuser` / `reprendre` passent par `ExecuteurTransactionnel`. À la validation, `MouvementBonGenerator` (qui **exige** une transaction) génère mouvements, soldes, coût courant (CUMP / dernier prix), historique de coût et références dans la **même transaction** que le passage du bon en EFFECTIF : tout ou rien, y compris en cas d'arrêt du processus. Plus de compensation manuelle. Sortie : pré-vérification cumulée par produit (message), puis **débit gardé** `StockBalanceService.debiter` (`findAndModify` filtré par `quantite >= q`) : deux validations simultanées ne peuvent pas passer sous zéro. La perdante d'une course est rejouée, relit le bon déjà EFFECTIF et reçoit le 409 de transition. Les notifications WebSocket partent **après le commit**. Tests : `ValidationConcurrenteIT`, `SoldeConcurrentIT`, `ValidationEchecMiParcoursIT`.
+`soumettre` / `valider` / `refuser` / `reprendre` passent par `ExecuteurTransactionnel`. À la validation, `MouvementBonGenerator` (qui **exige** une transaction) génère mouvements, soldes, coût courant (CUMP / dernier prix), historique de coût et références dans la **même transaction** que le passage du bon en EFFECTIF : tout ou rien, y compris en cas d'arrêt du processus. Plus de compensation manuelle. Sortie : pré-vérification cumulée par produit (message), puis **débit gardé** `StockBalanceService.debiter` (`findAndModify` filtré par `quantite >= q`) : deux validations simultanées ne peuvent pas passer sous zéro. La perdante d'une course est rejouée, relit le bon déjà EFFECTIF et reçoit le 409 de transition. Le numéro de pièce est attribué dans la même transaction (1b). Les notifications WebSocket partent du consommateur d'événements (1b), jamais sur annulation de transaction. Tests : `ValidationConcurrenteIT`, `SoldeConcurrentIT`, `ValidationEchecMiParcoursIT`.
 
 ## Tests 7.4
 

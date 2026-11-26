@@ -67,7 +67,7 @@ public class BonMailNotificationService {
             return;
         }
         Map<String, String> lignes = new LinkedHashMap<>();
-        lignes.put("Référence", valeur(bon.getReference()));
+        lignes.put("Référence", valeur(bon.libelleNumero()));
         lignes.put("Type", libelle(bon.getType() == null ? null : bon.getType().name()));
         lignes.put("Date", date(bon.getDate()));
         lignes.put("Site source", valeur(bon.getSiteSourceNom())
@@ -77,7 +77,7 @@ public class BonMailNotificationService {
         lignes.put("Montant total", montant(bon.getMontantTotal()));
         lignes.put("Créé par", auteur(bon.getHistorique()));
 
-        envoyer(SensBon.SORTIE, bon.getId(), bon.getReference(), lignes);
+        envoyer(SensBon.SORTIE, bon.getId(), bon.libelleNumero(), lignes);
     }
 
     public void notifierCreationEntree(BonEntree bon) {
@@ -85,7 +85,7 @@ public class BonMailNotificationService {
             return;
         }
         Map<String, String> lignes = new LinkedHashMap<>();
-        lignes.put("Référence", valeur(bon.getReference()));
+        lignes.put("Référence", valeur(bon.libelleNumero()));
         lignes.put("Type", libelle(bon.getType() == null ? null : bon.getType().name()));
         lignes.put("Date", date(bon.getDate()));
         lignes.put("Site destination", valeur(bon.getSiteDestinationNom()));
@@ -94,7 +94,7 @@ public class BonMailNotificationService {
         lignes.put("Montant total", montant(bon.getMontantTotal()));
         lignes.put("Créé par", auteur(bon.getHistorique()));
 
-        envoyer(SensBon.ENTREE, bon.getId(), bon.getReference(), lignes);
+        envoyer(SensBon.ENTREE, bon.getId(), bon.libelleNumero(), lignes);
     }
 
     // ------------------------------------------------------------------
