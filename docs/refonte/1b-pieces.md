@@ -1,6 +1,6 @@
 # Lot 1 — Sous-branche 1b : pièces, outbox, audit, registre
 
-Branche `refonte/v3-1b-pieces` (depuis `refonte/v3`), backend. Conception : `docs/refonte/lot-1-conception.md`, décisions D4, D5, D6 (journal d'audit seulement ; le journal des accès est en 1g), §4 « 1b ». Lignes F002, F003, F004 (base de F009).
+Branche `refonte/v3-1b-pieces` (depuis `refonte/v3`), backend et front. **Fusionnée dans `refonte/v3` le 26/11** (`--no-ff`, voir §13). Conception : `docs/refonte/lot-1-conception.md`, décisions D4, D5, D6 (journal d'audit seulement ; le journal des accès est en 1g), §4 « 1b ». Lignes F002, F003, F004 (base de F009).
 
 ### Résumé
 
@@ -8,10 +8,10 @@ Branche `refonte/v3-1b-pieces` (depuis `refonte/v3`), backend. Conception : `doc
 - **Outbox** (D5) : `evenements_domaine` écrit avec la pièce, dispatcher toutes les 2 s, consommateurs idempotents, nouvel essai exponentiel, `EN_ERREUR` après 10 tentatives, supervision super-admin.
 - **Journal d'audit** (D6) : `journal_audit`, une ligne par transition, écrite dans la transaction, différentiel champ par champ, champs `@Sensible` masqués.
 - **Registre des pièces** : `registre_pieces`, alimenté par événement uniquement.
-- **Bons de stock et inventaires portés** : numéro à la validation (bons) ou à la clôture (inventaires), plus de suppression. Un brouillon s'**abandonne**, une pièce validée s'**annule** (motif tracé) ; les mouvements inverses sont produits par événement.
+- **Bons de stock et inventaires portés** : numéro à la validation (bons) ou à la clôture (inventaires), plus de suppression. Un brouillon s'**abandonne**, une pièce validée s'**annule** (motif tracé) ; les mouvements inverses sont produits dans la transaction d'annulation (B11), les autres effets par événement.
 - **Garde-fous** : `RoutesSuppressionIT` (aucune route DELETE hors liste blanche), `SuppressionsInterditesArchTest` (aucun appel de suppression hors liste blanche, règle 3 des événements).
 - `SuppressionDefinitiveService` et `ExecuteurTransactionnel.apresCommit` **supprimés** ; la compensation manuelle de la clôture d'inventaire est retirée (D1.6).
-- Suite complète : **1 106 tests, 0 échec** (1 062 en fin de 1a).
+- Suite complète : **1 107 tests, 0 échec** (1 062 en fin de 1a). Parcours réel par l'API : 20 contrôles sur 20 (§10 bis).
 
 ---
 
@@ -159,8 +159,19 @@ Aucune opération serveur propre à 1b : les ChangeUnits `0012`, `0013`, `0106`�
 
 ## 12. Ce qui reste
 
-1. **Front F1/F2** (`pointage-agents`) : modèles, services, permissions, libellés, `libelleNumero`, boutons « Abandonner » / « Annuler le bon », dialogue d'annulation, bandeau du motif, colonnes du Kanban, inventaires.
+1. ~~**Front F1/F2**~~ : fait (`pointage-agents` `f902594`, un seul commit : dialogue et constantes partagés). `ng build` vert ; specs touchés 37/37 ; suite Karma 299/348, les 49 échecs sont les suites déjà cassées avant 1b.
 2. ~~`bootRun` et parcours réel~~ : fait le 25/11 (§10 bis), 20 contrôles sur 20.
 3. ~~Écart 5~~ : résolu en B11.
 4. Routes et classes en sursis : à retirer dans leurs sous-branches ; les 19 routes des modules métier sont rattachées à leur lot (RH lot 6, Terrain lot 2, Stock lot 3, Chimie lot 8 ; `lot-1-conception.md` §4, sous 1b).
 5. Écran de supervision de l'outbox.
+
+## 13. Fusion
+
+Le 26/11, sur feu vert : `refonte/v3-1b-pieces` fusionnée dans `refonte/v3` (`--no-ff`) dans les deux dépôts, puis `refonte/v3` poussée. `refonte/v3` n'avait pas bougé depuis la création de la sous-branche : fusion sans conflit, contenu identique aux pointes testées.
+
+| Dépôt | Pointe de la sous-branche | Commit de fusion |
+| --- | --- | --- |
+| backend `Pointage_Backend` | `a1b192f` | `4d57587` |
+| front `Pointage_Frontend` | `f902594` | `3168523` |
+
+Vérifié avant la fusion : arbres de travail propres, `package-lock.json` du front inchangé par le `npm ci`. La production n'est pas migrée : les ChangeUnits de 1b jouent au basculement final (annexe 1b de `docs/exploitation/basculement-v3.md`).
