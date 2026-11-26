@@ -1,3 +1,5 @@
 /gradlew text eol=lf
 *.bat text eol=crlf
 *.jar binary
+# Hooks git : scripts shell, toujours en LF (sinon « /bin/sh^M » sous Windows).
+.githooks/* text eol=lf
