@@ -200,7 +200,10 @@ Le fichier `.env` local du backend, ignoré par git, contient des valeurs réell
 4. Les sélecteurs de site et de produit ne déclenchent aucun signal « liste chargée ». `choisirDansSelecteur` retape donc la recherche jusqu'à voir l'option.
 5. Le poste a une **mémoire insuffisante** pour faire tourner ensemble le dev et les e2e (§2.6).
 6. La CI n'a pas encore tourné (§3).
-7. **À rejouer avant la fusion**, poste déchargé : `ng build` (production), `npm run test:ci` et `npm run lint:modifies` sur l'état final du front, interrompus faute de mémoire le 26/11 au soir. Ces derniers changements ne sont que des attributs `data-testid` (formulaire de l'accueil, `<main>` de la sidebar).
+7. **Rejoué avant la fusion le 27/11**, sur un poste déchargé. Les trois commandes avaient été interrompues faute de mémoire le 26/11 au soir. Résultats sur l'état final du front (`c861e54`) :
+   - `ng build --configuration production` : vert. Les avertissements sont déjà connus : modules CommonJS `html2canvas` et `ts-luxon`, et 8 sélecteurs CSS `%` ignorés.
+   - `npm run test:ci` : **294 / 294**.
+   - `npm run lint:modifies` : vert, 25 fichiers modifiés depuis `origin/refonte/v3`, 0 avertissement.
 
 ## 9. Écart avec la conception, à reporter
 
