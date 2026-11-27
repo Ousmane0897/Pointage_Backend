@@ -1,0 +1,9 @@
+# Fuites ANCIENNES de l'historique, déjà remplacées (docs/securite/rotation-secrets.md) : empreintes
+# commit:fichier:règle:ligne, sans la valeur. Inventaire : docs/refonte/outillage.md. Ne jamais
+# ajouter ici une fuite nouvelle : retirer le secret du commit et le changer.
+18f4be20ffd35cf293b35e6948ce36ae221298ca:docker-compose.yml:gcp-api-key:22
+18f4be20ffd35cf293b35e6948ce36ae221298ca:src/main/resources/application-prod.yml:gcp-api-key:22
+18f4be20ffd35cf293b35e6948ce36ae221298ca:src/main/resources/application.yml:gcp-api-key:25
+fa246dd94b4727d8055a11bc48b68225ec6fa797:docker-compose.yml:generic-api-key:21
+3f7a9216a32c5cfe871e7150cc8e9232e6948d52:docker-compose.yml:generic-api-key:21
+3f7a9216a32c5cfe871e7150cc8e9232e6948d52:src/main/resources/application.yml:generic-api-key:29

@@ -47,6 +47,7 @@ docker-compose up --build             # prod : mongo:7.0 replica set rs0 + auth 
 - `application-dev.yml` — SMTP via `MAIL_USERNAME` / `MAIL_PASSWORD` env vars (plus aucun secret en dur).
 - `application-prod.yml` — Mongo `mongodb://${MONGO_APP_USERNAME}:${MONGO_APP_PASSWORD}@mongo:27017/pointage_cleanic?replicaSet=rs0&authSource=admin` (mots de passe en `[A-Za-z0-9]`, insérés tels quels dans l'URI), secrets sans valeur par défaut (`SecretsRequisVerificateur` refuse le démarrage s'il en manque un), Swagger désactivé, `server.forward-headers-strategy: native`.
 - Profil **`demo`** : seul à créer les données de démonstration (sites fictifs Terrain, grille et formations RH d'exemple : ChangeUnits `9001`/`9002`). Jamais en prod.
+- Profil **`e2e`** (`application-e2e.yml`) : essais de bout en bout Playwright du front, port 8089, base `cleanic_e2e`, comptes et stock d'essai (ChangeUnits `9101`/`9102`), refus de toute base dont le nom ne contient pas `e2e`. Jamais en prod. Voir « Règles de la refonte V3 » (section CI).
 - `application-test.yml` — dummy JWT secret, disabled mail. ⚠ Ce profil n'est **pas** activé automatiquement : les valeurs factices des tests viennent de `src/test/resources/config/application.yml` (et des `properties` des `@SpringBootTest`).
 
 Jackson is configured globally for `dd/MM/yyyy` dates in `Africa/Dakar`. Preserve that when adding DTOs — don't hardcode other formats.
@@ -158,7 +159,15 @@ Things that only make sense after reading several files:
 
 ## CI
 
-`.github/workflows/backend.yml` runs on push to `main` only: JDK 21 setup → `./gradlew clean build -x test` → `./gradlew test`. Docker push and VPS deploy steps are commented out. The `develop` branch (current working branch) is not covered by CI.
+`.github/workflows/backend.yml` runs on push to `main` only: JDK 21 setup → `./gradlew clean build -x test` → `./gradlew test`. Docker push and VPS deploy steps are commented out (étape checkout réparée en `refonte/v3-outillage`, rien d'autre de changé).
+
+**`.github/workflows/ci-refonte.yml`** (sous-branche outillage) : sur push et PR vers `refonte/v3` et `refonte/v3-**`, deux jobs, `./gradlew test` (Testcontainers `mongo:7.0` en replica set, stratégie Docker Unix forcée par `TESTCONTAINERS_DOCKER_CLIENT_STRATEGY`, car `src/test/resources/testcontainers.properties` vise le npipe Windows du poste) et **gitleaks** sur tout l'historique. Même workflow côté front (`ng build`, `npm run test:ci`, lint, gitleaks). Les essais e2e restent locaux. Compte rendu : `docs/refonte/outillage.md`.
+
+### Règles de la refonte V3 (outillage, 2026-11)
+
+- **Toute sous-branche qui modifie un écran ajoute ou met à jour ses parcours e2e ; `npm run e2e` est vert avant de déclarer une sous-branche terminée.** Les parcours (Playwright) vivent dans le dépôt front (`e2e/`, mode d'emploi `docs/tests/e2e.md` du front) ; ils démarrent ce backend en **profil `e2e`** (`application-e2e.yml` : port 8089, base `cleanic_e2e` remise à zéro à chaque lancement ; jeu de départ par les ChangeUnits `9101`/`9102` `@Profile("e2e")`, garde-fou `E2eGardeFou` : base dont le nom contient `e2e` seulement ; mots de passe `E2E_SUPERADMIN_PASSWORD` / `E2E_STOCK_PASSWORD`). Une donnée de départ manque à un parcours : l'ajouter dans `E2eStockSeed` (la ChangeUnit repasse, la base étant neuve à chaque lancement).
+- **`npm run lint` sans erreur sur les fichiers modifiés** (front : `npm run lint:modifies`, strict, `--max-warnings 0`).
+- **gitleaks actif : aucun secret dans un commit.** `.gitleaks.toml` (règles par défaut + valeurs factices des tests), hook `.githooks/pre-commit` activé par `git config core.hooksPath .githooks` (une fois par clone ; `winget install Gitleaks.Gitleaks`), même analyse en CI. Les fuites anciennes de l'historique, déjà remplacées, sont neutralisées par empreinte dans `.gitleaksignore` (sans la valeur) : n'y ajoutez jamais une fuite nouvelle, retirez le secret et changez-le.
 
 ## Sécurité
 

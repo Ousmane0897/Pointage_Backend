@@ -1,0 +1,80 @@
+# Intégration continue de la refonte V3 (sous-branche outillage) : tests backend et détection
+# des secrets, sur refonte/v3 et ses sous-branches. Le déploiement (backend.yml, branche main)
+# n'est pas concerné. Voir docs/refonte/outillage.md.
+name: CI refonte V3 - backend
+
+on:
+  push:
+    branches: [ "refonte/v3", "refonte/v3-**" ]
+  pull_request:
+    branches: [ "refonte/v3", "refonte/v3-**" ]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-refonte-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    name: ./gradlew test
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      # src/test/resources/testcontainers.properties force la stratégie Windows (npipe) du poste
+      # de développement ; sous Linux, Testcontainers parle au socket Unix de Docker.
+      TESTCONTAINERS_DOCKER_CLIENT_STRATEGY: org.testcontainers.dockerclient.UnixSocketClientProviderStrategy
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Gradle (cache)
+        uses: gradle/actions/setup-gradle@v4
+
+      # MongoDB : conteneur mongo:7.0 en replica set démarré par Testcontainers (MongoTestContainer),
+      # comme sur le poste. Aucun service Mongo n'est nécessaire.
+      - name: Tests
+        run: |
+          chmod +x gradlew
+          ./gradlew test --no-daemon
+
+      - name: Rapport de tests
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rapport-tests-backend
+          path: build/reports/tests/test
+          retention-days: 7
+
+  gitleaks:
+    name: gitleaks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GITLEAKS_VERSION: 8.30.1
+    steps:
+      - name: Checkout (historique complet)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Installation de gitleaks
+        run: |
+          curl -sSfL -o gitleaks.tar.gz \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -sSfL -o checksums.txt \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_checksums.txt"
+          grep " gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz$" checksums.txt | sha256sum -c -
+          tar -xzf gitleaks.tar.gz gitleaks
+
+      # Tout l'historique ; les fuites anciennes, déjà remplacées, sont neutralisées par
+      # .gitleaksignore (empreintes sans valeur). Toute nouvelle fuite fait échouer l'étape.
+      - name: Analyse des secrets
+        run: ./gitleaks git --config .gitleaks.toml --gitleaks-ignore-path .gitleaksignore --redact --no-banner --verbose .

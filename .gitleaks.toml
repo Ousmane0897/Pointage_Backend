@@ -1,0 +1,20 @@
+# Détection des secrets (gitleaks ≥ 8.25). Règles par défaut de gitleaks, plus les valeurs
+# factices connues des tests, qui ne sont pas des secrets.
+# Hook local : .githooks/pre-commit ; CI : .github/workflows/ci-refonte.yml.
+# Fuites ANCIENNES de l'historique (secrets remplacés depuis, voir docs/securite/rotation-secrets.md) :
+# empreintes dans .gitleaksignore, sans la valeur ; l'historique n'est pas réécrit.
+# Voir docs/refonte/outillage.md.
+
+title = "Pointage Cleanic — backend"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Secrets JWT factices des tests (jamais utilisés hors tests)"
+regexTarget = "secret"
+regexes = [
+  '''^test_secret_at_least_32_characters_long_xyz$''',
+  '''^valeur_factice_de_test_au_moins_32_caracteres$''',
+  '''^test-secret-tres-long-de-plus-de-32-caracteres$''',
+]

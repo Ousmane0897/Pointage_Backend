@@ -1,0 +1,10 @@
+#!/bin/sh
+# Refuse un commit qui ajoute un secret (gitleaks, configuration .gitleaks.toml du dépôt).
+# Activation, une fois par clone : git config core.hooksPath .githooks
+# Installation de gitleaks : winget install Gitleaks.Gitleaks (Windows), brew install gitleaks (macOS).
+# Voir docs/refonte/outillage.md.
+if ! command -v gitleaks >/dev/null 2>&1; then
+  echo "pre-commit : gitleaks introuvable. Installez-le (winget install Gitleaks.Gitleaks) : aucun commit sans détection des secrets." >&2
+  exit 1
+fi
+exec gitleaks git --pre-commit --staged --redact --no-banner --verbose

@@ -11,7 +11,7 @@ jobs:
     steps:
       # 1️⃣ Checkout code      # Récupérer le code source
       - name: Checkout repository
-      - uses: actions/checkout@v4   # permet à GitHub Actions de cloner ton dépôt dans la machine virtuelle du workflow. Le v4 signifie simplement la quatrième version majeure actuelle de cette action pour cloner ton dépôt Git dans le runner GitHub Actions
+        uses: actions/checkout@v4   # permet à GitHub Actions de cloner ton dépôt dans la machine virtuelle du workflow. Le v4 signifie simplement la quatrième version majeure actuelle de cette action pour cloner ton dépôt Git dans le runner GitHub Actions
 
       # 2️⃣ Set up JDK 21
       - name: Set up JDK 21

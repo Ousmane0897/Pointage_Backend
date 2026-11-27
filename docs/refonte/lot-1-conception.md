@@ -753,10 +753,12 @@ Chaque sous-branche est créée depuis `refonte/v3` et fusionnée dans `refonte/
 - **le journal des connexions passe dans 1g** (il dépend de `comptes`). 1l garde les données personnelles et les sauvegardes.
 
 ```
-1a ─┬─ 1b ─┬─ 1c ─── 1g ─┬─ 1d ─┬─ 1e ─┬─ 1f ─── 1i ─── 1k ─── 1h ─── 1j ─── 1m
-    │      │             │      │      │
-    └──────┴─────────────┴──────┴──────┴──────────────────────────────── 1l (après 1c + 1i)
+1a ─┬─ 1b ─┬─ outillage ─── 1c ─── 1g ─┬─ 1d ─┬─ 1e ─┬─ 1f ─── 1i ─── 1k ─── 1h ─── 1j ─── 1m
+    │      │                           │      │      │
+    └──────┴───────────────────────────┴──────┴──────┴────────────────── 1l (après 1c + 1i)
 ```
+
+**Écart accepté le 26/11 : sous-branche `refonte/v3-outillage`, insérée entre 1b et 1c** (même nom dans les deux dépôts). Elle apporte les essais de bout en bout Playwright (profil Spring `e2e`, base `cleanic_e2e`), gitleaks (hook et CI), une CI GitHub Actions sur `refonte/v3` et ses sous-branches, et ESLint dans le front. Compte rendu : `docs/refonte/outillage.md`. **À partir de 1c, chaque sous-branche ajoute à ses critères d'acceptation** : parcours e2e ajoutés ou mis à jour pour tout écran modifié, `npm run e2e` vert ; `npm run lint:modifies` sans erreur ; aucun secret détecté par gitleaks (hook et CI).
 
 ### 1a — Socle technique : transactions, verrous, index, migrations
 
