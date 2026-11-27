@@ -23,6 +23,10 @@ configurations {
 dependencyManagement {
 	imports {
 		mavenBom "org.springframework.boot:spring-boot-dependencies:3.3.6"
+		// Après le BOM Spring Boot (qui fixe Testcontainers 1.19.8) : le dernier importé l'emporte.
+		// 1.21.4 au moins pour Docker Engine 29 (runners GitHub), qui refuse l'API par défaut des
+		// versions antérieures. Voir docs/refonte/outillage.md §3.
+		mavenBom "org.testcontainers:testcontainers-bom:1.21.4"
 	}
 }
 
@@ -90,8 +94,8 @@ dependencies {
 	testImplementation 'org.springframework.security:spring-security-test'
 	// Lot 1 / 1b : garde-fous d'architecture (suppressions interdites, règle 3 des événements)
 	testImplementation 'com.tngtech.archunit:archunit-junit5:1.3.0'
-	testImplementation 'org.testcontainers:junit-jupiter:1.21.4'
-	testImplementation 'org.testcontainers:mongodb:1.21.4'
+	testImplementation 'org.testcontainers:junit-jupiter'
+	testImplementation 'org.testcontainers:mongodb'
 	mockitoAgent('net.bytebuddy:byte-buddy-agent:1.14.19') { transitive = false }
 
 
