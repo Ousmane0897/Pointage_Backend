@@ -115,7 +115,12 @@ D'où trois écarts avec la demande (« bootRun », « ng serve ») :
 
 - **Pas de service Mongo** (décision du 26/11) : les tests utilisent déjà Testcontainers, qui fonctionne sur les runners Linux. `src/test/resources/testcontainers.properties` force la stratégie Docker Windows (npipe) du poste. En CI, elle est remplacée par `TESTCONTAINERS_DOCKER_CLIENT_STRATEGY=…UnixSocketClientProviderStrategy`.
 - **Vérifications faites** : `actionlint` (dans Docker) ne signale rien sur les workflows du backend. Ceux du front ont la même structure.
-- **Non vérifié** : aucun workflow n'a encore tourné. Le premier push dira si la surcharge Testcontainers suffit (sinon, rendre `testcontainers.properties` propre au poste).
+- **Vérifié le 27/11** : `ci-refonte.yml` est **vert** dans les deux dépôts, sur `refonte/v3` (backend `026014f`, front `9e6b55c`). La surcharge `TESTCONTAINERS_DOCKER_CLIENT_STRATEGY` suffit : `testcontainers.properties` reste tel quel. Le premier push a échoué. Deux corrections ont suivi, faites dans `refonte/v3-outillage` puis refusionnées :
+  1. **gitleaks (les deux dépôts)** : `sha256sum -c` cherche le fichier sous le nom qu'il porte dans `checksums.txt`. L'archive, téléchargée sous le nom `gitleaks.tar.gz`, était donc introuvable. Elle garde désormais son nom d'origine (`gitleaks_<version>_linux_x64.tar.gz`). Étape vérifiée dans un conteneur Ubuntu 24.04.
+  2. **Tests backend** : 348 tests en échec, « Could not find a valid Docker environment ». Les runners GitHub ont **Docker Engine 29**, qui refuse l'API 1.32 envoyée par les anciennes versions de Testcontainers (« client version 1.32 is too old. Minimum supported API version is 1.40 »). C'est vérifié sur `docker:29-dind`. Le poste a Docker 28, d'où des tests verts en local.
+     - Correctif : Testcontainers **1.21.4**, par le BOM `org.testcontainers:testcontainers-bom` importé **après** celui de Spring Boot dans `build.gradle`.
+     - ⚠ Monter seulement `junit-jupiter` et `mongodb` ne suffit pas : le BOM Spring Boot 3.3.6 laisse le noyau `org.testcontainers:testcontainers` (transitif) en 1.19.8. Contrôle : `./gradlew dependencyInsight --configuration testRuntimeClasspath --dependency org.testcontainers:testcontainers`.
+     - Suite locale avec 1.21.4 : 1 111 tests, 0 échec.
 - Les e2e restent locaux.
 
 ## 4. gitleaks
@@ -199,7 +204,7 @@ Le fichier `.env` local du backend, ignoré par git, contient des valeurs réell
 3. Les e2e sont **locaux seulement**, et lents (≈ 5 min, plus 2 à 3 min quand le front doit être reconstruit). Ils couvrent le Stock (bons, inventaires) et les droits ; les autres modules n'ont pas encore de parcours.
 4. Les sélecteurs de site et de produit ne déclenchent aucun signal « liste chargée ». `choisirDansSelecteur` retape donc la recherche jusqu'à voir l'option.
 5. Le poste a une **mémoire insuffisante** pour faire tourner ensemble le dev et les e2e (§2.6).
-6. La CI n'a pas encore tourné (§3).
+6. La CI a tourné le 27/11 et elle est **verte** dans les deux dépôts, après deux corrections (§3) : le nom de l'archive gitleaks et Testcontainers 1.21.4 pour Docker 29. Toute montée du BOM Spring Boot doit garder Testcontainers ≥ 1.21.4.
 7. **Rejoué avant la fusion le 27/11**, sur un poste déchargé. Les trois commandes avaient été interrompues faute de mémoire le 26/11 au soir. Résultats sur l'état final du front (`c861e54`) :
    - `ng build --configuration production` : vert. Les avertissements sont déjà connus : modules CommonJS `html2canvas` et `ts-luxon`, et 8 sélecteurs CSS `%` ignorés.
    - `npm run test:ci` : **294 / 294**.
